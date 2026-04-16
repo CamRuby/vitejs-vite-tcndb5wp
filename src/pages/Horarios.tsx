@@ -268,7 +268,7 @@ export default function Horarios() {
       {/* Grilla con scroll */}
       <div style={{ flex: 1, overflow: 'auto' }}>
         {cargando && <p style={{ textAlign: 'center' as const, color: '#666', padding: '20px' }}>Cargando...</p>}
-        <table style={{ borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed' as const }}>
+         <table style={{ borderCollapse: 'collapse', width: vista === 'semana' ? 'max-content' : '100%' }}>
           <thead style={{ position: 'sticky' as const, top: 0, zIndex: 3 }}>
             <tr style={{ background: TEAL }}>
               <th style={{ padding: '10px 12px', color: 'white', fontSize: '12px', width: '64px', position: 'sticky' as const, left: 0, background: TEAL, zIndex: 4 }}>Hora</th>
