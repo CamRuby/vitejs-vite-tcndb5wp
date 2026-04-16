@@ -177,7 +177,7 @@ export default function Profesores() {
   }
 
   return (
-    <div style={{ padding: '32px', maxWidth: '960px' }}>
+    <div style={{ padding: '32px', maxWidth: '1400px' }}>
 
       <div style={{ marginBottom: '28px' }}>
         <h2 style={{ margin: 0, fontSize: '26px', color: '#1a1a1a' }}>Profesores</h2>
