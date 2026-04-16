@@ -275,7 +275,7 @@ export default function Horarios() {
               {vista === 'semana'
                 ? fechasToShow.map((fecha, i) =>
                   salones.map((salon: any) => (
-                    <th key={`${formatFecha(fecha)}-${salon.id}`} style={{ padding: '8px 10px', color: 'white', fontSize: '11px', textAlign: 'center' as const, borderLeft: '1px solid rgba(255,255,255,0.2)', minWidth: '160px' }}>
+                    <th key={`${formatFecha(fecha)}-${salon.id}`} style={{ padding: '8px 10px', color: 'white', fontSize: '11px', textAlign: 'center' as const, borderLeft: '1px solid rgba(255,255,255,0.2)', width: '160px', minWidth: '160px' }}>
                       <div style={{ fontWeight: '600' }}>{DIAS[i]} {formatFechaMostrar(fecha)}</div>
                       <div style={{ opacity: 0.8 }}>{salon.nombre}</div>
                     </th>
@@ -308,7 +308,7 @@ export default function Horarios() {
                       return (
                         <td key={`${formatFecha(fecha)}-${salon.id}-${hora}`}
                           onClick={() => abrirSlot(salon, hora, formatFecha(fecha))}
-                          style={{ padding: '1px 3px', verticalAlign: 'top' as const, borderLeft: '1px solid #f1f5f9', cursor: 'pointer', height: '18px', minWidth: '160px' }}
+                          style={{ padding: '1px 3px', verticalAlign: 'top' as const, borderLeft: '1px solid #f1f5f9', cursor: 'pointer', height: '18px', width: '160px', minWidth: '160px' }}
                           onMouseEnter={e => { if (!cs.length) e.currentTarget.style.background = TEAL_LIGHT }}
                           onMouseLeave={e => { if (!cs.length) e.currentTarget.style.background = '' }}
                         >
