@@ -180,7 +180,7 @@ export default function Clientes() {
   )
 
   return (
-    <div style={{ padding: '32px', maxWidth: '960px' }}>
+    <div style={{ padding: '32px', maxWidth: '1400px' }}>
 
       {/* ENCABEZADO */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
