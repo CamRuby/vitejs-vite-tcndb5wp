@@ -308,7 +308,7 @@ export default function Horarios() {
                       return (
                         <td key={`${formatFecha(fecha)}-${salon.id}-${hora}`}
                           onClick={() => abrirSlot(salon, hora, formatFecha(fecha))}
-                          style={{ padding: '1px 3px', verticalAlign: 'top' as const, borderLeft: '1px solid #f1f5f9', cursor: 'pointer', height: '18px', width: '160px', minWidth: '160px' }}
+                          style={{ padding: '1px 3px', verticalAlign: 'top' as const, borderLeft: '1px solid #f1f5f9', cursor: 'pointer', height: '18px', maxHeight: '18px', overflow: 'hidden', width: '160px', minWidth: '160px' }}
                           onMouseEnter={e => { if (!cs.length) e.currentTarget.style.background = TEAL_LIGHT }}
                           onMouseLeave={e => { if (!cs.length) e.currentTarget.style.background = '' }}
                         >
@@ -327,7 +327,7 @@ export default function Horarios() {
                     return (
                       <td key={`${salon.id}-${hora}`}
                         onClick={() => abrirSlot(salon, hora, formatFecha(diaSeleccionado))}
-                        style={{ padding: '2px 6px', verticalAlign: 'top' as const, borderLeft: '1px solid #f1f5f9', cursor: 'pointer', height: '22px' }}
+                        style={{ padding: '2px 6px', verticalAlign: 'top' as const, borderLeft: '1px solid #f1f5f9', cursor: 'pointer', height: '22px', maxHeight: '22px', overflow: 'hidden' }}
                         onMouseEnter={e => { if (!cs.length) e.currentTarget.style.background = TEAL_LIGHT }}
                         onMouseLeave={e => { if (!cs.length) e.currentTarget.style.background = '' }}
                       >
@@ -354,7 +354,7 @@ export default function Horarios() {
       {/* Modal */}
       {modalAbierto && slotSeleccionado && (
         <div style={{ position: 'fixed' as const, inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '1400px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
             <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>Asignar clase</h3>
