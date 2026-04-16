@@ -387,7 +387,7 @@ export default function Clientes() {
                   {p.total_clases - p.clases_tomadas} clases restantes
                 </span>
                 <span style={{ fontSize: '20px', color: '#555', fontWeight: '500' }}>
-                   ${p.valor_plan?.toLocaleString() || '—'}
+                  {'$'}{p.valor_plan?.toLocaleString() || '—'}
 <                   /span>
               </div>
             </div>
