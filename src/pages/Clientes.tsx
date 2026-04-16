@@ -388,7 +388,7 @@ export default function Clientes() {
                 </span>
                 <span style={{ fontSize: '20px', color: '#555', fontWeight: '500' }}>
                   {'$'}{p.valor_plan?.toLocaleString() || '—'}
-<                   /span>
+                 </span>
               </div>
             </div>
           ))}
