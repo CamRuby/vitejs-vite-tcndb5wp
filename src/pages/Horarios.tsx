@@ -484,7 +484,8 @@ export default function Horarios() {
                       rowSpan={rowSpan}
                       onClick={() => { if (!mainClass) abrirSlot(col.salon, hora, col.fecha) }}
                       style={{
-                        padding: mainClass ? '3px 4px' : '0',
+                        padding: 0,
+                        height: '1px',
                         verticalAlign: 'top',
                         borderLeft: '1px solid #f1f5f9',
                         cursor: mainClass ? 'default' : 'pointer',
@@ -495,7 +496,6 @@ export default function Horarios() {
                     >
                       {mainClass && (() => {
                         const col2 = getColorEstado(mainClass.estado)
-                       const cardH = rowSpan * ROW_H + rowSpan - 2
                         return (
                           <div
                             onClick={(e) => abrirClaseExistente(e, mainClass)}
@@ -506,9 +506,10 @@ export default function Horarios() {
                               borderRadius: '6px', padding: '4px 8px',
                               fontSize: vista === 'dia' ? '12px' : '10px',
                               cursor: 'pointer',
-                              height: `${cardH}px`,
+                              height: 'calc(100% - 4px)',
                               overflow: 'hidden',
-                              boxSizing: 'border-box'
+                              boxSizing: 'border-box',
+                              margin: '2px 3px'
                             }}
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
