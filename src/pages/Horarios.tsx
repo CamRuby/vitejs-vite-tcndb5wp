@@ -495,7 +495,7 @@ export default function Horarios() {
                     >
                       {mainClass && (() => {
                         const col2 = getColorEstado(mainClass.estado)
-                        const cardH = rowSpan * ROW_H - 6
+                       const cardH = rowSpan * ROW_H + rowSpan - 2
                         return (
                           <div
                             onClick={(e) => abrirClaseExistente(e, mainClass)}
