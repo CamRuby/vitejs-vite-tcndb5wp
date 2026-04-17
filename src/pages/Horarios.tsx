@@ -520,7 +520,7 @@ export default function Horarios() {
                               </strong>
                               {mainClass.recurrente && <span style={{ fontSize: '9px', marginLeft: '4px', flexShrink: 0 }}>🔁</span>}
                             </div>
-                            {vista === 'dia' && cardH >= 42 && (
+                            {vista === 'dia' && rowSpan >= 3 && (
                               <>
                                 <div style={{ fontSize: '11px', opacity: 0.85, marginTop: '2px' }}>
                                   {mainClass.contratos?.instrumentos?.nombre} · {mainClass.duracion_min}min
@@ -530,7 +530,7 @@ export default function Horarios() {
                                 </div>
                               </>
                             )}
-                            {vista === 'semana' && cardH >= 18 && (
+                            {vista === 'semana' && rowSpan >= 1 && (
                               <div style={{ fontSize: '9px', opacity: 0.75 }}>{mainClass.duracion_min}min</div>
                             )}
                           </div>
