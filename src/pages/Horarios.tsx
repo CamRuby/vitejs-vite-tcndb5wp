@@ -1,12 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../supabase'
 
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
-
-const ROW_H_DIA = 56
-const ROW_H_SEM = 22
+const ROW_H = 20  // px por cada slot de 15 minutos
 
 const HORAS = Array.from({ length: 57 }, (_, i) => {
   const totalMin = 7 * 60 + i * 15
@@ -89,12 +87,48 @@ export default function Horarios() {
   const [confirmarBorrar, setConfirmarBorrar] = useState(false)
 
   const fechasSemana = getFechasSemana(fechaBase)
-  const ROW_H = vista === 'dia' ? ROW_H_DIA : ROW_H_SEM
+
+  // Columnas de la grilla (salon x fecha)
+  const columns = useMemo(() => {
+    if (vista === 'semana') {
+      return fechasSemana.flatMap((fecha, i) =>
+        salones.map((salon: any) => ({
+          salon,
+          fecha: formatFecha(fecha),
+          header: `${DIAS[i]} ${formatFechaMostrar(fecha)}`,
+          subheader: salon.nombre
+        }))
+      )
+    }
+    return salones.map((salon: any) => ({
+      salon,
+      fecha: formatFecha(diaSeleccionado),
+      header: salon.nombre,
+      subheader: ''
+    }))
+  }, [vista, salones, fechasSemana, diaSeleccionado])
+
+  // Celdas cubiertas por rowspan de clases que empezaron antes
+  const skipSet = useMemo(() => {
+    const skip = new Set<string>()
+    clases.forEach((c: any) => {
+      const salonId = c.salones?.id
+      if (!salonId || !c.fecha || !c.hora || c.estado === 'cancelada') return
+      const cInicio = horaAMinutos(c.hora.substring(0, 5))
+      const numSlots = Math.max(1, Math.round((c.duracion_min || 60) / 15))
+      for (let i = 1; i < numSlots; i++) {
+        const min = cInicio + i * 15
+        const hh = Math.floor(min / 60)
+        const mm = min % 60
+        const h = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
+        skip.add(`${salonId}-${c.fecha}-${h}`)
+      }
+    })
+    return skip
+  }, [clases])
 
   useEffect(() => { cargarSedes(); cargarProfesores() }, [])
-  useEffect(() => {
-    if (sedeSeleccionada) { cargarSalones(); cargarClases() }
-  }, [sedeSeleccionada, fechaBase, diaSeleccionado, vista])
+  useEffect(() => { if (sedeSeleccionada) { cargarSalones(); cargarClases() } }, [sedeSeleccionada, fechaBase, diaSeleccionado, vista])
 
   async function cargarSedes() {
     const { data } = await supabase.from('sedes').select('id, nombre').order('nombre')
@@ -131,22 +165,33 @@ export default function Horarios() {
     setCargando(false)
   }
 
-  // ── Validación de solapamiento ──────────────────────────────────────────────
-  function hayConflicto(salonId: string, fecha: string, hora: string, duracionMin: number, excluirId?: string): boolean {
+  // Validacion FRESCA contra la base de datos (evita el problema de datos desactualizados)
+  async function verificarConflicto(
+    salonId: string, fecha: string, hora: string, duracionMin: number, excluirId?: string
+  ): Promise<string | null> {
     const inicio = horaAMinutos(hora)
     const fin = inicio + duracionMin
-    return clases.some((c: any) => {
-      if (excluirId && c.id === excluirId) return false
-      if (c.salones?.id !== salonId) return false
-      if (c.fecha !== fecha) return false
-      if (c.estado === 'cancelada') return false
-      const cInicio = horaAMinutos(c.hora?.substring(0, 5) || '00:00')
-      const cFin = cInicio + (c.duracion_min || 60)
-      return inicio < cFin && fin > cInicio
-    })
+    const { data } = await supabase
+      .from('clases')
+      .select('id, hora, duracion_min, contratos(clientes(nombre))')
+      .eq('salon_id', salonId)
+      .eq('fecha', fecha)
+      .neq('estado', 'cancelada')
+    if (!data) return null
+    for (const c of data) {
+      if (excluirId && c.id === excluirId) continue
+      const cInicio = horaAMinutos((c.hora || '').substring(0, 5))
+      const cFin = cInicio + ((c as any).duracion_min || 60)
+      if (inicio < cFin && fin > cInicio) {
+        const nombre = (c as any).contratos?.clientes?.nombre || 'otra clase'
+        const hi = `${String(Math.floor(cInicio / 60)).padStart(2, '0')}:${String(cInicio % 60).padStart(2, '0')}`
+        const hf = `${String(Math.floor(cFin / 60)).padStart(2, '0')}:${String(cFin % 60).padStart(2, '0')}`
+        return `Conflicto con ${nombre} (${hi}–${hf})`
+      }
+    }
+    return null
   }
 
-  // ── Buscar clientes ─────────────────────────────────────────────────────────
   async function buscarClientes(texto: string) {
     setBusquedaCliente(texto)
     setClienteSeleccionado(null)
@@ -182,7 +227,6 @@ export default function Horarios() {
     }
   }
 
-  // ── Abrir slot vacío (crear clase) ──────────────────────────────────────────
   function abrirSlot(salon: any, hora: string, fecha: string) {
     setSlotSeleccionado({ salon, hora, fecha })
     setModalAbierto(true)
@@ -198,7 +242,6 @@ export default function Horarios() {
     setError('')
   }
 
-  // ── Abrir clase existente (editar) ──────────────────────────────────────────
   function abrirClaseExistente(e: React.MouseEvent, clase: any) {
     e.stopPropagation()
     setClaseEditando(clase)
@@ -212,16 +255,12 @@ export default function Horarios() {
     setModalEditar(true)
   }
 
-  // ── Guardar clase nueva ─────────────────────────────────────────────────────
   async function guardarClase() {
     if (!clienteSeleccionado) { setError('Selecciona un cliente'); return }
     if (!contratoSeleccionado) { setError('Selecciona un plan'); return }
     if (!profesorId) { setError('Selecciona un profesor'); return }
-    if (hayConflicto(slotSeleccionado.salon.id, slotSeleccionado.fecha, slotSeleccionado.hora, parseInt(duracion))) {
-      setError('Ya hay una clase en ese salón a esa hora'); return
-    }
-    setError('')
     setGuardando(true)
+    setError('')
 
     if (recurrente && semanasRecurrencia > 1) {
       const patronId = crypto.randomUUID()
@@ -231,9 +270,17 @@ export default function Horarios() {
         const d = new Date(slotSeleccionado.fecha + 'T12:00:00')
         d.setDate(d.getDate() + i * 7)
         const fechaStr = formatFecha(d)
-        if (i > 0 && hayConflicto(slotSeleccionado.salon.id, fechaStr, slotSeleccionado.hora, parseInt(duracion))) {
-          setError(`Conflicto en semana ${i + 1} (${fechaStr}). Se crearon ${batch.length} clases hasta esa semana.`)
-          break
+        const conflicto = await verificarConflicto(slotSeleccionado.salon.id, fechaStr, slotSeleccionado.hora, parseInt(duracion))
+        if (conflicto) {
+          if (batch.length === 0) {
+            setError(`${conflicto} en la semana 1. No se creó ninguna clase.`)
+          } else {
+            const { error: err } = await supabase.from('clases').insert(batch)
+            if (err) setError('Error al guardar: ' + err.message)
+            else { setError(`${conflicto} en semana ${i + 1}. Se crearon ${batch.length} clases.`); cargarClases() }
+          }
+          setGuardando(false)
+          return
         }
         batch.push({
           contrato_id: (contratoSeleccionado as any).id,
@@ -250,11 +297,14 @@ export default function Horarios() {
         })
       }
 
-      if (batch.length > 0) {
-        const { error: err } = await supabase.from('clases').insert(batch)
-        if (err) { setError('Error: ' + err.message) } else { setModalAbierto(false); cargarClases() }
-      }
+      const { error: err } = await supabase.from('clases').insert(batch)
+      if (err) setError('Error: ' + err.message)
+      else { setModalAbierto(false); cargarClases() }
+
     } else {
+      const conflicto = await verificarConflicto(slotSeleccionado.salon.id, slotSeleccionado.fecha, slotSeleccionado.hora, parseInt(duracion))
+      if (conflicto) { setError(conflicto); setGuardando(false); return }
+
       const { error: err } = await supabase.from('clases').insert({
         contrato_id: (contratoSeleccionado as any).id,
         salon_id: slotSeleccionado.salon.id,
@@ -266,17 +316,18 @@ export default function Horarios() {
         confirmada_cliente: false,
         confirmada_profesor: false
       })
-      if (err) { setError('Error: ' + err.message) } else { setModalAbierto(false); cargarClases() }
+      if (err) setError('Error: ' + err.message)
+      else { setModalAbierto(false); cargarClases() }
     }
     setGuardando(false)
   }
 
-  // ── Guardar edición ─────────────────────────────────────────────────────────
   async function guardarEdicion(alcance: 'esta' | 'futuras') {
-    if (hayConflicto(editSalonId, claseEditando.fecha, editHora, parseInt(editDuracion), claseEditando.id)) {
-      setEditError('Ya hay una clase en ese salón a esa hora'); return
-    }
     setEditGuardando(true)
+    setEditError('')
+    const conflicto = await verificarConflicto(editSalonId, claseEditando.fecha, editHora, parseInt(editDuracion), claseEditando.id)
+    if (conflicto) { setEditError(conflicto); setEditGuardando(false); return }
+
     const updates = {
       profesor_id: editProfesorId,
       duracion_min: parseInt(editDuracion),
@@ -299,7 +350,6 @@ export default function Horarios() {
     setEditGuardando(false)
   }
 
-  // ── Borrar clase ────────────────────────────────────────────────────────────
   async function borrarClase(alcance: 'esta' | 'futuras') {
     setEditGuardando(true)
     if (alcance === 'futuras' && claseEditando.patron_id) {
@@ -323,24 +373,22 @@ export default function Horarios() {
     switch (estado) {
       case 'programada': return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' }
       case 'confirmada': return { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
-      case 'dada': return { bg: TEAL_LIGHT, color: TEAL, border: TEAL_MID }
-      case 'cancelada': return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' }
-      default: return { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' }
+      case 'dada':       return { bg: TEAL_LIGHT, color: TEAL, border: TEAL_MID }
+      case 'cancelada':  return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' }
+      default:           return { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' }
     }
   }
-
-  const fechasToShow = vista === 'semana' ? fechasSemana : [diaSeleccionado]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
 
-      {/* ── Encabezado fijo ── */}
+      {/* Encabezado */}
       <div style={{ padding: '16px 24px', background: 'white', borderBottom: '1px solid #eef2f7', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '22px', color: '#1a1a1a' }}>Horarios</h2>
             <p style={{ margin: '2px 0 0', color: '#666', fontSize: '13px' }}>
-              {vista === 'dia' ? formatFechaMostrar(diaSeleccionado) : `${formatFechaMostrar(fechasSemana[0])} – ${formatFechaMostrar(fechasSemana[5])}`}
+              {vista === 'dia' ? formatFechaMostrar(diaSeleccionado) : `${formatFechaMostrar(fechasSemana[0])} - ${formatFechaMostrar(fechasSemana[5])}`}
             </p>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -353,11 +401,11 @@ export default function Horarios() {
                 <button key={v} onClick={() => setVista(v)} style={{
                   padding: '7px 14px', border: 'none', cursor: 'pointer', fontSize: '13px',
                   background: vista === v ? TEAL : 'white', color: vista === v ? 'white' : '#333'
-                }}>{v === 'dia' ? 'Día' : 'Semana'}</button>
+                }}>{v === 'dia' ? 'Dia' : 'Semana'}</button>
               ))}
             </div>
             <div style={{ display: 'flex', gap: '4px' }}>
-              <button onClick={() => { const d = new Date(vista === 'semana' ? fechaBase : diaSeleccionado); d.setDate(d.getDate() + (vista === 'semana' ? -7 : -1)); vista === 'semana' ? setFechaBase(d) : setDiaSeleccionado(d) }}
+              <button onClick={() => { const d = new Date(vista === 'semana' ? fechaBase : diaSeleccionado); d.setDate(d.getDate() - (vista === 'semana' ? 7 : 1)); vista === 'semana' ? setFechaBase(d) : setDiaSeleccionado(d) }}
                 style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', background: 'white', cursor: 'pointer' }}>‹</button>
               <button onClick={() => { setFechaBase(new Date()); setDiaSeleccionado(new Date()) }}
                 style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', background: 'white', cursor: 'pointer', fontSize: '13px' }}>Hoy</button>
@@ -390,112 +438,124 @@ export default function Horarios() {
         </div>
       </div>
 
-      {/* ── Grilla con scroll ── */}
+      {/* Grilla */}
       <div style={{ flex: 1, overflow: 'auto' }}>
         {cargando && <p style={{ textAlign: 'center', color: '#666', padding: '20px' }}>Cargando...</p>}
         <table style={{ borderCollapse: 'collapse', minWidth: '100%', width: 'max-content' }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 3 }}>
             <tr style={{ background: TEAL }}>
               <th style={{ padding: '10px 12px', color: 'white', fontSize: '12px', width: '64px', position: 'sticky', left: 0, background: TEAL, zIndex: 4 }}>Hora</th>
-              {vista === 'semana'
-                ? fechasToShow.map((fecha, i) =>
-                  salones.map((salon: any) => (
-                    <th key={`${formatFecha(fecha)}-${salon.id}`} style={{ padding: '8px 10px', color: 'white', fontSize: '11px', textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.2)', width: '160px', minWidth: '160px' }}>
-                      <div style={{ fontWeight: '600' }}>{DIAS[i]} {formatFechaMostrar(fecha)}</div>
-                      <div style={{ opacity: 0.8 }}>{salon.nombre}</div>
-                    </th>
-                  ))
-                )
-                : salones.map((salon: any) => (
-                  <th key={salon.id} style={{ padding: '10px 12px', color: 'white', fontSize: '13px', textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.2)', minWidth: '160px' }}>
-                    {salon.nombre}
-                  </th>
-                ))
-              }
+              {columns.map(col => (
+                <th key={`${col.salon.id}-${col.fecha}`} style={{ padding: '8px 10px', color: 'white', textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.2)', width: '160px', minWidth: '160px' }}>
+                  <div style={{ fontWeight: '600', fontSize: vista === 'dia' ? '13px' : '11px' }}>{col.header}</div>
+                  {col.subheader && <div style={{ opacity: 0.8, fontSize: '11px' }}>{col.subheader}</div>}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {HORAS.map((hora) => (
               <tr key={hora} style={{ borderTop: hora.endsWith(':00') ? '2px solid #e2e8f0' : '1px solid #f8fafc' }}>
+
+                {/* Hora */}
                 <td style={{
-                  padding: '2px 8px', fontSize: '11px',
-                  color: hora.endsWith(':00') ? '#444' : '#bbb',
-                  fontWeight: hora.endsWith(':00') ? '600' : '400',
-                  background: '#fafbfc', position: 'sticky', left: 0, zIndex: 1,
-                  borderRight: '2px solid #e2e8f0', whiteSpace: 'nowrap', width: '64px',
-                  height: `${ROW_H}px`
+                  padding: '0 8px', fontSize: '11px',
+                  color: hora.endsWith(':00') ? '#444' : 'transparent',
+                  fontWeight: '600', background: '#fafbfc',
+                  position: 'sticky', left: 0, zIndex: 1,
+                  borderRight: '2px solid #e2e8f0', whiteSpace: 'nowrap',
+                  width: '64px', height: `${ROW_H}px`, verticalAlign: 'top'
                 }}>
-                  {hora.endsWith(':00') ? hora : ''}
+                  {hora}
                 </td>
 
-                {vista === 'semana'
-                  ? fechasToShow.map((fecha) =>
-                    salones.map((salon: any) => {
-                      const cs = getClasesSlot(salon.id, hora, formatFecha(fecha))
-                      return (
-                        <td key={`${formatFecha(fecha)}-${salon.id}-${hora}`}
-                          onClick={() => abrirSlot(salon, hora, formatFecha(fecha))}
-                          style={{ padding: 0, borderLeft: '1px solid #f1f5f9', cursor: 'pointer', width: '160px', minWidth: '160px', height: `${ROW_H}px` }}
-                          onMouseEnter={e => { if (!cs.length) e.currentTarget.style.background = TEAL_LIGHT }}
-                          onMouseLeave={e => { if (!cs.length) e.currentTarget.style.background = '' }}
-                        >
-                          <div style={{ height: `${ROW_H}px`, overflow: 'hidden', padding: '1px 3px' }}>
-                            {cs.map((c: any) => {
-                              const col = getColorEstado(c.estado)
-                              return (
-                                <div key={c.id}
-                                  onClick={(e) => abrirClaseExistente(e, c)}
-                                  title={`${c.contratos?.clientes?.nombre} — clic para editar`}
-                                  style={{ background: col.bg, color: col.color, border: `1px solid ${col.border}`, borderRadius: '3px', padding: '1px 4px', fontSize: '10px', cursor: 'pointer', marginBottom: '1px' }}>
-                                  {c.contratos?.clientes?.nombre?.split(' ')[0]}{c.recurrente ? ' 🔁' : ''}
+                {columns.map(col => {
+                  const cellKey = `${col.salon.id}-${col.fecha}-${hora}`
+                  if (skipSet.has(cellKey)) return null
+
+                  const cs = getClasesSlot(col.salon.id, hora, col.fecha)
+                  const mainClass = cs[0]
+                  const rowSpan = mainClass
+                    ? Math.max(1, Math.round((mainClass.duracion_min || 60) / 15))
+                    : 1
+
+                  return (
+                    <td key={cellKey}
+                      rowSpan={rowSpan}
+                      onClick={() => { if (!mainClass) abrirSlot(col.salon, hora, col.fecha) }}
+                      style={{
+                        padding: mainClass ? '3px 4px' : '0',
+                        verticalAlign: 'top',
+                        borderLeft: '1px solid #f1f5f9',
+                        cursor: mainClass ? 'default' : 'pointer',
+                        width: '160px', minWidth: '160px'
+                      }}
+                      onMouseEnter={e => { if (!mainClass) e.currentTarget.style.background = TEAL_LIGHT }}
+                      onMouseLeave={e => { if (!mainClass) e.currentTarget.style.background = '' }}
+                    >
+                      {mainClass && (() => {
+                        const col2 = getColorEstado(mainClass.estado)
+                        const cardH = rowSpan * ROW_H - 6
+                        return (
+                          <div
+                            onClick={(e) => abrirClaseExistente(e, mainClass)}
+                            title="Clic para editar"
+                            style={{
+                              background: col2.bg, color: col2.color,
+                              border: `1px solid ${col2.border}`,
+                              borderRadius: '6px', padding: '4px 8px',
+                              fontSize: vista === 'dia' ? '12px' : '10px',
+                              cursor: 'pointer',
+                              height: `${cardH}px`,
+                              overflow: 'hidden',
+                              boxSizing: 'border-box'
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <strong style={{ lineHeight: '1.3' }}>
+                                {vista === 'dia'
+                                  ? mainClass.contratos?.clientes?.nombre
+                                  : mainClass.contratos?.clientes?.nombre?.split(' ')[0]}
+                              </strong>
+                              {mainClass.recurrente && <span style={{ fontSize: '9px', marginLeft: '4px', flexShrink: 0 }}>🔁</span>}
+                            </div>
+                            {vista === 'dia' && cardH >= 42 && (
+                              <>
+                                <div style={{ fontSize: '11px', opacity: 0.85, marginTop: '2px' }}>
+                                  {mainClass.contratos?.instrumentos?.nombre} · {mainClass.duracion_min}min
                                 </div>
-                              )
-                            })}
+                                <div style={{ fontSize: '11px', opacity: 0.85 }}>
+                                  {mainClass.profesores?.nombre}
+                                </div>
+                              </>
+                            )}
+                            {vista === 'semana' && cardH >= 18 && (
+                              <div style={{ fontSize: '9px', opacity: 0.75 }}>{mainClass.duracion_min}min</div>
+                            )}
                           </div>
-                        </td>
-                      )
-                    })
+                        )
+                      })()}
+
+                      {cs.slice(1).map((c: any) => {
+                        const col2 = getColorEstado(c.estado)
+                        return (
+                          <div key={c.id} onClick={(e) => abrirClaseExistente(e, c)}
+                            title="Solapamiento historico"
+                            style={{ background: col2.bg, color: col2.color, border: `1px solid ${col2.border}`, borderRadius: '4px', padding: '2px 6px', fontSize: '10px', marginTop: '2px', cursor: 'pointer' }}>
+                            {c.contratos?.clientes?.nombre?.split(' ')[0]} ⚠️
+                          </div>
+                        )
+                      })}
+                    </td>
                   )
-                  : salones.map((salon: any) => {
-                    const cs = getClasesSlot(salon.id, hora, formatFecha(diaSeleccionado))
-                    return (
-                      <td key={`${salon.id}-${hora}`}
-                        onClick={() => abrirSlot(salon, hora, formatFecha(diaSeleccionado))}
-                        style={{ padding: 0, borderLeft: '1px solid #f1f5f9', cursor: 'pointer', height: `${ROW_H}px` }}
-                        onMouseEnter={e => { if (!cs.length) e.currentTarget.style.background = TEAL_LIGHT }}
-                        onMouseLeave={e => { if (!cs.length) e.currentTarget.style.background = '' }}
-                      >
-                        <div style={{ height: `${ROW_H}px`, overflow: 'hidden', padding: '2px 6px' }}>
-                          {cs.map((c: any) => {
-                            const col = getColorEstado(c.estado)
-                            return (
-                              <div key={c.id}
-                                onClick={(e) => abrirClaseExistente(e, c)}
-                                title="Clic para editar"
-                                style={{ background: col.bg, color: col.color, border: `1px solid ${col.border}`, borderRadius: '6px', padding: '3px 8px', fontSize: '12px', marginBottom: '2px', cursor: 'pointer' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <strong style={{ fontSize: '12px' }}>{c.contratos?.clientes?.nombre}</strong>
-                                  {c.recurrente && <span style={{ fontSize: '10px' }}>🔁</span>}
-                                </div>
-                                <div style={{ fontSize: '11px', opacity: 0.85 }}>{c.contratos?.instrumentos?.nombre} · {c.duracion_min}min</div>
-                                <div style={{ fontSize: '11px', opacity: 0.85 }}>{c.profesores?.nombre}</div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </td>
-                    )
-                  })
-                }
+                })}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* ══════════════════════════════════════════════
-          MODAL CREAR CLASE
-      ══════════════════════════════════════════════ */}
+      {/* MODAL CREAR */}
       {modalAbierto && slotSeleccionado && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
@@ -506,12 +566,10 @@ export default function Horarios() {
                   {slotSeleccionado.salon.nombre} · {slotSeleccionado.fecha} · {slotSeleccionado.hora}
                 </p>
               </div>
-              <button onClick={() => setModalAbierto(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
+              <button onClick={() => setModalAbierto(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>X</button>
             </div>
-
             <div style={{ padding: '20px 24px', maxHeight: '80vh', overflowY: 'auto' }}>
 
-              {/* Cliente */}
               <div style={{ marginBottom: '14px', position: 'relative' }}>
                 <label style={labelStyle}>Cliente</label>
                 <input placeholder="Buscar cliente..." value={busquedaCliente}
@@ -531,32 +589,29 @@ export default function Horarios() {
                 )}
               </div>
 
-              {/* Plan */}
               {contratos.length > 0 && (
                 <div style={{ marginBottom: '14px' }}>
                   <label style={labelStyle}>Plan</label>
                   <select value={(contratoSeleccionado as any)?.id || ''} onChange={e => seleccionarContrato(e.target.value)} style={fieldStyle}>
                     {contratos.map((ct: any) => (
                       <option key={ct.id} value={ct.id}>
-                        {ct.instrumentos?.nombre || '—'} · {ct.profesores?.nombre || '—'} · {ct.clases_tomadas}/{ct.total_clases} · {ct.duracion_min}min
+                        {ct.instrumentos?.nombre || '-'} · {ct.profesores?.nombre || '-'} · {ct.clases_tomadas}/{ct.total_clases} · {ct.duracion_min}min
                       </option>
                     ))}
                   </select>
                 </div>
               )}
 
-              {/* Profesor */}
               <div style={{ marginBottom: '14px' }}>
-                <label style={labelStyle}>Profesor <span style={{ color: '#999', fontWeight: '400' }}>(titular por defecto)</span></label>
+                <label style={labelStyle}>Profesor</label>
                 <select value={profesorId} onChange={e => setProfesorId(e.target.value)} style={fieldStyle}>
-                  <option value="">— Seleccionar profesor —</option>
+                  <option value="">- Seleccionar profesor -</option>
                   {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
               </div>
 
-              {/* Duración */}
               <div style={{ marginBottom: '14px' }}>
-                <label style={labelStyle}>Duración</label>
+                <label style={labelStyle}>Duracion</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   {['30', '45', '60'].map(d => (
                     <button key={d} onClick={() => setDuracion(d)} style={{
@@ -569,7 +624,6 @@ export default function Horarios() {
                 </div>
               </div>
 
-              {/* Recurrencia */}
               <div style={{ marginBottom: '20px', background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#333' }}>
                   <input type="checkbox" checked={recurrente} onChange={e => setRecurrente(e.target.checked)} />
@@ -577,7 +631,7 @@ export default function Horarios() {
                 </label>
                 {recurrente && (
                   <div style={{ marginTop: '10px' }}>
-                    <label style={{ ...labelStyle, marginBottom: '6px' }}>¿Cuántas semanas?</label>
+                    <label style={{ ...labelStyle, marginBottom: '6px' }}>Cuantas semanas?</label>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                       {[4, 8, 12, 16].map(n => (
                         <button key={n} onClick={() => setSemanasRecurrencia(n)} style={{
@@ -592,7 +646,7 @@ export default function Horarios() {
                         style={{ width: '60px', padding: '6px 8px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px' }} />
                     </div>
                     <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#666' }}>
-                      Se crearán {semanasRecurrencia} clases, una por semana, mismo día y hora.
+                      Se crearan {semanasRecurrencia} clases · mismo dia y hora
                     </p>
                   </div>
                 )}
@@ -605,7 +659,7 @@ export default function Horarios() {
                   flex: 1, padding: '11px', background: TEAL, color: 'white',
                   border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500'
                 }}>
-                  {guardando ? 'Guardando...' : recurrente ? `Crear ${semanasRecurrencia} clases` : 'Asignar clase'}
+                  {guardando ? 'Verificando...' : recurrente ? `Crear ${semanasRecurrencia} clases` : 'Asignar clase'}
                 </button>
                 <button onClick={() => setModalAbierto(false)} style={{
                   padding: '11px 18px', background: '#f1f5f9', color: '#334155',
@@ -617,9 +671,7 @@ export default function Horarios() {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════
-          MODAL EDITAR CLASE
-      ══════════════════════════════════════════════ */}
+      {/* MODAL EDITAR */}
       {modalEditar && claseEditando && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
@@ -630,34 +682,29 @@ export default function Horarios() {
                   {claseEditando.contratos?.clientes?.nombre} · {claseEditando.fecha}
                 </p>
               </div>
-              <button onClick={() => setModalEditar(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
+              <button onClick={() => setModalEditar(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>X</button>
             </div>
-
             <div style={{ padding: '20px 24px', maxHeight: '80vh', overflowY: 'auto' }}>
 
-              {/* Info no editable */}
               <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px', marginBottom: '16px', fontSize: '13px', color: '#333' }}>
                 <div><strong>Cliente:</strong> {claseEditando.contratos?.clientes?.nombre}</div>
                 <div><strong>Instrumento:</strong> {claseEditando.contratos?.instrumentos?.nombre}</div>
                 {claseEditando.recurrente && (
-                  <div style={{ marginTop: '6px', color: TEAL, fontWeight: '600', fontSize: '12px' }}>
-                    🔁 Clase recurrente — puedes editar solo esta o todas las futuras
-                  </div>
+                  <div style={{ marginTop: '6px', color: TEAL, fontWeight: '600', fontSize: '12px' }}>🔁 Clase recurrente</div>
                 )}
               </div>
 
-              {/* Estado */}
               <div style={{ marginBottom: '14px' }}>
                 <label style={labelStyle}>Estado</label>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                   {['programada', 'confirmada', 'dada', 'cancelada'].map(est => {
-                    const col = getColorEstado(est)
+                    const col2 = getColorEstado(est)
                     return (
                       <button key={est} onClick={() => setEditEstado(est)} style={{
                         padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500',
-                        border: `1px solid ${editEstado === est ? col.color : '#e2e8f0'}`,
-                        background: editEstado === est ? col.bg : 'white',
-                        color: editEstado === est ? col.color : '#666'
+                        border: `1px solid ${editEstado === est ? col2.color : '#e2e8f0'}`,
+                        background: editEstado === est ? col2.bg : 'white',
+                        color: editEstado === est ? col2.color : '#666'
                       }}>
                         {est.charAt(0).toUpperCase() + est.slice(1)}
                       </button>
@@ -666,7 +713,6 @@ export default function Horarios() {
                 </div>
               </div>
 
-              {/* Hora */}
               <div style={{ marginBottom: '14px' }}>
                 <label style={labelStyle}>Hora de inicio</label>
                 <select value={editHora} onChange={e => setEditHora(e.target.value)} style={fieldStyle}>
@@ -674,9 +720,8 @@ export default function Horarios() {
                 </select>
               </div>
 
-              {/* Duración */}
               <div style={{ marginBottom: '14px' }}>
-                <label style={labelStyle}>Duración</label>
+                <label style={labelStyle}>Duracion</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   {['30', '45', '60'].map(d => (
                     <button key={d} onClick={() => setEditDuracion(d)} style={{
@@ -689,18 +734,16 @@ export default function Horarios() {
                 </div>
               </div>
 
-              {/* Profesor */}
               <div style={{ marginBottom: '14px' }}>
                 <label style={labelStyle}>Profesor</label>
                 <select value={editProfesorId} onChange={e => setEditProfesorId(e.target.value)} style={fieldStyle}>
-                  <option value="">— Sin profesor —</option>
+                  <option value="">- Sin profesor -</option>
                   {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
               </div>
 
-              {/* Salón */}
               <div style={{ marginBottom: '20px' }}>
-                <label style={labelStyle}>Salón</label>
+                <label style={labelStyle}>Salon</label>
                 <select value={editSalonId} onChange={e => setEditSalonId(e.target.value)} style={fieldStyle}>
                   {salones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                 </select>
@@ -708,21 +751,16 @@ export default function Horarios() {
 
               {editError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{editError}</p>}
 
-              {/* Botones guardar */}
               {claseEditando.recurrente && claseEditando.patron_id ? (
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
                   <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{
                     flex: 1, padding: '10px', background: TEAL, color: 'white',
                     border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
-                  }}>
-                    {editGuardando ? '...' : 'Guardar solo esta'}
-                  </button>
+                  }}>{editGuardando ? '...' : 'Guardar solo esta'}</button>
                   <button onClick={() => guardarEdicion('futuras')} disabled={editGuardando} style={{
                     flex: 1, padding: '10px', background: '#0f766e', color: 'white',
                     border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
-                  }}>
-                    {editGuardando ? '...' : 'Esta y futuras'}
-                  </button>
+                  }}>{editGuardando ? '...' : 'Esta y futuras'}</button>
                 </div>
               ) : (
                 <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{
@@ -731,7 +769,6 @@ export default function Horarios() {
                 }}>{editGuardando ? 'Guardando...' : 'Guardar cambios'}</button>
               )}
 
-              {/* Borrar */}
               {!confirmarBorrar ? (
                 <button onClick={() => setConfirmarBorrar(true)} style={{
                   width: '100%', padding: '10px', background: 'white', color: '#dc2626',
@@ -740,9 +777,7 @@ export default function Horarios() {
               ) : (
                 <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px' }}>
                   <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#991b1b', fontWeight: '600' }}>
-                    {claseEditando.recurrente && claseEditando.patron_id
-                      ? '¿Cuáles clases quieres borrar?'
-                      : '¿Confirmar borrado?'}
+                    {claseEditando.recurrente && claseEditando.patron_id ? 'Que quieres borrar?' : 'Confirmar borrado?'}
                   </p>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {claseEditando.recurrente && claseEditando.patron_id ? (
@@ -760,7 +795,7 @@ export default function Horarios() {
                       <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{
                         flex: 1, padding: '8px', background: '#dc2626', color: 'white',
                         border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
-                      }}>Sí, borrar</button>
+                      }}>Si, borrar</button>
                     )}
                     <button onClick={() => setConfirmarBorrar(false)} style={{
                       padding: '8px 14px', background: 'white', color: '#333',
