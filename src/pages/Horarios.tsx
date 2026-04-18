@@ -16,6 +16,7 @@ const HORAS = Array.from({ length: 57 }, (_, i) => {
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const DIAS_LARGO = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+const DURACIONES = ['30', '45', '60', '90']
 
 function formatFecha(d: Date): string {
   const y = d.getFullYear()
@@ -190,15 +191,10 @@ export default function Horarios() {
     setCargando(false)
   }
 
-  // Validación salón: no dos clases solapadas en mismo salón
-  async function verificarConflictoSalon(
-    salonId: string, fecha: string, hora: string, duracionMin: number, excluirId?: string
-  ): Promise<string | null> {
+  async function verificarConflictoSalon(salonId: string, fecha: string, hora: string, durMin: number, excluirId?: string): Promise<string | null> {
     const inicio = horaAMinutos(hora)
-    const fin = inicio + duracionMin
-    const { data } = await supabase
-      .from('clases')
-      .select('id, hora, duracion_min, contratos(clientes(nombre))')
+    const fin = inicio + durMin
+    const { data } = await supabase.from('clases').select('id, hora, duracion_min, contratos(clientes(nombre))')
       .eq('salon_id', salonId).eq('fecha', fecha).neq('estado', 'cancelada')
     if (!data) return null
     for (const c of data) {
@@ -207,24 +203,17 @@ export default function Horarios() {
       const cF = cI + ((c as any).duracion_min || 60)
       if (inicio < cF && fin > cI) {
         const nombre = (c as any).contratos?.clientes?.nombre || 'otra clase'
-        const hi = `${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}`
-        const hf = `${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')}`
-        return `Conflicto de salón con ${nombre} (${hi}–${hf})`
+        return `Conflicto de salón con ${nombre} (${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}–${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')})`
       }
     }
     return null
   }
 
-  // Validación profesor: no dos clases solapadas con mismo profesor
-  async function verificarConflictoProfesor(
-    profId: string, fecha: string, hora: string, duracionMin: number, excluirId?: string
-  ): Promise<string | null> {
+  async function verificarConflictoProfesor(profId: string, fecha: string, hora: string, durMin: number, excluirId?: string): Promise<string | null> {
     if (!profId) return null
     const inicio = horaAMinutos(hora)
-    const fin = inicio + duracionMin
-    const { data } = await supabase
-      .from('clases')
-      .select('id, hora, duracion_min, salones(nombre), contratos(clientes(nombre))')
+    const fin = inicio + durMin
+    const { data } = await supabase.from('clases').select('id, hora, duracion_min, salones(nombre), contratos(clientes(nombre))')
       .eq('profesor_id', profId).eq('fecha', fecha).neq('estado', 'cancelada')
     if (!data) return null
     for (const c of data) {
@@ -234,30 +223,22 @@ export default function Horarios() {
       if (inicio < cF && fin > cI) {
         const cliente = (c as any).contratos?.clientes?.nombre || 'otro cliente'
         const salon = (c as any).salones?.nombre || 'otro salón'
-        const hi = `${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}`
-        const hf = `${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')}`
-        return `El profesor ya tiene clase con ${cliente} en ${salon} (${hi}–${hf})`
+        return `Profesor ya tiene clase con ${cliente} en ${salon} (${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}–${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')})`
       }
     }
     return null
   }
 
-  // Validación cliente: no dos clases solapadas con mismo cliente
-  async function verificarConflictoCliente(
-    contratoId: string, fecha: string, hora: string, duracionMin: number, excluirId?: string
-  ): Promise<string | null> {
+  async function verificarConflictoCliente(contratoId: string, fecha: string, hora: string, durMin: number, excluirId?: string): Promise<string | null> {
     if (!contratoId) return null
     const inicio = horaAMinutos(hora)
-    const fin = inicio + duracionMin
-    // Obtener cliente_id desde el contrato
+    const fin = inicio + durMin
     const { data: ct } = await supabase.from('contratos').select('cliente_id').eq('id', contratoId).single()
     if (!ct) return null
     const { data: otrosContratos } = await supabase.from('contratos').select('id').eq('cliente_id', ct.cliente_id)
     if (!otrosContratos) return null
     const ids = otrosContratos.map((c: any) => c.id)
-    const { data } = await supabase
-      .from('clases')
-      .select('id, hora, duracion_min, salones(nombre), profesores(nombre)')
+    const { data } = await supabase.from('clases').select('id, hora, duracion_min, salones(nombre), profesores(nombre)')
       .in('contrato_id', ids).eq('fecha', fecha).neq('estado', 'cancelada')
     if (!data) return null
     for (const c of data) {
@@ -267,18 +248,13 @@ export default function Horarios() {
       if (inicio < cF && fin > cI) {
         const salon = (c as any).salones?.nombre || 'otro salón'
         const prof = (c as any).profesores?.nombre || 'otro profesor'
-        const hi = `${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}`
-        const hf = `${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')}`
-        return `El cliente ya tiene clase con ${prof} en ${salon} (${hi}–${hf})`
+        return `Cliente ya tiene clase con ${prof} en ${salon} (${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}–${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')})`
       }
     }
     return null
   }
 
-  async function verificarTodosLosConflictos(
-    salonId: string, profId: string, contratoId: string,
-    fecha: string, hora: string, durMin: number, excluirId?: string
-  ): Promise<string | null> {
+  async function verificarTodos(salonId: string, profId: string, contratoId: string, fecha: string, hora: string, durMin: number, excluirId?: string): Promise<string | null> {
     const c1 = await verificarConflictoSalon(salonId, fecha, hora, durMin, excluirId)
     if (c1) return c1
     const c2 = await verificarConflictoProfesor(profId, fecha, hora, durMin, excluirId)
@@ -367,10 +343,7 @@ export default function Horarios() {
         const d = parseFechaLocal(slotSeleccionado.fecha)
         d.setDate(d.getDate() + i * 7)
         const fechaStr = formatFecha(d)
-        const conflicto = await verificarTodosLosConflictos(
-          slotSeleccionado.salon.id, profesorId, (contratoSeleccionado as any).id,
-          fechaStr, slotSeleccionado.hora, parseInt(duracion)
-        )
+        const conflicto = await verificarTodos(slotSeleccionado.salon.id, profesorId, (contratoSeleccionado as any).id, fechaStr, slotSeleccionado.hora, parseInt(duracion))
         if (conflicto) {
           if (batch.length === 0) {
             setError(`${conflicto} — semana 1. No se creó ninguna clase.`)
@@ -400,10 +373,7 @@ export default function Horarios() {
       if (err) setError('Error: ' + err.message)
       else { setModalAbierto(false); cargarClases() }
     } else {
-      const conflicto = await verificarTodosLosConflictos(
-        slotSeleccionado.salon.id, profesorId, (contratoSeleccionado as any).id,
-        slotSeleccionado.fecha, slotSeleccionado.hora, parseInt(duracion)
-      )
+      const conflicto = await verificarTodos(slotSeleccionado.salon.id, profesorId, (contratoSeleccionado as any).id, slotSeleccionado.fecha, slotSeleccionado.hora, parseInt(duracion))
       if (conflicto) { setError(conflicto); setGuardando(false); return }
       const { error: err } = await supabase.from('clases').insert({
         contrato_id: (contratoSeleccionado as any).id,
@@ -425,32 +395,59 @@ export default function Horarios() {
   async function guardarEdicion(alcance: 'esta' | 'futuras') {
     setEditGuardando(true)
     setEditError('')
-    const conflicto = await verificarTodosLosConflictos(
-      editSalonId, editProfesorId, claseEditando.contratos?.id,
+
+    // Validar conflicto solo para la clase actual
+    const conflicto = await verificarTodos(
+      editSalonId, editProfesorId, claseEditando.contratos?.id || '',
       editFecha, editHora, parseInt(editDuracion), claseEditando.id
     )
-    if (conflicto) { setEditError(conflicto); setEditGuardando(false); return }
-
-    const updates: any = {
-      profesor_id: editProfesorId,
-      duracion_min: parseInt(editDuracion),
-      hora: editHora + ':00',
-      salon_id: editSalonId,
-      estado: editEstado,
-      fecha: editFecha
+    if (conflicto) {
+      setEditError(conflicto)
+      setEditGuardando(false)
+      return
     }
 
-    let dbError: any = null
     if (alcance === 'futuras' && claseEditando.patron_id) {
-      const { fecha: _f, ...sinFecha } = updates
-      const { error } = await supabase.from('clases').update(sinFecha)
-        .eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
-      dbError = error
+      // Actualiza hora, duración, profesor, salón y estado en TODAS las clases futuras de la serie
+      // La fecha NO se propaga (cada clase mantiene su propia fecha)
+      const { error } = await supabase
+        .from('clases')
+        .update({
+          hora: editHora + ':00',
+          duracion_min: parseInt(editDuracion),
+          profesor_id: editProfesorId,
+          salon_id: editSalonId,
+          estado: editEstado
+        })
+        .eq('patron_id', claseEditando.patron_id)
+        .gte('fecha', claseEditando.fecha)
+
+      if (error) {
+        setEditError('Error: ' + error.message)
+        setEditGuardando(false)
+        return
+      }
     } else {
-      const { error } = await supabase.from('clases').update(updates).eq('id', claseEditando.id)
-      dbError = error
+      // Solo esta clase — actualiza todo incluyendo fecha
+      const { error } = await supabase
+        .from('clases')
+        .update({
+          hora: editHora + ':00',
+          duracion_min: parseInt(editDuracion),
+          profesor_id: editProfesorId,
+          salon_id: editSalonId,
+          estado: editEstado,
+          fecha: editFecha
+        })
+        .eq('id', claseEditando.id)
+
+      if (error) {
+        setEditError('Error: ' + error.message)
+        setEditGuardando(false)
+        return
+      }
     }
-    if (dbError) { setEditError('Error: ' + dbError.message); setEditGuardando(false); return }
+
     setModalEditar(false)
     cargarClases()
     setEditGuardando(false)
@@ -475,9 +472,6 @@ export default function Horarios() {
     )
   }
 
-  const DURACIONES = ['30', '45', '60', '90']
-
-  // Detecta si algo cambió al editar (para saber si preguntar alcance en recurrentes)
   const hayEdicionReal = claseEditando && (
     editHora !== claseEditando.hora?.substring(0, 5) ||
     editFecha !== claseEditando.fecha ||
@@ -489,7 +483,7 @@ export default function Horarios() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
 
-      {/* Encabezado — sin título "Horarios" */}
+      {/* Encabezado */}
       <div style={{ padding: '12px 24px', background: 'white', borderBottom: '1px solid #eef2f7', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           <p style={{ margin: 0, color: '#333', fontSize: '18px', fontWeight: '700' }}>
@@ -625,12 +619,9 @@ export default function Horarios() {
                               </strong>
                               <div style={{ display: 'flex', gap: '3px', flexShrink: 0, alignItems: 'center' }}>
                                 {numPlan && (
-                                  <span style={{
-                                    fontSize: vista === 'dia' ? '12px' : '11px',
-                                    fontWeight: '700',
-                                    opacity: 0.9,
-                                    whiteSpace: 'nowrap'
-                                  }}>{numPlan}</span>
+                                  <span style={{ fontSize: vista === 'dia' ? '12px' : '11px', fontWeight: '700', opacity: 0.9, whiteSpace: 'nowrap' }}>
+                                    {numPlan}
+                                  </span>
                                 )}
                                 {mainClass.recurrente && <span style={{ fontSize: '9px' }}>🔁</span>}
                               </div>
@@ -863,7 +854,6 @@ export default function Horarios() {
 
                   {editError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{editError}</p>}
 
-                  {/* Botones guardar — recurrente Y con cambios reales: preguntar alcance */}
                   {claseEditando.recurrente && claseEditando.patron_id && hayEdicionReal ? (
                     <>
                       <p style={{ fontSize: '13px', color: '#555', marginBottom: '8px', fontWeight: '500' }}>
