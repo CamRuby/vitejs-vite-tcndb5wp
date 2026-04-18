@@ -72,7 +72,7 @@ function getColorEstado(estado: string) {
   switch (estado) {
     case 'programada': return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' }
     case 'confirmada': return { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
-    case 'dada':       return { bg: '#fefce8', color: '#854d0e', border: '#fde68a' }  // amarillo
+    case 'dada':       return { bg: '#fefce8', color: '#854d0e', border: '#fde68a' }
     case 'cancelada':  return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' }
     default:           return { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' }
   }
@@ -123,18 +123,15 @@ export default function Horarios() {
     if (vista === 'semana') {
       return fechasSemana.flatMap((fecha, i) =>
         salones.map((salon: any) => ({
-          salon,
-          fecha: formatFecha(fecha),
+          salon, fecha: formatFecha(fecha),
           header: `${DIAS[i]} ${formatFechaMostrar(fecha)}`,
           subheader: salon.nombre
         }))
       )
     }
     return salones.map((salon: any) => ({
-      salon,
-      fecha: formatFecha(diaSeleccionado),
-      header: salon.nombre,
-      subheader: ''
+      salon, fecha: formatFecha(diaSeleccionado),
+      header: salon.nombre, subheader: ''
     }))
   }, [vista, salones, fechasSemana, diaSeleccionado])
 
@@ -149,8 +146,7 @@ export default function Horarios() {
         const min = cInicio + i * 15
         const hh = Math.floor(min / 60)
         const mm = min % 60
-        const h = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
-        skip.add(`${salonId}-${c.fecha}-${h}`)
+        skip.add(`${salonId}-${c.fecha}-${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`)
       }
     })
     return skip
@@ -183,7 +179,7 @@ export default function Horarios() {
       .from('clases')
       .select(`
         id, fecha, hora, duracion_min, estado, patron_id, recurrente,
-        contratos (id, clases_tomadas, total_clases, clientes (nombre), instrumentos (nombre)),
+        contratos (id, clases_tomadas, total_clases, clientes (id, nombre), instrumentos (nombre)),
         profesores (id, nombre),
         salones (id, nombre, sede_id)
       `)
@@ -194,7 +190,8 @@ export default function Horarios() {
     setCargando(false)
   }
 
-  async function verificarConflicto(
+  // Validación salón: no dos clases solapadas en mismo salón
+  async function verificarConflictoSalon(
     salonId: string, fecha: string, hora: string, duracionMin: number, excluirId?: string
   ): Promise<string | null> {
     const inicio = horaAMinutos(hora)
@@ -202,21 +199,92 @@ export default function Horarios() {
     const { data } = await supabase
       .from('clases')
       .select('id, hora, duracion_min, contratos(clientes(nombre))')
-      .eq('salon_id', salonId)
-      .eq('fecha', fecha)
-      .neq('estado', 'cancelada')
+      .eq('salon_id', salonId).eq('fecha', fecha).neq('estado', 'cancelada')
     if (!data) return null
     for (const c of data) {
       if (excluirId && c.id === excluirId) continue
-      const cInicio = horaAMinutos((c.hora || '').substring(0, 5))
-      const cFin = cInicio + ((c as any).duracion_min || 60)
-      if (inicio < cFin && fin > cInicio) {
+      const cI = horaAMinutos((c.hora || '').substring(0, 5))
+      const cF = cI + ((c as any).duracion_min || 60)
+      if (inicio < cF && fin > cI) {
         const nombre = (c as any).contratos?.clientes?.nombre || 'otra clase'
-        const hi = `${String(Math.floor(cInicio / 60)).padStart(2, '0')}:${String(cInicio % 60).padStart(2, '0')}`
-        const hf = `${String(Math.floor(cFin / 60)).padStart(2, '0')}:${String(cFin % 60).padStart(2, '0')}`
-        return `Conflicto con ${nombre} (${hi}–${hf})`
+        const hi = `${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}`
+        const hf = `${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')}`
+        return `Conflicto de salón con ${nombre} (${hi}–${hf})`
       }
     }
+    return null
+  }
+
+  // Validación profesor: no dos clases solapadas con mismo profesor
+  async function verificarConflictoProfesor(
+    profId: string, fecha: string, hora: string, duracionMin: number, excluirId?: string
+  ): Promise<string | null> {
+    if (!profId) return null
+    const inicio = horaAMinutos(hora)
+    const fin = inicio + duracionMin
+    const { data } = await supabase
+      .from('clases')
+      .select('id, hora, duracion_min, salones(nombre), contratos(clientes(nombre))')
+      .eq('profesor_id', profId).eq('fecha', fecha).neq('estado', 'cancelada')
+    if (!data) return null
+    for (const c of data) {
+      if (excluirId && c.id === excluirId) continue
+      const cI = horaAMinutos((c.hora || '').substring(0, 5))
+      const cF = cI + ((c as any).duracion_min || 60)
+      if (inicio < cF && fin > cI) {
+        const cliente = (c as any).contratos?.clientes?.nombre || 'otro cliente'
+        const salon = (c as any).salones?.nombre || 'otro salón'
+        const hi = `${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}`
+        const hf = `${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')}`
+        return `El profesor ya tiene clase con ${cliente} en ${salon} (${hi}–${hf})`
+      }
+    }
+    return null
+  }
+
+  // Validación cliente: no dos clases solapadas con mismo cliente
+  async function verificarConflictoCliente(
+    contratoId: string, fecha: string, hora: string, duracionMin: number, excluirId?: string
+  ): Promise<string | null> {
+    if (!contratoId) return null
+    const inicio = horaAMinutos(hora)
+    const fin = inicio + duracionMin
+    // Obtener cliente_id desde el contrato
+    const { data: ct } = await supabase.from('contratos').select('cliente_id').eq('id', contratoId).single()
+    if (!ct) return null
+    const { data: otrosContratos } = await supabase.from('contratos').select('id').eq('cliente_id', ct.cliente_id)
+    if (!otrosContratos) return null
+    const ids = otrosContratos.map((c: any) => c.id)
+    const { data } = await supabase
+      .from('clases')
+      .select('id, hora, duracion_min, salones(nombre), profesores(nombre)')
+      .in('contrato_id', ids).eq('fecha', fecha).neq('estado', 'cancelada')
+    if (!data) return null
+    for (const c of data) {
+      if (excluirId && c.id === excluirId) continue
+      const cI = horaAMinutos((c.hora || '').substring(0, 5))
+      const cF = cI + ((c as any).duracion_min || 60)
+      if (inicio < cF && fin > cI) {
+        const salon = (c as any).salones?.nombre || 'otro salón'
+        const prof = (c as any).profesores?.nombre || 'otro profesor'
+        const hi = `${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}`
+        const hf = `${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')}`
+        return `El cliente ya tiene clase con ${prof} en ${salon} (${hi}–${hf})`
+      }
+    }
+    return null
+  }
+
+  async function verificarTodosLosConflictos(
+    salonId: string, profId: string, contratoId: string,
+    fecha: string, hora: string, durMin: number, excluirId?: string
+  ): Promise<string | null> {
+    const c1 = await verificarConflictoSalon(salonId, fecha, hora, durMin, excluirId)
+    if (c1) return c1
+    const c2 = await verificarConflictoProfesor(profId, fecha, hora, durMin, excluirId)
+    if (c2) return c2
+    const c3 = await verificarConflictoCliente(contratoId, fecha, hora, durMin, excluirId)
+    if (c3) return c3
     return null
   }
 
@@ -299,14 +367,17 @@ export default function Horarios() {
         const d = parseFechaLocal(slotSeleccionado.fecha)
         d.setDate(d.getDate() + i * 7)
         const fechaStr = formatFecha(d)
-        const conflicto = await verificarConflicto(slotSeleccionado.salon.id, fechaStr, slotSeleccionado.hora, parseInt(duracion))
+        const conflicto = await verificarTodosLosConflictos(
+          slotSeleccionado.salon.id, profesorId, (contratoSeleccionado as any).id,
+          fechaStr, slotSeleccionado.hora, parseInt(duracion)
+        )
         if (conflicto) {
           if (batch.length === 0) {
-            setError(`${conflicto} en la semana 1. No se creó ninguna clase.`)
+            setError(`${conflicto} — semana 1. No se creó ninguna clase.`)
           } else {
             const { error: err } = await supabase.from('clases').insert(batch)
-            if (err) setError('Error al guardar: ' + err.message)
-            else { setError(`${conflicto} en semana ${i + 1}. Se crearon ${batch.length} clases.`); cargarClases() }
+            if (err) setError('Error: ' + err.message)
+            else { setError(`${conflicto} — semana ${i + 1}. Se crearon ${batch.length} clases.`); cargarClases() }
           }
           setGuardando(false)
           return
@@ -329,7 +400,10 @@ export default function Horarios() {
       if (err) setError('Error: ' + err.message)
       else { setModalAbierto(false); cargarClases() }
     } else {
-      const conflicto = await verificarConflicto(slotSeleccionado.salon.id, slotSeleccionado.fecha, slotSeleccionado.hora, parseInt(duracion))
+      const conflicto = await verificarTodosLosConflictos(
+        slotSeleccionado.salon.id, profesorId, (contratoSeleccionado as any).id,
+        slotSeleccionado.fecha, slotSeleccionado.hora, parseInt(duracion)
+      )
       if (conflicto) { setError(conflicto); setGuardando(false); return }
       const { error: err } = await supabase.from('clases').insert({
         contrato_id: (contratoSeleccionado as any).id,
@@ -351,7 +425,10 @@ export default function Horarios() {
   async function guardarEdicion(alcance: 'esta' | 'futuras') {
     setEditGuardando(true)
     setEditError('')
-    const conflicto = await verificarConflicto(editSalonId, editFecha, editHora, parseInt(editDuracion), claseEditando.id)
+    const conflicto = await verificarTodosLosConflictos(
+      editSalonId, editProfesorId, claseEditando.contratos?.id,
+      editFecha, editHora, parseInt(editDuracion), claseEditando.id
+    )
     if (conflicto) { setEditError(conflicto); setEditGuardando(false); return }
 
     const updates: any = {
@@ -365,9 +442,8 @@ export default function Horarios() {
 
     let dbError: any = null
     if (alcance === 'futuras' && claseEditando.patron_id) {
-      // Para "esta y futuras": actualiza todo EXCEPTO la fecha (cada una mantiene su fecha propia)
-      const { fecha: _f, ...updatessinFecha } = updates
-      const { error } = await supabase.from('clases').update(updatessinFecha)
+      const { fecha: _f, ...sinFecha } = updates
+      const { error } = await supabase.from('clases').update(sinFecha)
         .eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
       dbError = error
     } else {
@@ -399,29 +475,28 @@ export default function Horarios() {
     )
   }
 
-  // Número de clase dentro del plan: cuántas clases tiene este contrato hasta esta fecha inclusive
-  function numeroClaseEnPlan(clase: any): string {
-    if (!clase.contratos?.id) return ''
-    const total = clase.contratos?.total_clases
-    const tomadas = clase.contratos?.clases_tomadas
-    if (!total) return ''
-    return `${tomadas ?? '?'}/${total}`
-  }
+  const DURACIONES = ['30', '45', '60', '90']
+
+  // Detecta si algo cambió al editar (para saber si preguntar alcance en recurrentes)
+  const hayEdicionReal = claseEditando && (
+    editHora !== claseEditando.hora?.substring(0, 5) ||
+    editFecha !== claseEditando.fecha ||
+    editProfesorId !== claseEditando.profesores?.id ||
+    editSalonId !== claseEditando.salones?.id ||
+    editDuracion !== String(claseEditando.duracion_min)
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
 
-      {/* Encabezado */}
-      <div style={{ padding: '16px 24px', background: 'white', borderBottom: '1px solid #eef2f7', flexShrink: 0 }}>
+      {/* Encabezado — sin título "Horarios" */}
+      <div style={{ padding: '12px 24px', background: 'white', borderBottom: '1px solid #eef2f7', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '22px', color: '#1a1a1a' }}>Horarios</h2>
-            <p style={{ margin: '4px 0 0', color: '#333', fontSize: '17px', fontWeight: '600' }}>
-              {vista === 'dia'
-                ? formatFechaLarga(diaSeleccionado)
-                : `${formatFechaMostrar(fechasSemana[0])} – ${formatFechaMostrar(fechasSemana[5])}, ${fechasSemana[0].getFullYear()}`}
-            </p>
-          </div>
+          <p style={{ margin: 0, color: '#333', fontSize: '18px', fontWeight: '700' }}>
+            {vista === 'dia'
+              ? formatFechaLarga(diaSeleccionado)
+              : `${formatFechaMostrar(fechasSemana[0])} – ${formatFechaMostrar(fechasSemana[5])}, ${fechasSemana[0].getFullYear()}`}
+          </p>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <select value={sedeSeleccionada} onChange={e => setSedeSeleccionada(e.target.value)}
               style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '14px' }}>
@@ -459,7 +534,7 @@ export default function Horarios() {
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '16px', marginTop: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '16px', marginTop: '8px', flexWrap: 'wrap' }}>
           {[
             { label: 'Programada', color: '#1d4ed8', bg: '#eff6ff' },
             { label: 'Confirmada', color: '#166534', bg: '#dcfce7' },
@@ -506,23 +581,19 @@ export default function Horarios() {
                 }}>
                   {hora}
                 </td>
-
                 {columns.map(col => {
                   const cellKey = `${col.salon.id}-${col.fecha}-${hora}`
                   if (skipSet.has(cellKey)) return null
-
                   const cs = getClasesSlot(col.salon.id, hora, col.fecha)
                   const mainClass = cs[0]
                   const rowSpan = mainClass ? Math.max(1, Math.round((mainClass.duracion_min || 60) / 15)) : 1
                   const esCeldaPasada = esPasado(col.fecha)
-
                   return (
                     <td key={cellKey}
                       rowSpan={rowSpan}
                       onClick={() => { if (!mainClass) abrirSlot(col.salon, hora, col.fecha) }}
                       style={{
-                        padding: 0, height: '1px',
-                        verticalAlign: 'top',
+                        padding: 0, height: '1px', verticalAlign: 'top',
                         borderLeft: '1px solid #f1f5f9',
                         cursor: mainClass ? 'default' : esCeldaPasada ? 'not-allowed' : 'pointer',
                         width: '160px', minWidth: '160px',
@@ -533,11 +604,11 @@ export default function Horarios() {
                     >
                       {mainClass && (() => {
                         const col2 = getColorEstado(mainClass.estado)
-                        const numPlan = numeroClaseEnPlan(mainClass)
+                        const numPlan = mainClass.contratos?.total_clases
+                          ? `${mainClass.contratos.clases_tomadas ?? '?'}/${mainClass.contratos.total_clases}`
+                          : ''
                         return (
-                          <div
-                            onClick={(e) => abrirClaseExistente(e, mainClass)}
-                            title="Clic para editar"
+                          <div onClick={(e) => abrirClaseExistente(e, mainClass)} title="Clic para editar"
                             style={{
                               background: col2.bg, color: col2.color,
                               border: `1px solid ${col2.border}`,
@@ -545,32 +616,30 @@ export default function Horarios() {
                               fontSize: vista === 'dia' ? '13px' : '11px',
                               cursor: 'pointer',
                               height: 'calc(100% - 4px)',
-                              overflow: 'hidden',
-                              boxSizing: 'border-box',
-                              margin: '2px 3px'
+                              overflow: 'hidden', boxSizing: 'border-box', margin: '2px 3px'
                             }}
                           >
-                            {/* Nombre completo siempre */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2px' }}>
                               <strong style={{ lineHeight: '1.3', fontSize: vista === 'dia' ? '13px' : '11px' }}>
                                 {mainClass.contratos?.clientes?.nombre}
                               </strong>
-                              <div style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
+                              <div style={{ display: 'flex', gap: '3px', flexShrink: 0, alignItems: 'center' }}>
                                 {numPlan && (
-                                  <span style={{ fontSize: '10px', opacity: 0.8, whiteSpace: 'nowrap' }}>{numPlan}</span>
+                                  <span style={{
+                                    fontSize: vista === 'dia' ? '12px' : '11px',
+                                    fontWeight: '700',
+                                    opacity: 0.9,
+                                    whiteSpace: 'nowrap'
+                                  }}>{numPlan}</span>
                                 )}
-                                {mainClass.recurrente && <span style={{ fontSize: '9px', flexShrink: 0 }}>🔁</span>}
+                                {mainClass.recurrente && <span style={{ fontSize: '9px' }}>🔁</span>}
                               </div>
                             </div>
-
-                            {/* Profesor — en vista día siempre, en semana si hay espacio (rowSpan >= 3) */}
                             {(vista === 'dia' || rowSpan >= 3) && mainClass.profesores?.nombre && (
                               <div style={{ fontSize: vista === 'dia' ? '12px' : '10px', opacity: 0.85, marginTop: '1px' }}>
                                 {mainClass.profesores.nombre}
                               </div>
                             )}
-
-                            {/* Instrumento solo en vista día con espacio */}
                             {vista === 'dia' && rowSpan >= 3 && (
                               <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '1px' }}>
                                 {mainClass.contratos?.instrumentos?.nombre}
@@ -612,7 +681,6 @@ export default function Horarios() {
               <button onClick={() => setModalAbierto(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ padding: '20px 24px', maxHeight: '75vh', overflowY: 'auto' }}>
-
               <div style={{ marginBottom: '14px', position: 'relative' }}>
                 <label style={labelStyle}>Cliente</label>
                 <input placeholder="Buscar cliente..." value={busquedaCliente}
@@ -631,7 +699,6 @@ export default function Horarios() {
                   </div>
                 )}
               </div>
-
               {contratos.length > 0 && (
                 <div style={{ marginBottom: '14px' }}>
                   <label style={labelStyle}>Plan</label>
@@ -644,7 +711,6 @@ export default function Horarios() {
                   </select>
                 </div>
               )}
-
               <div style={{ marginBottom: '14px' }}>
                 <label style={labelStyle}>Profesor</label>
                 <select value={profesorId} onChange={e => setProfesorId(e.target.value)} style={fieldStyle}>
@@ -652,21 +718,19 @@ export default function Horarios() {
                   {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
               </div>
-
               <div style={{ marginBottom: '14px' }}>
                 <label style={labelStyle}>Duración</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {['30', '45', '60'].map(d => (
+                  {DURACIONES.map(d => (
                     <button key={d} onClick={() => setDuracion(d)} style={{
                       flex: 1, padding: '9px', border: `1px solid ${duracion === d ? TEAL : TEAL_MID}`,
-                      borderRadius: '8px', cursor: 'pointer', fontSize: '14px',
+                      borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
                       background: duracion === d ? TEAL : 'white', color: duracion === d ? 'white' : '#333',
                       fontWeight: duracion === d ? '600' : '400'
-                    }}>{d} min</button>
+                    }}>{d}min</button>
                   ))}
                 </div>
               </div>
-
               <div style={{ marginBottom: '20px', background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#333' }}>
                   <input type="checkbox" checked={recurrente} onChange={e => setRecurrente(e.target.checked)} />
@@ -694,9 +758,7 @@ export default function Horarios() {
                   </div>
                 )}
               </div>
-
               {error && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{error}</p>}
-
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button onClick={guardarClase} disabled={guardando} style={{
                   flex: 1, padding: '11px', background: TEAL, color: 'white',
@@ -723,9 +785,7 @@ export default function Horarios() {
                 <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>
                   {esPasado(claseEditando.fecha) ? 'Ver clase (solo lectura)' : 'Editar clase'}
                 </h3>
-                <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
-                  {claseEditando.contratos?.clientes?.nombre}
-                </p>
+                <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>{claseEditando.contratos?.clientes?.nombre}</p>
                 <p style={{ margin: '4px 0 0', color: 'white', fontSize: '18px', fontWeight: '700' }}>
                   {formatFechaLarga(parseFechaLocal(claseEditando.fecha))} · {claseEditando.hora?.substring(0, 5)}
                 </p>
@@ -733,17 +793,12 @@ export default function Horarios() {
               <button onClick={() => setModalEditar(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ padding: '20px 24px', maxHeight: '75vh', overflowY: 'auto' }}>
-
               <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px', marginBottom: '16px', fontSize: '13px', color: '#333' }}>
                 <div><strong>Cliente:</strong> {claseEditando.contratos?.clientes?.nombre}</div>
                 <div><strong>Instrumento:</strong> {claseEditando.contratos?.instrumentos?.nombre}</div>
                 <div><strong>Plan:</strong> {claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases</div>
-                {claseEditando.recurrente && (
-                  <div style={{ marginTop: '6px', color: TEAL, fontWeight: '600', fontSize: '12px' }}>🔁 Clase recurrente</div>
-                )}
-                {esPasado(claseEditando.fecha) && (
-                  <div style={{ marginTop: '6px', color: '#999', fontWeight: '600', fontSize: '12px' }}>🔒 Clase pasada — solo lectura</div>
-                )}
+                {claseEditando.recurrente && <div style={{ marginTop: '6px', color: TEAL, fontWeight: '600', fontSize: '12px' }}>🔁 Clase recurrente</div>}
+                {esPasado(claseEditando.fecha) && <div style={{ marginTop: '6px', color: '#999', fontWeight: '600', fontSize: '12px' }}>🔒 Clase pasada — solo lectura</div>}
               </div>
 
               {!esPasado(claseEditando.fecha) && (
@@ -759,25 +814,15 @@ export default function Horarios() {
                             border: `1px solid ${editEstado === est ? col2.color : '#e2e8f0'}`,
                             background: editEstado === est ? col2.bg : 'white',
                             color: editEstado === est ? col2.color : '#666'
-                          }}>
-                            {est.charAt(0).toUpperCase() + est.slice(1)}
-                          </button>
+                          }}>{est.charAt(0).toUpperCase() + est.slice(1)}</button>
                         )
                       })}
                     </div>
                   </div>
 
-                  {/* Fecha editable */}
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Fecha</label>
-                    <input type="date" value={editFecha}
-                      onChange={e => setEditFecha(e.target.value)}
-                      style={fieldStyle} />
-                    {editFecha !== claseEditando.fecha && (
-                      <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#854d0e' }}>
-                        ⚠️ Cambio de fecha aplica solo a esta clase (no afecta las demás de la serie)
-                      </p>
-                    )}
+                    <input type="date" value={editFecha} onChange={e => setEditFecha(e.target.value)} style={fieldStyle} />
                   </div>
 
                   <div style={{ marginBottom: '14px' }}>
@@ -790,13 +835,13 @@ export default function Horarios() {
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Duración</label>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      {['30', '45', '60'].map(d => (
+                      {DURACIONES.map(d => (
                         <button key={d} onClick={() => setEditDuracion(d)} style={{
                           flex: 1, padding: '9px', border: `1px solid ${editDuracion === d ? TEAL : TEAL_MID}`,
-                          borderRadius: '8px', cursor: 'pointer', fontSize: '14px',
+                          borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
                           background: editDuracion === d ? TEAL : 'white', color: editDuracion === d ? 'white' : '#333',
                           fontWeight: editDuracion === d ? '600' : '400'
-                        }}>{d} min</button>
+                        }}>{d}min</button>
                       ))}
                     </div>
                   </div>
@@ -818,17 +863,23 @@ export default function Horarios() {
 
                   {editError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{editError}</p>}
 
-                  {claseEditando.recurrente && claseEditando.patron_id ? (
-                    <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                      <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{
-                        flex: 1, padding: '10px', background: TEAL, color: 'white',
-                        border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
-                      }}>{editGuardando ? '...' : 'Guardar solo esta'}</button>
-                      <button onClick={() => guardarEdicion('futuras')} disabled={editGuardando} style={{
-                        flex: 1, padding: '10px', background: '#0f766e', color: 'white',
-                        border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
-                      }}>{editGuardando ? '...' : 'Esta y futuras'}</button>
-                    </div>
+                  {/* Botones guardar — recurrente Y con cambios reales: preguntar alcance */}
+                  {claseEditando.recurrente && claseEditando.patron_id && hayEdicionReal ? (
+                    <>
+                      <p style={{ fontSize: '13px', color: '#555', marginBottom: '8px', fontWeight: '500' }}>
+                        ¿A qué clases aplica el cambio?
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                        <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{
+                          flex: 1, padding: '10px', background: TEAL, color: 'white',
+                          border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
+                        }}>{editGuardando ? '...' : 'Solo esta clase'}</button>
+                        <button onClick={() => guardarEdicion('futuras')} disabled={editGuardando} style={{
+                          flex: 1, padding: '10px', background: '#0f766e', color: 'white',
+                          border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
+                        }}>{editGuardando ? '...' : 'Esta y las siguientes'}</button>
+                      </div>
+                    </>
                   ) : (
                     <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{
                       width: '100%', padding: '11px', background: TEAL, color: 'white',
@@ -859,7 +910,7 @@ export default function Horarios() {
                             <button onClick={() => borrarClase('futuras')} disabled={editGuardando} style={{
                               flex: 1, padding: '8px', background: '#991b1b', color: 'white',
                               border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500'
-                            }}>Borrar esta y futuras</button>
+                            }}>Borrar esta y siguientes</button>
                           </>
                         ) : (
                           <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{
