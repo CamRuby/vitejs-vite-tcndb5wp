@@ -4,7 +4,7 @@ import { supabase } from '../supabase'
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
-const ROW_H = 20  // px por cada slot de 15 minutos
+const ROW_H = 20
 
 const HORAS = Array.from({ length: 57 }, (_, i) => {
   const totalMin = 7 * 60 + i * 15
@@ -14,6 +14,22 @@ const HORAS = Array.from({ length: 57 }, (_, i) => {
 })
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+const DIAS_LARGO = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+
+// Convierte Date a string YYYY-MM-DD usando hora local (no UTC)
+function formatFecha(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// Convierte string YYYY-MM-DD a Date local (sin desfase de zona horaria)
+function parseFechaLocal(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
 
 function getFechasSemana(fechaBase: Date) {
   const dia = fechaBase.getDay()
@@ -27,17 +43,24 @@ function getFechasSemana(fechaBase: Date) {
   })
 }
 
-function formatFecha(d: Date) {
-  return d.toISOString().split('T')[0]
+function formatFechaMostrar(d: Date): string {
+  return `${d.getDate()} de ${MESES[d.getMonth()]}`
 }
 
-function formatFechaMostrar(d: Date) {
-  return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })
+function formatFechaLarga(d: Date): string {
+  const nombreDia = DIAS_LARGO[d.getDay()]
+  const nombreDiaCapital = nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1)
+  return `${nombreDiaCapital}, ${d.getDate()} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`
 }
 
 function horaAMinutos(hora: string): number {
   const parts = (hora || '').split(':').map(Number)
   return (parts[0] || 0) * 60 + (parts[1] || 0)
+}
+
+function esPasado(fechaStr: string): boolean {
+  const hoy = formatFecha(new Date())
+  return fechaStr < hoy
 }
 
 const fieldStyle: React.CSSProperties = {
@@ -88,7 +111,6 @@ export default function Horarios() {
 
   const fechasSemana = getFechasSemana(fechaBase)
 
-  // Columnas de la grilla (salon x fecha)
   const columns = useMemo(() => {
     if (vista === 'semana') {
       return fechasSemana.flatMap((fecha, i) =>
@@ -108,7 +130,6 @@ export default function Horarios() {
     }))
   }, [vista, salones, fechasSemana, diaSeleccionado])
 
-  // Celdas cubiertas por rowspan de clases que empezaron antes
   const skipSet = useMemo(() => {
     const skip = new Set<string>()
     clases.forEach((c: any) => {
@@ -165,7 +186,6 @@ export default function Horarios() {
     setCargando(false)
   }
 
-  // Validacion FRESCA contra la base de datos (evita el problema de datos desactualizados)
   async function verificarConflicto(
     salonId: string, fecha: string, hora: string, duracionMin: number, excluirId?: string
   ): Promise<string | null> {
@@ -228,6 +248,7 @@ export default function Horarios() {
   }
 
   function abrirSlot(salon: any, hora: string, fecha: string) {
+    if (esPasado(fecha)) return  // no crear clases en el pasado
     setSlotSeleccionado({ salon, hora, fecha })
     setModalAbierto(true)
     setBusquedaCliente('')
@@ -265,15 +286,14 @@ export default function Horarios() {
     if (recurrente && semanasRecurrencia > 1) {
       const patronId = crypto.randomUUID()
       const batch: any[] = []
-
       for (let i = 0; i < semanasRecurrencia; i++) {
-        const d = new Date(slotSeleccionado.fecha + 'T12:00:00')
+        const d = parseFechaLocal(slotSeleccionado.fecha)
         d.setDate(d.getDate() + i * 7)
         const fechaStr = formatFecha(d)
         const conflicto = await verificarConflicto(slotSeleccionado.salon.id, fechaStr, slotSeleccionado.hora, parseInt(duracion))
         if (conflicto) {
           if (batch.length === 0) {
-            setError(`${conflicto} en la semana 1. No se creó ninguna clase.`)
+            setError(`${conflicto} en la semana 1. No se creo ninguna clase.`)
           } else {
             const { error: err } = await supabase.from('clases').insert(batch)
             if (err) setError('Error al guardar: ' + err.message)
@@ -296,15 +316,12 @@ export default function Horarios() {
           recurrente: true
         })
       }
-
       const { error: err } = await supabase.from('clases').insert(batch)
       if (err) setError('Error: ' + err.message)
       else { setModalAbierto(false); cargarClases() }
-
     } else {
       const conflicto = await verificarConflicto(slotSeleccionado.salon.id, slotSeleccionado.fecha, slotSeleccionado.hora, parseInt(duracion))
       if (conflicto) { setError(conflicto); setGuardando(false); return }
-
       const { error: err } = await supabase.from('clases').insert({
         contrato_id: (contratoSeleccionado as any).id,
         salon_id: slotSeleccionado.salon.id,
@@ -327,7 +344,6 @@ export default function Horarios() {
     setEditError('')
     const conflicto = await verificarConflicto(editSalonId, claseEditando.fecha, editHora, parseInt(editDuracion), claseEditando.id)
     if (conflicto) { setEditError(conflicto); setEditGuardando(false); return }
-
     const updates = {
       profesor_id: editProfesorId,
       duracion_min: parseInt(editDuracion),
@@ -379,6 +395,8 @@ export default function Horarios() {
     }
   }
 
+  const esDiaSeleccionadoPasado = esPasado(formatFecha(diaSeleccionado))
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
 
@@ -387,8 +405,10 @@ export default function Horarios() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '22px', color: '#1a1a1a' }}>Horarios</h2>
-            <p style={{ margin: '2px 0 0', color: '#666', fontSize: '13px' }}>
-              {vista === 'dia' ? formatFechaMostrar(diaSeleccionado) : `${formatFechaMostrar(fechasSemana[0])} - ${formatFechaMostrar(fechasSemana[5])}`}
+            <p style={{ margin: '4px 0 0', color: '#333', fontSize: '17px', fontWeight: '600' }}>
+              {vista === 'dia'
+                ? formatFechaLarga(diaSeleccionado)
+                : `${formatFechaMostrar(fechasSemana[0])} – ${formatFechaMostrar(fechasSemana[5])}, ${fechasSemana[0].getFullYear()}`}
             </p>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -401,20 +421,29 @@ export default function Horarios() {
                 <button key={v} onClick={() => setVista(v)} style={{
                   padding: '7px 14px', border: 'none', cursor: 'pointer', fontSize: '13px',
                   background: vista === v ? TEAL : 'white', color: vista === v ? 'white' : '#333'
-                }}>{v === 'dia' ? 'Dia' : 'Semana'}</button>
+                }}>{v === 'dia' ? 'Día' : 'Semana'}</button>
               ))}
             </div>
             <div style={{ display: 'flex', gap: '4px' }}>
-              <button onClick={() => { const d = new Date(vista === 'semana' ? fechaBase : diaSeleccionado); d.setDate(d.getDate() - (vista === 'semana' ? 7 : 1)); vista === 'semana' ? setFechaBase(d) : setDiaSeleccionado(d) }}
-                style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', background: 'white', cursor: 'pointer' }}>‹</button>
+              <button onClick={() => {
+                const d = new Date(vista === 'semana' ? fechaBase : diaSeleccionado)
+                d.setDate(d.getDate() - (vista === 'semana' ? 7 : 1))
+                vista === 'semana' ? setFechaBase(d) : setDiaSeleccionado(d)
+              }} style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', background: 'white', cursor: 'pointer' }}>‹</button>
               <button onClick={() => { setFechaBase(new Date()); setDiaSeleccionado(new Date()) }}
                 style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', background: 'white', cursor: 'pointer', fontSize: '13px' }}>Hoy</button>
-              <button onClick={() => { const d = new Date(vista === 'semana' ? fechaBase : diaSeleccionado); d.setDate(d.getDate() + (vista === 'semana' ? 7 : 1)); vista === 'semana' ? setFechaBase(d) : setDiaSeleccionado(d) }}
-                style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', background: 'white', cursor: 'pointer' }}>›</button>
+              <button onClick={() => {
+                const d = new Date(vista === 'semana' ? fechaBase : diaSeleccionado)
+                d.setDate(d.getDate() + (vista === 'semana' ? 7 : 1))
+                vista === 'semana' ? setFechaBase(d) : setDiaSeleccionado(d)
+              }} style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', background: 'white', cursor: 'pointer' }}>›</button>
             </div>
             {vista === 'dia' && (
               <input type="date" value={formatFecha(diaSeleccionado)}
-                onChange={e => setDiaSeleccionado(new Date(e.target.value + 'T12:00:00'))}
+                onChange={e => {
+                  const [y, m, d] = e.target.value.split('-').map(Number)
+                  setDiaSeleccionado(new Date(y, m - 1, d))
+                }}
                 style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px' }} />
             )}
           </div>
@@ -435,6 +464,12 @@ export default function Horarios() {
             <span style={{ fontSize: '12px' }}>🔁</span>
             <span style={{ fontSize: '12px', color: '#666' }}>Recurrente</span>
           </div>
+          {esDiaSeleccionadoPasado && vista === 'dia' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginLeft: '8px' }}>
+              <span style={{ fontSize: '12px' }}>🔒</span>
+              <span style={{ fontSize: '12px', color: '#999' }}>Día pasado — solo lectura</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -456,8 +491,6 @@ export default function Horarios() {
           <tbody>
             {HORAS.map((hora) => (
               <tr key={hora} style={{ borderTop: hora.endsWith(':00') ? '2px solid #e2e8f0' : '1px solid #f8fafc' }}>
-
-                {/* Hora */}
                 <td style={{
                   padding: '0 8px', fontSize: '11px',
                   color: hora.endsWith(':00') ? '#444' : 'transparent',
@@ -475,24 +508,23 @@ export default function Horarios() {
 
                   const cs = getClasesSlot(col.salon.id, hora, col.fecha)
                   const mainClass = cs[0]
-                  const rowSpan = mainClass
-                    ? Math.max(1, Math.round((mainClass.duracion_min || 60) / 15))
-                    : 1
+                  const rowSpan = mainClass ? Math.max(1, Math.round((mainClass.duracion_min || 60) / 15)) : 1
+                  const esCeldaPasada = esPasado(col.fecha)
 
                   return (
                     <td key={cellKey}
                       rowSpan={rowSpan}
                       onClick={() => { if (!mainClass) abrirSlot(col.salon, hora, col.fecha) }}
                       style={{
-                        padding: 0,
-                        height: '1px',
+                        padding: 0, height: '1px',
                         verticalAlign: 'top',
                         borderLeft: '1px solid #f1f5f9',
-                        cursor: mainClass ? 'default' : 'pointer',
-                        width: '160px', minWidth: '160px'
+                        cursor: mainClass ? 'default' : esCeldaPasada ? 'not-allowed' : 'pointer',
+                        width: '160px', minWidth: '160px',
+                        background: esCeldaPasada && !mainClass ? '#fafafa' : undefined
                       }}
-                      onMouseEnter={e => { if (!mainClass) e.currentTarget.style.background = TEAL_LIGHT }}
-                      onMouseLeave={e => { if (!mainClass) e.currentTarget.style.background = '' }}
+                      onMouseEnter={e => { if (!mainClass && !esCeldaPasada) e.currentTarget.style.background = TEAL_LIGHT }}
+                      onMouseLeave={e => { if (!mainClass) e.currentTarget.style.background = esCeldaPasada ? '#fafafa' : '' }}
                     >
                       {mainClass && (() => {
                         const col2 = getColorEstado(mainClass.estado)
@@ -536,12 +568,10 @@ export default function Horarios() {
                           </div>
                         )
                       })()}
-
                       {cs.slice(1).map((c: any) => {
                         const col2 = getColorEstado(c.estado)
                         return (
                           <div key={c.id} onClick={(e) => abrirClaseExistente(e, c)}
-                            title="Solapamiento historico"
                             style={{ background: col2.bg, color: col2.color, border: `1px solid ${col2.border}`, borderRadius: '4px', padding: '2px 6px', fontSize: '10px', marginTop: '2px', cursor: 'pointer' }}>
                             {c.contratos?.clientes?.nombre?.split(' ')[0]} ⚠️
                           </div>
@@ -556,20 +586,27 @@ export default function Horarios() {
         </table>
       </div>
 
-      {/* MODAL CREAR */}
+      {/* ══ MODAL CREAR ══ */}
       {modalAbierto && slotSeleccionado && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
             <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>Asignar clase</h3>
-                <p style={{ margin: '3px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '12px' }}>
-                  {slotSeleccionado.salon.nombre} · {slotSeleccionado.fecha} · {slotSeleccionado.hora}
+                <p style={{ margin: '3px 0 0', color: 'rgba(255,255,255,0.7)', fontSize: '12px' }}>
+                  {slotSeleccionado.salon.nombre}
+                </p>
+                {/* Fecha y hora grandes */}
+                <p style={{ margin: '6px 0 0', color: 'white', fontSize: '22px', fontWeight: '700', letterSpacing: '0.5px' }}>
+                  {(() => {
+                    const d = parseFechaLocal(slotSeleccionado.fecha)
+                    return `${formatFechaLarga(d)} · ${slotSeleccionado.hora}`
+                  })()}
                 </p>
               </div>
-              <button onClick={() => setModalAbierto(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>X</button>
+              <button onClick={() => setModalAbierto(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', alignSelf: 'flex-start' }}>✕</button>
             </div>
-            <div style={{ padding: '20px 24px', maxHeight: '80vh', overflowY: 'auto' }}>
+            <div style={{ padding: '20px 24px', maxHeight: '75vh', overflowY: 'auto' }}>
 
               <div style={{ marginBottom: '14px', position: 'relative' }}>
                 <label style={labelStyle}>Cliente</label>
@@ -596,7 +633,7 @@ export default function Horarios() {
                   <select value={(contratoSeleccionado as any)?.id || ''} onChange={e => seleccionarContrato(e.target.value)} style={fieldStyle}>
                     {contratos.map((ct: any) => (
                       <option key={ct.id} value={ct.id}>
-                        {ct.instrumentos?.nombre || '-'} · {ct.profesores?.nombre || '-'} · {ct.clases_tomadas}/{ct.total_clases} · {ct.duracion_min}min
+                        {ct.instrumentos?.nombre || '—'} · {ct.profesores?.nombre || '—'} · {ct.clases_tomadas}/{ct.total_clases} · {ct.duracion_min}min
                       </option>
                     ))}
                   </select>
@@ -606,13 +643,13 @@ export default function Horarios() {
               <div style={{ marginBottom: '14px' }}>
                 <label style={labelStyle}>Profesor</label>
                 <select value={profesorId} onChange={e => setProfesorId(e.target.value)} style={fieldStyle}>
-                  <option value="">- Seleccionar profesor -</option>
+                  <option value="">— Seleccionar profesor —</option>
                   {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
               </div>
 
               <div style={{ marginBottom: '14px' }}>
-                <label style={labelStyle}>Duracion</label>
+                <label style={labelStyle}>Duración</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   {['30', '45', '60'].map(d => (
                     <button key={d} onClick={() => setDuracion(d)} style={{
@@ -632,7 +669,7 @@ export default function Horarios() {
                 </label>
                 {recurrente && (
                   <div style={{ marginTop: '10px' }}>
-                    <label style={{ ...labelStyle, marginBottom: '6px' }}>Cuantas semanas?</label>
+                    <label style={{ ...labelStyle, marginBottom: '6px' }}>¿Cuántas semanas?</label>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                       {[4, 8, 12, 16].map(n => (
                         <button key={n} onClick={() => setSemanasRecurrencia(n)} style={{
@@ -647,7 +684,7 @@ export default function Horarios() {
                         style={{ width: '60px', padding: '6px 8px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px' }} />
                     </div>
                     <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#666' }}>
-                      Se crearan {semanasRecurrencia} clases · mismo dia y hora
+                      Se crearán {semanasRecurrencia} clases · mismo día y hora
                     </p>
                   </div>
                 )}
@@ -672,20 +709,28 @@ export default function Horarios() {
         </div>
       )}
 
-      {/* MODAL EDITAR */}
+      {/* ══ MODAL EDITAR ══ */}
       {modalEditar && claseEditando && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
             <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>Editar clase</h3>
-                <p style={{ margin: '3px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '12px' }}>
-                  {claseEditando.contratos?.clientes?.nombre} · {claseEditando.fecha}
+                <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>
+                  {esPasado(claseEditando.fecha) ? 'Ver clase (solo lectura)' : 'Editar clase'}
+                </h3>
+                <p style={{ margin: '3px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
+                  {claseEditando.contratos?.clientes?.nombre}
+                </p>
+                <p style={{ margin: '4px 0 0', color: 'white', fontSize: '18px', fontWeight: '700' }}>
+                  {(() => {
+                    const d = parseFechaLocal(claseEditando.fecha)
+                    return `${formatFechaLarga(d)} · ${claseEditando.hora?.substring(0, 5)}`
+                  })()}
                 </p>
               </div>
-              <button onClick={() => setModalEditar(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>X</button>
+              <button onClick={() => setModalEditar(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', alignSelf: 'flex-start' }}>✕</button>
             </div>
-            <div style={{ padding: '20px 24px', maxHeight: '80vh', overflowY: 'auto' }}>
+            <div style={{ padding: '20px 24px', maxHeight: '75vh', overflowY: 'auto' }}>
 
               <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px', marginBottom: '16px', fontSize: '13px', color: '#333' }}>
                 <div><strong>Cliente:</strong> {claseEditando.contratos?.clientes?.nombre}</div>
@@ -693,117 +738,139 @@ export default function Horarios() {
                 {claseEditando.recurrente && (
                   <div style={{ marginTop: '6px', color: TEAL, fontWeight: '600', fontSize: '12px' }}>🔁 Clase recurrente</div>
                 )}
+                {esPasado(claseEditando.fecha) && (
+                  <div style={{ marginTop: '6px', color: '#999', fontWeight: '600', fontSize: '12px' }}>🔒 Clase pasada — no se puede editar ni borrar</div>
+                )}
               </div>
 
-              <div style={{ marginBottom: '14px' }}>
-                <label style={labelStyle}>Estado</label>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {['programada', 'confirmada', 'dada', 'cancelada'].map(est => {
-                    const col2 = getColorEstado(est)
-                    return (
-                      <button key={est} onClick={() => setEditEstado(est)} style={{
-                        padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500',
-                        border: `1px solid ${editEstado === est ? col2.color : '#e2e8f0'}`,
-                        background: editEstado === est ? col2.bg : 'white',
-                        color: editEstado === est ? col2.color : '#666'
-                      }}>
-                        {est.charAt(0).toUpperCase() + est.slice(1)}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
+              {/* Solo mostrar campos editables si NO es pasado */}
+              {!esPasado(claseEditando.fecha) && (
+                <>
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={labelStyle}>Estado</label>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {['programada', 'confirmada', 'dada', 'cancelada'].map(est => {
+                        const col2 = getColorEstado(est)
+                        return (
+                          <button key={est} onClick={() => setEditEstado(est)} style={{
+                            padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500',
+                            border: `1px solid ${editEstado === est ? col2.color : '#e2e8f0'}`,
+                            background: editEstado === est ? col2.bg : 'white',
+                            color: editEstado === est ? col2.color : '#666'
+                          }}>
+                            {est.charAt(0).toUpperCase() + est.slice(1)}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
 
-              <div style={{ marginBottom: '14px' }}>
-                <label style={labelStyle}>Hora de inicio</label>
-                <select value={editHora} onChange={e => setEditHora(e.target.value)} style={fieldStyle}>
-                  {HORAS.map(h => <option key={h} value={h}>{h}</option>)}
-                </select>
-              </div>
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={labelStyle}>Hora de inicio</label>
+                    <select value={editHora} onChange={e => setEditHora(e.target.value)} style={fieldStyle}>
+                      {HORAS.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
 
-              <div style={{ marginBottom: '14px' }}>
-                <label style={labelStyle}>Duracion</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {['30', '45', '60'].map(d => (
-                    <button key={d} onClick={() => setEditDuracion(d)} style={{
-                      flex: 1, padding: '9px', border: `1px solid ${editDuracion === d ? TEAL : TEAL_MID}`,
-                      borderRadius: '8px', cursor: 'pointer', fontSize: '14px',
-                      background: editDuracion === d ? TEAL : 'white', color: editDuracion === d ? 'white' : '#333',
-                      fontWeight: editDuracion === d ? '600' : '400'
-                    }}>{d} min</button>
-                  ))}
-                </div>
-              </div>
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={labelStyle}>Duración</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {['30', '45', '60'].map(d => (
+                        <button key={d} onClick={() => setEditDuracion(d)} style={{
+                          flex: 1, padding: '9px', border: `1px solid ${editDuracion === d ? TEAL : TEAL_MID}`,
+                          borderRadius: '8px', cursor: 'pointer', fontSize: '14px',
+                          background: editDuracion === d ? TEAL : 'white', color: editDuracion === d ? 'white' : '#333',
+                          fontWeight: editDuracion === d ? '600' : '400'
+                        }}>{d} min</button>
+                      ))}
+                    </div>
+                  </div>
 
-              <div style={{ marginBottom: '14px' }}>
-                <label style={labelStyle}>Profesor</label>
-                <select value={editProfesorId} onChange={e => setEditProfesorId(e.target.value)} style={fieldStyle}>
-                  <option value="">- Sin profesor -</option>
-                  {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
-              </div>
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={labelStyle}>Profesor</label>
+                    <select value={editProfesorId} onChange={e => setEditProfesorId(e.target.value)} style={fieldStyle}>
+                      <option value="">— Sin profesor —</option>
+                      {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </select>
+                  </div>
 
-              <div style={{ marginBottom: '20px' }}>
-                <label style={labelStyle}>Salon</label>
-                <select value={editSalonId} onChange={e => setEditSalonId(e.target.value)} style={fieldStyle}>
-                  {salones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                </select>
-              </div>
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={labelStyle}>Salón</label>
+                    <select value={editSalonId} onChange={e => setEditSalonId(e.target.value)} style={fieldStyle}>
+                      {salones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                    </select>
+                  </div>
 
-              {editError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{editError}</p>}
+                  {editError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{editError}</p>}
 
-              {claseEditando.recurrente && claseEditando.patron_id ? (
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                  <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{
-                    flex: 1, padding: '10px', background: TEAL, color: 'white',
-                    border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
-                  }}>{editGuardando ? '...' : 'Guardar solo esta'}</button>
-                  <button onClick={() => guardarEdicion('futuras')} disabled={editGuardando} style={{
-                    flex: 1, padding: '10px', background: '#0f766e', color: 'white',
-                    border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
-                  }}>{editGuardando ? '...' : 'Esta y futuras'}</button>
-                </div>
-              ) : (
-                <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{
-                  width: '100%', padding: '11px', background: TEAL, color: 'white',
-                  border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500', marginBottom: '10px'
-                }}>{editGuardando ? 'Guardando...' : 'Guardar cambios'}</button>
+                  {claseEditando.recurrente && claseEditando.patron_id ? (
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                      <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{
+                        flex: 1, padding: '10px', background: TEAL, color: 'white',
+                        border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
+                      }}>{editGuardando ? '...' : 'Guardar solo esta'}</button>
+                      <button onClick={() => guardarEdicion('futuras')} disabled={editGuardando} style={{
+                        flex: 1, padding: '10px', background: '#0f766e', color: 'white',
+                        border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
+                      }}>{editGuardando ? '...' : 'Esta y futuras'}</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{
+                      width: '100%', padding: '11px', background: TEAL, color: 'white',
+                      border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500', marginBottom: '10px'
+                    }}>{editGuardando ? 'Guardando...' : 'Guardar cambios'}</button>
+                  )}
+
+                  {/* Borrar con confirmación */}
+                  {!confirmarBorrar ? (
+                    <button onClick={() => setConfirmarBorrar(true)} style={{
+                      width: '100%', padding: '10px', background: 'white', color: '#dc2626',
+                      border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px'
+                    }}>Borrar clase</button>
+                  ) : (
+                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '14px' }}>
+                      <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#991b1b', fontWeight: '700' }}>
+                        ¿Confirmar eliminación?
+                      </p>
+                      <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#666' }}>
+                        {claseEditando.recurrente && claseEditando.patron_id
+                          ? 'Esta clase es parte de una serie recurrente.'
+                          : `Clase de ${claseEditando.contratos?.clientes?.nombre} · ${claseEditando.fecha} · ${claseEditando.hora?.substring(0, 5)}`}
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {claseEditando.recurrente && claseEditando.patron_id ? (
+                          <>
+                            <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{
+                              flex: 1, padding: '8px', background: '#dc2626', color: 'white',
+                              border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500'
+                            }}>Borrar solo esta</button>
+                            <button onClick={() => borrarClase('futuras')} disabled={editGuardando} style={{
+                              flex: 1, padding: '8px', background: '#991b1b', color: 'white',
+                              border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500'
+                            }}>Borrar esta y futuras</button>
+                          </>
+                        ) : (
+                          <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{
+                            flex: 1, padding: '8px', background: '#dc2626', color: 'white',
+                            border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
+                          }}>Sí, borrar clase</button>
+                        )}
+                        <button onClick={() => setConfirmarBorrar(false)} style={{
+                          padding: '8px 14px', background: 'white', color: '#333',
+                          border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px'
+                        }}>Cancelar</button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
-              {!confirmarBorrar ? (
-                <button onClick={() => setConfirmarBorrar(true)} style={{
-                  width: '100%', padding: '10px', background: 'white', color: '#dc2626',
-                  border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px'
-                }}>Borrar clase</button>
-              ) : (
-                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px' }}>
-                  <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#991b1b', fontWeight: '600' }}>
-                    {claseEditando.recurrente && claseEditando.patron_id ? 'Que quieres borrar?' : 'Confirmar borrado?'}
-                  </p>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {claseEditando.recurrente && claseEditando.patron_id ? (
-                      <>
-                        <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{
-                          flex: 1, padding: '8px', background: '#dc2626', color: 'white',
-                          border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500'
-                        }}>Solo esta clase</button>
-                        <button onClick={() => borrarClase('futuras')} disabled={editGuardando} style={{
-                          flex: 1, padding: '8px', background: '#991b1b', color: 'white',
-                          border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500'
-                        }}>Esta y futuras</button>
-                      </>
-                    ) : (
-                      <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{
-                        flex: 1, padding: '8px', background: '#dc2626', color: 'white',
-                        border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
-                      }}>Si, borrar</button>
-                    )}
-                    <button onClick={() => setConfirmarBorrar(false)} style={{
-                      padding: '8px 14px', background: 'white', color: '#333',
-                      border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px'
-                    }}>Cancelar</button>
-                  </div>
-                </div>
+              {/* Si es pasado solo botón cerrar */}
+              {esPasado(claseEditando.fecha) && (
+                <button onClick={() => setModalEditar(false)} style={{
+                  width: '100%', padding: '11px', background: '#f1f5f9', color: '#334155',
+                  border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px'
+                }}>Cerrar</button>
               )}
             </div>
           </div>
