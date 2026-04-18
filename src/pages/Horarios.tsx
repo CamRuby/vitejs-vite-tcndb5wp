@@ -17,7 +17,6 @@ const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const DIAS_LARGO = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
-// Convierte Date a string YYYY-MM-DD usando hora local (no UTC)
 function formatFecha(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -25,7 +24,6 @@ function formatFecha(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
-// Convierte string YYYY-MM-DD a Date local (sin desfase de zona horaria)
 function parseFechaLocal(s: string): Date {
   const [y, m, d] = s.split('-').map(Number)
   return new Date(y, m - 1, d)
@@ -49,8 +47,8 @@ function formatFechaMostrar(d: Date): string {
 
 function formatFechaLarga(d: Date): string {
   const nombreDia = DIAS_LARGO[d.getDay()]
-  const nombreDiaCapital = nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1)
-  return `${nombreDiaCapital}, ${d.getDate()} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`
+  const cap = nombreDia.charAt(0).toUpperCase() + nombreDia.slice(1)
+  return `${cap}, ${d.getDate()} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`
 }
 
 function horaAMinutos(hora: string): number {
@@ -59,8 +57,7 @@ function horaAMinutos(hora: string): number {
 }
 
 function esPasado(fechaStr: string): boolean {
-  const hoy = formatFecha(new Date())
-  return fechaStr < hoy
+  return fechaStr < formatFecha(new Date())
 }
 
 const fieldStyle: React.CSSProperties = {
@@ -69,6 +66,16 @@ const fieldStyle: React.CSSProperties = {
 }
 const labelStyle: React.CSSProperties = {
   display: 'block', fontWeight: '500', fontSize: '13px', marginBottom: '5px', color: '#555'
+}
+
+function getColorEstado(estado: string) {
+  switch (estado) {
+    case 'programada': return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' }
+    case 'confirmada': return { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
+    case 'dada':       return { bg: '#fefce8', color: '#854d0e', border: '#fde68a' }  // amarillo
+    case 'cancelada':  return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' }
+    default:           return { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' }
+  }
 }
 
 export default function Horarios() {
@@ -103,6 +110,7 @@ export default function Horarios() {
   const [editProfesorId, setEditProfesorId] = useState('')
   const [editDuracion, setEditDuracion] = useState('60')
   const [editHora, setEditHora] = useState('')
+  const [editFecha, setEditFecha] = useState('')
   const [editSalonId, setEditSalonId] = useState('')
   const [editEstado, setEditEstado] = useState('programada')
   const [editError, setEditError] = useState('')
@@ -175,7 +183,7 @@ export default function Horarios() {
       .from('clases')
       .select(`
         id, fecha, hora, duracion_min, estado, patron_id, recurrente,
-        contratos (clientes (nombre), instrumentos (nombre)),
+        contratos (id, clases_tomadas, total_clases, clientes (nombre), instrumentos (nombre)),
         profesores (id, nombre),
         salones (id, nombre, sede_id)
       `)
@@ -248,7 +256,7 @@ export default function Horarios() {
   }
 
   function abrirSlot(salon: any, hora: string, fecha: string) {
-    if (esPasado(fecha)) return  // no crear clases en el pasado
+    if (esPasado(fecha)) return
     setSlotSeleccionado({ salon, hora, fecha })
     setModalAbierto(true)
     setBusquedaCliente('')
@@ -269,6 +277,7 @@ export default function Horarios() {
     setEditProfesorId(clase.profesores?.id || '')
     setEditDuracion(String(clase.duracion_min || 60))
     setEditHora(clase.hora?.substring(0, 5) || '')
+    setEditFecha(clase.fecha || '')
     setEditSalonId(clase.salones?.id || '')
     setEditEstado(clase.estado || 'programada')
     setEditError('')
@@ -293,7 +302,7 @@ export default function Horarios() {
         const conflicto = await verificarConflicto(slotSeleccionado.salon.id, fechaStr, slotSeleccionado.hora, parseInt(duracion))
         if (conflicto) {
           if (batch.length === 0) {
-            setError(`${conflicto} en la semana 1. No se creo ninguna clase.`)
+            setError(`${conflicto} en la semana 1. No se creó ninguna clase.`)
           } else {
             const { error: err } = await supabase.from('clases').insert(batch)
             if (err) setError('Error al guardar: ' + err.message)
@@ -342,18 +351,23 @@ export default function Horarios() {
   async function guardarEdicion(alcance: 'esta' | 'futuras') {
     setEditGuardando(true)
     setEditError('')
-    const conflicto = await verificarConflicto(editSalonId, claseEditando.fecha, editHora, parseInt(editDuracion), claseEditando.id)
+    const conflicto = await verificarConflicto(editSalonId, editFecha, editHora, parseInt(editDuracion), claseEditando.id)
     if (conflicto) { setEditError(conflicto); setEditGuardando(false); return }
-    const updates = {
+
+    const updates: any = {
       profesor_id: editProfesorId,
       duracion_min: parseInt(editDuracion),
       hora: editHora + ':00',
       salon_id: editSalonId,
-      estado: editEstado
+      estado: editEstado,
+      fecha: editFecha
     }
+
     let dbError: any = null
     if (alcance === 'futuras' && claseEditando.patron_id) {
-      const { error } = await supabase.from('clases').update(updates)
+      // Para "esta y futuras": actualiza todo EXCEPTO la fecha (cada una mantiene su fecha propia)
+      const { fecha: _f, ...updatessinFecha } = updates
+      const { error } = await supabase.from('clases').update(updatessinFecha)
         .eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
       dbError = error
     } else {
@@ -385,17 +399,14 @@ export default function Horarios() {
     )
   }
 
-  function getColorEstado(estado: string) {
-    switch (estado) {
-      case 'programada': return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' }
-      case 'confirmada': return { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
-      case 'dada':       return { bg: TEAL_LIGHT, color: TEAL, border: TEAL_MID }
-      case 'cancelada':  return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' }
-      default:           return { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' }
-    }
+  // Número de clase dentro del plan: cuántas clases tiene este contrato hasta esta fecha inclusive
+  function numeroClaseEnPlan(clase: any): string {
+    if (!clase.contratos?.id) return ''
+    const total = clase.contratos?.total_clases
+    const tomadas = clase.contratos?.clases_tomadas
+    if (!total) return ''
+    return `${tomadas ?? '?'}/${total}`
   }
-
-  const esDiaSeleccionadoPasado = esPasado(formatFecha(diaSeleccionado))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
@@ -452,7 +463,7 @@ export default function Horarios() {
           {[
             { label: 'Programada', color: '#1d4ed8', bg: '#eff6ff' },
             { label: 'Confirmada', color: '#166534', bg: '#dcfce7' },
-            { label: 'Dada', color: TEAL, bg: TEAL_LIGHT },
+            { label: 'Dada', color: '#854d0e', bg: '#fefce8' },
             { label: 'Cancelada', color: '#991b1b', bg: '#fee2e2' },
           ].map(l => (
             <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -464,12 +475,6 @@ export default function Horarios() {
             <span style={{ fontSize: '12px' }}>🔁</span>
             <span style={{ fontSize: '12px', color: '#666' }}>Recurrente</span>
           </div>
-          {esDiaSeleccionadoPasado && vista === 'dia' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginLeft: '8px' }}>
-              <span style={{ fontSize: '12px' }}>🔒</span>
-              <span style={{ fontSize: '12px', color: '#999' }}>Día pasado — solo lectura</span>
-            </div>
-          )}
         </div>
       </div>
 
@@ -528,6 +533,7 @@ export default function Horarios() {
                     >
                       {mainClass && (() => {
                         const col2 = getColorEstado(mainClass.estado)
+                        const numPlan = numeroClaseEnPlan(mainClass)
                         return (
                           <div
                             onClick={(e) => abrirClaseExistente(e, mainClass)}
@@ -535,8 +541,8 @@ export default function Horarios() {
                             style={{
                               background: col2.bg, color: col2.color,
                               border: `1px solid ${col2.border}`,
-                              borderRadius: '6px', padding: '4px 8px',
-                              fontSize: vista === 'dia' ? '12px' : '10px',
+                              borderRadius: '6px', padding: '4px 7px',
+                              fontSize: vista === 'dia' ? '13px' : '11px',
                               cursor: 'pointer',
                               height: 'calc(100% - 4px)',
                               overflow: 'hidden',
@@ -544,26 +550,31 @@ export default function Horarios() {
                               margin: '2px 3px'
                             }}
                           >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                              <strong style={{ lineHeight: '1.3' }}>
-                                {vista === 'dia'
-                                  ? mainClass.contratos?.clientes?.nombre
-                                  : mainClass.contratos?.clientes?.nombre?.split(' ')[0]}
+                            {/* Nombre completo siempre */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2px' }}>
+                              <strong style={{ lineHeight: '1.3', fontSize: vista === 'dia' ? '13px' : '11px' }}>
+                                {mainClass.contratos?.clientes?.nombre}
                               </strong>
-                              {mainClass.recurrente && <span style={{ fontSize: '9px', marginLeft: '4px', flexShrink: 0 }}>🔁</span>}
+                              <div style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
+                                {numPlan && (
+                                  <span style={{ fontSize: '10px', opacity: 0.8, whiteSpace: 'nowrap' }}>{numPlan}</span>
+                                )}
+                                {mainClass.recurrente && <span style={{ fontSize: '9px', flexShrink: 0 }}>🔁</span>}
+                              </div>
                             </div>
-                            {vista === 'dia' && rowSpan >= 3 && (
-                              <>
-                                <div style={{ fontSize: '11px', opacity: 0.85, marginTop: '2px' }}>
-                                  {mainClass.contratos?.instrumentos?.nombre} · {mainClass.duracion_min}min
-                                </div>
-                                <div style={{ fontSize: '11px', opacity: 0.85 }}>
-                                  {mainClass.profesores?.nombre}
-                                </div>
-                              </>
+
+                            {/* Profesor — en vista día siempre, en semana si hay espacio (rowSpan >= 3) */}
+                            {(vista === 'dia' || rowSpan >= 3) && mainClass.profesores?.nombre && (
+                              <div style={{ fontSize: vista === 'dia' ? '12px' : '10px', opacity: 0.85, marginTop: '1px' }}>
+                                {mainClass.profesores.nombre}
+                              </div>
                             )}
-                            {vista === 'semana' && rowSpan >= 1 && (
-                              <div style={{ fontSize: '9px', opacity: 0.75 }}>{mainClass.duracion_min}min</div>
+
+                            {/* Instrumento solo en vista día con espacio */}
+                            {vista === 'dia' && rowSpan >= 3 && (
+                              <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '1px' }}>
+                                {mainClass.contratos?.instrumentos?.nombre}
+                              </div>
                             )}
                           </div>
                         )
@@ -572,8 +583,8 @@ export default function Horarios() {
                         const col2 = getColorEstado(c.estado)
                         return (
                           <div key={c.id} onClick={(e) => abrirClaseExistente(e, c)}
-                            style={{ background: col2.bg, color: col2.color, border: `1px solid ${col2.border}`, borderRadius: '4px', padding: '2px 6px', fontSize: '10px', marginTop: '2px', cursor: 'pointer' }}>
-                            {c.contratos?.clientes?.nombre?.split(' ')[0]} ⚠️
+                            style={{ background: col2.bg, color: col2.color, border: `1px solid ${col2.border}`, borderRadius: '4px', padding: '2px 6px', fontSize: '11px', marginTop: '2px', cursor: 'pointer' }}>
+                            {c.contratos?.clientes?.nombre} ⚠️
                           </div>
                         )
                       })}
@@ -590,21 +601,15 @@ export default function Horarios() {
       {modalAbierto && slotSeleccionado && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-            <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>Asignar clase</h3>
-                <p style={{ margin: '3px 0 0', color: 'rgba(255,255,255,0.7)', fontSize: '12px' }}>
-                  {slotSeleccionado.salon.nombre}
-                </p>
-                {/* Fecha y hora grandes */}
-                <p style={{ margin: '6px 0 0', color: 'white', fontSize: '22px', fontWeight: '700', letterSpacing: '0.5px' }}>
-                  {(() => {
-                    const d = parseFechaLocal(slotSeleccionado.fecha)
-                    return `${formatFechaLarga(d)} · ${slotSeleccionado.hora}`
-                  })()}
+                <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.7)', fontSize: '12px' }}>{slotSeleccionado.salon.nombre}</p>
+                <p style={{ margin: '6px 0 0', color: 'white', fontSize: '20px', fontWeight: '700' }}>
+                  {formatFechaLarga(parseFechaLocal(slotSeleccionado.fecha))} · {slotSeleccionado.hora}
                 </p>
               </div>
-              <button onClick={() => setModalAbierto(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', alignSelf: 'flex-start' }}>✕</button>
+              <button onClick={() => setModalAbierto(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ padding: '20px 24px', maxHeight: '75vh', overflowY: 'auto' }}>
 
@@ -713,37 +718,34 @@ export default function Horarios() {
       {modalEditar && claseEditando && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-            <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>
                   {esPasado(claseEditando.fecha) ? 'Ver clase (solo lectura)' : 'Editar clase'}
                 </h3>
-                <p style={{ margin: '3px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
+                <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
                   {claseEditando.contratos?.clientes?.nombre}
                 </p>
                 <p style={{ margin: '4px 0 0', color: 'white', fontSize: '18px', fontWeight: '700' }}>
-                  {(() => {
-                    const d = parseFechaLocal(claseEditando.fecha)
-                    return `${formatFechaLarga(d)} · ${claseEditando.hora?.substring(0, 5)}`
-                  })()}
+                  {formatFechaLarga(parseFechaLocal(claseEditando.fecha))} · {claseEditando.hora?.substring(0, 5)}
                 </p>
               </div>
-              <button onClick={() => setModalEditar(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', alignSelf: 'flex-start' }}>✕</button>
+              <button onClick={() => setModalEditar(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ padding: '20px 24px', maxHeight: '75vh', overflowY: 'auto' }}>
 
               <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px', marginBottom: '16px', fontSize: '13px', color: '#333' }}>
                 <div><strong>Cliente:</strong> {claseEditando.contratos?.clientes?.nombre}</div>
                 <div><strong>Instrumento:</strong> {claseEditando.contratos?.instrumentos?.nombre}</div>
+                <div><strong>Plan:</strong> {claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases</div>
                 {claseEditando.recurrente && (
                   <div style={{ marginTop: '6px', color: TEAL, fontWeight: '600', fontSize: '12px' }}>🔁 Clase recurrente</div>
                 )}
                 {esPasado(claseEditando.fecha) && (
-                  <div style={{ marginTop: '6px', color: '#999', fontWeight: '600', fontSize: '12px' }}>🔒 Clase pasada — no se puede editar ni borrar</div>
+                  <div style={{ marginTop: '6px', color: '#999', fontWeight: '600', fontSize: '12px' }}>🔒 Clase pasada — solo lectura</div>
                 )}
               </div>
 
-              {/* Solo mostrar campos editables si NO es pasado */}
               {!esPasado(claseEditando.fecha) && (
                 <>
                   <div style={{ marginBottom: '14px' }}>
@@ -763,6 +765,19 @@ export default function Horarios() {
                         )
                       })}
                     </div>
+                  </div>
+
+                  {/* Fecha editable */}
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={labelStyle}>Fecha</label>
+                    <input type="date" value={editFecha}
+                      onChange={e => setEditFecha(e.target.value)}
+                      style={fieldStyle} />
+                    {editFecha !== claseEditando.fecha && (
+                      <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#854d0e' }}>
+                        ⚠️ Cambio de fecha aplica solo a esta clase (no afecta las demás de la serie)
+                      </p>
+                    )}
                   </div>
 
                   <div style={{ marginBottom: '14px' }}>
@@ -821,7 +836,6 @@ export default function Horarios() {
                     }}>{editGuardando ? 'Guardando...' : 'Guardar cambios'}</button>
                   )}
 
-                  {/* Borrar con confirmación */}
                   {!confirmarBorrar ? (
                     <button onClick={() => setConfirmarBorrar(true)} style={{
                       width: '100%', padding: '10px', background: 'white', color: '#dc2626',
@@ -829,13 +843,11 @@ export default function Horarios() {
                     }}>Borrar clase</button>
                   ) : (
                     <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '14px' }}>
-                      <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#991b1b', fontWeight: '700' }}>
-                        ¿Confirmar eliminación?
-                      </p>
+                      <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#991b1b', fontWeight: '700' }}>¿Confirmar eliminación?</p>
                       <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#666' }}>
                         {claseEditando.recurrente && claseEditando.patron_id
                           ? 'Esta clase es parte de una serie recurrente.'
-                          : `Clase de ${claseEditando.contratos?.clientes?.nombre} · ${claseEditando.fecha} · ${claseEditando.hora?.substring(0, 5)}`}
+                          : `${claseEditando.contratos?.clientes?.nombre} · ${claseEditando.fecha} · ${claseEditando.hora?.substring(0, 5)}`}
                       </p>
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         {claseEditando.recurrente && claseEditando.patron_id ? (
@@ -865,7 +877,6 @@ export default function Horarios() {
                 </>
               )}
 
-              {/* Si es pasado solo botón cerrar */}
               {esPasado(claseEditando.fecha) && (
                 <button onClick={() => setModalEditar(false)} style={{
                   width: '100%', padding: '11px', background: '#f1f5f9', color: '#334155',
