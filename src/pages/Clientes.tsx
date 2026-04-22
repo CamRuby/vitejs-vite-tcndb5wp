@@ -18,7 +18,7 @@ const CLASES_PRESET = [4, 8, 16, 20, 40, 80]
 const VISTAS = [
   { value: 'clientes',     label: '👤 Últimos 30 clientes registrados' },
   { value: 'planes',       label: '📋 Últimos 30 planes creados' },
-  { value: 'completados',  label: '✅ Planes completados' },
+  { value: 'completados',  label: '📁 Últimos 30 planes archivados' },
   { value: 'aplazados',    label: '⏸ Planes aplazados' },
   { value: 'reactivacion', label: '🔄 Planes pendientes de reactivación' },
 ]
@@ -350,19 +350,19 @@ export default function Clientes() {
       const { data } = await supabase.from('contratos').select(planSelect).order('fecha_inicio', { ascending: false }).limit(30)
       setDatosVista(data || [])
     } else if (vista === 'completados') {
-      const { data } = await supabase.from('contratos').select(planSelect).eq('estado', 'completado').order('fecha_inicio', { ascending: false })
+      const { data } = await supabase.from('contratos').select(planSelect).eq('estado', 'archivado').order('fecha_inicio', { ascending: false }).limit(30)
       setDatosVista(data || [])
     } else if (vista === 'aplazados') {
       const { data } = await supabase.from('contratos').select(planSelect).eq('estado', 'aplazado').order('fecha_inicio', { ascending: false })
       setDatosVista(data || [])
     } else if (vista === 'reactivacion') {
-      // Planes archivados cuyo cliente NO tiene plan activo actualmente
-      const { data: archivados } = await supabase.from('contratos').select(planSelect).eq('estado', 'archivado').order('fecha_inicio', { ascending: false })
-      if (!archivados?.length) { setDatosVista([]); setCargandoVista(false); return }
-      const clienteIds = [...new Set(archivados.map((p: any) => p.cliente_id))]
+      // Planes completados (no archivados) cuyo cliente NO tiene plan activo actualmente
+      const { data: completados } = await supabase.from('contratos').select(planSelect).eq('estado', 'completado').order('fecha_inicio', { ascending: false })
+      if (!completados?.length) { setDatosVista([]); setCargandoVista(false); return }
+      const clienteIds = [...new Set(completados.map((p: any) => p.cliente_id))]
       const { data: activos } = await supabase.from('contratos').select('cliente_id').eq('estado', 'activo').in('cliente_id', clienteIds)
       const clientesConActivo = new Set((activos || []).map((p: any) => p.cliente_id))
-      setDatosVista(archivados.filter((p: any) => !clientesConActivo.has(p.cliente_id)))
+      setDatosVista(completados.filter((p: any) => !clientesConActivo.has(p.cliente_id)))
     }
     setCargandoVista(false)
   }
