@@ -67,7 +67,7 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
   )
 }
 
-// ── Modal crear/editar plan ──
+// ── Modal plan ──
 function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar }) {
   const esNuevo = !plan?.id
   const [fp, setFp] = useState({
@@ -141,7 +141,6 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
               </select>
             </div>
 
-            {/* Número de clases con presets */}
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Número de clases *</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
@@ -204,7 +203,6 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
               </select>
             </div>
 
-            {/* Clases tomadas solo al editar */}
             {!esNuevo && (
               <div style={{ gridColumn: '1 / -1' }}>
                 <label style={labelStyle}>Clases tomadas</label>
@@ -266,6 +264,7 @@ export default function Clientes() {
       supabase
         .from('clientes')
         .select('id, nombre, estado, created_at, contratos(id, fecha_inicio, tipo_plan, sedes(nombre))')
+        .not('created_at', 'is', null)
         .order('created_at', { ascending: false })
         .limit(20),
     ])
@@ -400,7 +399,13 @@ export default function Clientes() {
     return TEAL
   }
 
-  function infoUltimoCliente(c: any) {
+  function formatFechaCorta(iso: string) {
+    if (!iso) return '—'
+    const d = new Date(iso)
+    return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`
+  }
+
+  function infoUltimoContrato(c: any) {
     const contratos = c.contratos || []
     if (!contratos.length) return { sede: '—', plan: '—', fecha: '—' }
     const ult = contratos[0]
@@ -471,30 +476,38 @@ export default function Clientes() {
             </div>
           )}
 
+          {/* Tabla últimos 20 clientes */}
           {busqueda.length < 2 && (
             <>
-              <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#555', fontWeight: '600' }}>Últimos 20 clientes registrados</h3>
+              <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#555', fontWeight: '600' }}>
+                Últimos 20 clientes registrados
+              </h3>
               <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: TEAL_LIGHT }}>
-                      {['Nombre', 'Sede', 'Tipo de plan', 'Inicio del plan', 'Estado'].map(h => (
+                      {['Fecha de ingreso', 'Nombre', 'Sede', 'Tipo de plan', 'Inicio del plan', 'Estado'].map(h => (
                         <th key={h} style={{ padding: '11px 16px', textAlign: 'left', fontSize: '13px', color: TEAL, fontWeight: '600' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {ultimosClientes.length === 0 && (
-                      <tr><td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#888' }}>Sin datos</td></tr>
+                      <tr>
+                        <td colSpan={6} style={{ padding: '32px', textAlign: 'center', color: '#aaa' }}>
+                          Los clientes nuevos aparecerán aquí
+                        </td>
+                      </tr>
                     )}
                     {ultimosClientes.map((c: any, i) => {
-                      const info = infoUltimoCliente(c)
+                      const info = infoUltimoContrato(c)
                       return (
                         <tr key={c.id} onClick={() => seleccionarCliente(c)}
                           style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc', cursor: 'pointer' }}
                           onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)}
                           onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafbfc')}
                         >
+                          <td style={{ padding: '11px 16px', fontSize: '13px', color: '#888' }}>{formatFechaCorta(c.created_at)}</td>
                           <td style={{ padding: '11px 16px', fontSize: '14px', fontWeight: '500', color: '#1a1a1a' }}>{c.nombre}</td>
                           <td style={{ padding: '11px 16px', fontSize: '14px', color: '#555' }}>{info.sede}</td>
                           <td style={{ padding: '11px 16px', fontSize: '14px', color: '#555' }}>{info.plan}</td>
@@ -530,7 +543,6 @@ export default function Clientes() {
             ← Volver a la lista
           </button>
 
-          {/* Tarjeta cliente */}
           <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.08)', marginBottom: '24px' }}>
             <div style={{ background: TEAL, padding: '24px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -567,7 +579,6 @@ export default function Clientes() {
             </div>
           </div>
 
-          {/* Confirmación borrar */}
           {confirmarBorrar && (
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', padding: '20px 24px', marginBottom: '24px' }}>
               <p style={{ margin: '0 0 6px', fontSize: '16px', color: '#991b1b', fontWeight: '700' }}>¿Borrar a {form.nombre}?</p>
@@ -588,7 +599,6 @@ export default function Clientes() {
             </div>
           )}
 
-          {/* Planes — botones de acción */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <h3 style={{ margin: 0, fontSize: '20px', color: '#1a1a1a' }}>
               Planes <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({planes.length})</span>
@@ -642,7 +652,6 @@ export default function Clientes() {
             </div>
           ))}
 
-          {/* Histórico clases */}
           <h3 style={{ margin: '32px 0 14px', fontSize: '18px', color: '#1a1a1a' }}>
             Histórico de clases <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({clases.length})</span>
           </h3>
@@ -679,7 +688,6 @@ export default function Clientes() {
         </div>
       )}
 
-      {/* MODAL PLAN */}
       {modalPlan !== null && (
         <ModalPlan
           plan={modalPlan}
