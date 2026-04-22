@@ -12,12 +12,10 @@ const estiloInput = {
   boxSizing: 'border-box' as const, marginTop: '6px',
   outline: 'none'
 }
-
 const labelStyle = { fontWeight: '500' as const, fontSize: '13px', color: '#555' }
+const TIPOS_PLAN = ['Plan mensual', 'Plan semestral', 'Plan anual']
 
-const TIPOS_PLAN = ['Plan mensual', 'Plan semestral', 'Plan anual', 'Taller']
-
-// ── Formulario cliente ──
+// ── Formulario cliente (fuera del componente principal para evitar bug de input) ──
 function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
   return (
     <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.08)' }}>
@@ -69,65 +67,83 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
 }
 
 // ── Modal plan ──
-function ModalPlan({ plan, instrumentos, sedes, onGuardar, onCerrar }) {
+function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar }) {
   const esNuevo = !plan?.id
-  const [formPlan, setFormPlan] = useState({
-    tipo_plan: plan?.tipo_plan || 'Plan mensual',
+  const [fp, setFp] = useState({
+    tipo_plan:      plan?.tipo_plan      || 'Plan mensual',
     instrumento_id: plan?.instrumento_id || '',
-    sede_id: plan?.sede_id || '',
-    total_clases: plan?.total_clases || 4,
+    profesor_id:    plan?.profesor_id    || '',
+    sede_id:        plan?.sede_id        || '',
+    total_clases:   plan?.total_clases   || 4,
     clases_tomadas: plan?.clases_tomadas || 0,
-    valor_plan: plan?.valor_plan || '',
-    duracion_min: plan?.duracion_min || 60,
-    fecha_inicio: plan?.fecha_inicio || new Date().toISOString().split('T')[0],
-    fecha_vencimiento: plan?.fecha_vencimiento || '',
-    estado: plan?.estado || 'activo',
+    valor_plan:     plan?.valor_plan     || '',
+    duracion_min:   plan?.duracion_min   || 60,
+    fecha_inicio:   plan?.fecha_inicio   || new Date().toISOString().split('T')[0],
+    estado:         plan?.estado         || 'activo',
   })
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
-  const esTaller = formPlan.tipo_plan === 'Taller'
-
   async function guardar() {
-    if (!formPlan.instrumento_id) { setError('Selecciona un instrumento'); return }
-    if (!formPlan.sede_id) { setError('Selecciona una sede'); return }
-    if (!formPlan.total_clases) { setError('Ingresa el número de clases'); return }
+    if (!fp.instrumento_id) { setError('Selecciona un instrumento'); return }
+    if (!fp.profesor_id)    { setError('Selecciona un profesor'); return }
+    if (!fp.sede_id)        { setError('Selecciona una sede'); return }
+    if (!fp.total_clases)   { setError('Ingresa el número de clases'); return }
     setGuardando(true)
     setError('')
-    const payload = { ...formPlan }
-    if (!esTaller) payload.fecha_vencimiento = null
+    const payload: any = {
+      tipo_plan:      fp.tipo_plan,
+      instrumento_id: fp.instrumento_id,
+      profesor_id:    fp.profesor_id,
+      sede_id:        fp.sede_id,
+      total_clases:   Number(fp.total_clases),
+      clases_tomadas: esNuevo ? 0 : Number(fp.clases_tomadas),
+      valor_plan:     fp.valor_plan !== '' ? Number(fp.valor_plan) : null,
+      duracion_min:   Number(fp.duracion_min),
+      fecha_inicio:   fp.fecha_inicio,
+      estado:         fp.estado,
+    }
     await onGuardar(payload, plan?.id)
     setGuardando(false)
   }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+      <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '520px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
         <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>{esNuevo ? 'Nuevo plan' : 'Editar plan'}</h3>
           <button onClick={onCerrar} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
         </div>
-        <div style={{ padding: '24px', maxHeight: '75vh', overflowY: 'auto' }}>
+        <div style={{ padding: '24px', maxHeight: '78vh', overflowY: 'auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
 
+            {/* Tipo de plan — siempre primero */}
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Tipo de plan *</label>
-              <select value={formPlan.tipo_plan} onChange={e => setFormPlan({ ...formPlan, tipo_plan: e.target.value })} style={estiloInput}>
+              <select value={fp.tipo_plan} onChange={e => setFp({ ...fp, tipo_plan: e.target.value })} style={estiloInput}>
                 {TIPOS_PLAN.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
 
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Instrumento *</label>
-              <select value={formPlan.instrumento_id} onChange={e => setFormPlan({ ...formPlan, instrumento_id: e.target.value })} style={estiloInput}>
+              <select value={fp.instrumento_id} onChange={e => setFp({ ...fp, instrumento_id: e.target.value })} style={estiloInput}>
                 <option value="">— Seleccionar —</option>
                 {instrumentos.map((i: any) => <option key={i.id} value={i.id}>{i.nombre}</option>)}
               </select>
             </div>
 
             <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Profesor *</label>
+              <select value={fp.profesor_id} onChange={e => setFp({ ...fp, profesor_id: e.target.value })} style={estiloInput}>
+                <option value="">— Seleccionar —</option>
+                {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+            </div>
+
+            <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Sede *</label>
-              <select value={formPlan.sede_id} onChange={e => setFormPlan({ ...formPlan, sede_id: e.target.value })} style={estiloInput}>
+              <select value={fp.sede_id} onChange={e => setFp({ ...fp, sede_id: e.target.value })} style={estiloInput}>
                 <option value="">— Seleccionar —</option>
                 {sedes.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
@@ -135,51 +151,45 @@ function ModalPlan({ plan, instrumentos, sedes, onGuardar, onCerrar }) {
 
             <div>
               <label style={labelStyle}>Número de clases *</label>
-              <input type="number" min={1} value={formPlan.total_clases}
-                onChange={e => setFormPlan({ ...formPlan, total_clases: parseInt(e.target.value) || 0 })}
+              <input type="number" min={1} value={fp.total_clases}
+                onChange={e => setFp({ ...fp, total_clases: e.target.value })}
                 style={estiloInput} />
             </div>
 
             <div>
-              <label style={labelStyle}>Clases tomadas</label>
-              <input type="number" min={0} value={formPlan.clases_tomadas}
-                onChange={e => setFormPlan({ ...formPlan, clases_tomadas: parseInt(e.target.value) || 0 })}
-                style={estiloInput} />
-            </div>
-
-            <div>
-              <label style={labelStyle}>Duración por clase (min)</label>
-              <select value={formPlan.duracion_min} onChange={e => setFormPlan({ ...formPlan, duracion_min: parseInt(e.target.value) })} style={estiloInput}>
+              <label style={labelStyle}>Duración por clase</label>
+              <select value={fp.duracion_min} onChange={e => setFp({ ...fp, duracion_min: e.target.value })} style={estiloInput}>
                 {[30, 45, 60, 90].map(d => <option key={d} value={d}>{d} min</option>)}
               </select>
             </div>
 
             <div>
               <label style={labelStyle}>Valor del plan ($)</label>
-              <input type="number" min={0} value={formPlan.valor_plan}
-                onChange={e => setFormPlan({ ...formPlan, valor_plan: parseInt(e.target.value) || 0 })}
+              <input type="number" min={0} value={fp.valor_plan}
+                onChange={e => setFp({ ...fp, valor_plan: e.target.value })}
                 style={estiloInput} />
             </div>
 
             <div>
               <label style={labelStyle}>Fecha de inicio</label>
-              <input type="date" value={formPlan.fecha_inicio}
-                onChange={e => setFormPlan({ ...formPlan, fecha_inicio: e.target.value })}
+              <input type="date" value={fp.fecha_inicio}
+                onChange={e => setFp({ ...fp, fecha_inicio: e.target.value })}
                 style={estiloInput} />
             </div>
 
-            {esTaller && (
+            {/* Clases tomadas solo al editar */}
+            {!esNuevo && (
               <div>
-                <label style={labelStyle}>Fecha de vencimiento</label>
-                <input type="date" value={formPlan.fecha_vencimiento}
-                  onChange={e => setFormPlan({ ...formPlan, fecha_vencimiento: e.target.value })}
+                <label style={labelStyle}>Clases tomadas</label>
+                <input type="number" min={0} value={fp.clases_tomadas}
+                  onChange={e => setFp({ ...fp, clases_tomadas: e.target.value })}
                   style={estiloInput} />
               </div>
             )}
 
-            <div style={{ gridColumn: '1 / -1' }}>
+            <div style={{ gridColumn: !esNuevo ? '2 / 3' : '1 / -1' }}>
               <label style={labelStyle}>Estado del plan</label>
-              <select value={formPlan.estado} onChange={e => setFormPlan({ ...formPlan, estado: e.target.value })} style={estiloInput}>
+              <select value={fp.estado} onChange={e => setFp({ ...fp, estado: e.target.value })} style={estiloInput}>
                 <option value="activo">Activo</option>
                 <option value="inactivo">Inactivo</option>
                 <option value="completado">Completado</option>
@@ -207,16 +217,17 @@ function ModalPlan({ plan, instrumentos, sedes, onGuardar, onCerrar }) {
 // ── Componente principal ──
 export default function Clientes() {
   const [busqueda, setBusqueda] = useState('')
-  const [clientes, setClientes] = useState([])
-  const [ultimosClientes, setUltimosClientes] = useState([])
-  const [clienteSeleccionado, setClienteSeleccionado] = useState(null)
-  const [planes, setPlanes] = useState([])
-  const [clases, setClases] = useState([])
+  const [clientes, setClientes] = useState<any[]>([])
+  const [ultimosClientes, setUltimosClientes] = useState<any[]>([])
+  const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null)
+  const [planes, setPlanes] = useState<any[]>([])
+  const [clases, setClases] = useState<any[]>([])
   const [modo, setModo] = useState('lista')
   const [cargando, setCargando] = useState(false)
   const [form, setForm] = useState({ nombre: '', telefono: '', email: '', grupo_whatsapp: '', estado: 'activo' })
-  const [instrumentos, setInstrumentos] = useState([])
-  const [sedes, setSedes] = useState([])
+  const [profesores, setProfesores] = useState<any[]>([])
+  const [instrumentos, setInstrumentos] = useState<any[]>([])
+  const [sedes, setSedes] = useState<any[]>([])
   const [modalPlan, setModalPlan] = useState<any>(null)
   const [confirmarBorrar, setConfirmarBorrar] = useState(false)
   const [errorBorrar, setErrorBorrar] = useState('')
@@ -230,17 +241,19 @@ export default function Clientes() {
   }, [busqueda])
 
   async function cargarDatosBase() {
-    const [{ data: ins }, { data: sed }, { data: ult }] = await Promise.all([
+    const [{ data: ins }, { data: sed }, { data: pro }, { data: ult }] = await Promise.all([
       supabase.from('instrumentos').select('id, nombre').order('nombre'),
       supabase.from('sedes').select('id, nombre').order('nombre'),
+      supabase.from('profesores').select('id, nombre').order('nombre'),
       supabase
         .from('clientes')
-        .select(`id, nombre, estado, created_at, contratos ( id, fecha_inicio, tipo_plan, sedes (nombre) )`)
+        .select('id, nombre, estado, created_at, contratos(id, fecha_inicio, tipo_plan, sedes(nombre))')
         .order('created_at', { ascending: false })
         .limit(20),
     ])
     setInstrumentos(ins || [])
     setSedes(sed || [])
+    setProfesores(pro || [])
     setUltimosClientes(ult || [])
   }
 
@@ -256,12 +269,10 @@ export default function Clientes() {
     setCargando(false)
   }
 
-  async function cargarDatosCliente(c) {
+  async function cargarDatosCliente(c: any) {
     const { data: planesData } = await supabase
       .from('contratos')
-      .select(`id, total_clases, clases_tomadas, valor_plan, tipo_plan, estado,
-        fecha_inicio, fecha_vencimiento, duracion_min, instrumento_id, sede_id,
-        instrumentos (nombre), sedes (nombre)`)
+      .select('id, total_clases, clases_tomadas, valor_plan, tipo_plan, estado, fecha_inicio, duracion_min, instrumento_id, profesor_id, sede_id, instrumentos(nombre), profesores(nombre), sedes(nombre)')
       .eq('cliente_id', c.id)
       .order('fecha_inicio', { ascending: false })
     setPlanes(planesData || [])
@@ -271,8 +282,7 @@ export default function Clientes() {
     if (ids.length > 0) {
       const { data: clasesData } = await supabase
         .from('clases')
-        .select(`id, fecha, duracion_min, numero_en_plan, modalidad, estado, contrato_id,
-          profesores (nombre), salones (nombre), contratos (instrumentos (nombre))`)
+        .select('id, fecha, duracion_min, numero_en_plan, modalidad, estado, profesores(nombre), salones(nombre), contratos(instrumentos(nombre))')
         .in('contrato_id', ids)
         .order('fecha', { ascending: false })
         .limit(50)
@@ -282,7 +292,7 @@ export default function Clientes() {
     }
   }
 
-  async function seleccionarCliente(c) {
+  async function seleccionarCliente(c: any) {
     setClienteSeleccionado(c)
     setForm({ nombre: c.nombre || '', telefono: c.telefono || '', email: c.email || '', grupo_whatsapp: c.grupo_whatsapp || '', estado: c.estado || 'activo' })
     await cargarDatosCliente(c)
@@ -294,6 +304,8 @@ export default function Clientes() {
   function nuevoCliente() {
     setClienteSeleccionado(null)
     setForm({ nombre: '', telefono: '', email: '', grupo_whatsapp: '', estado: 'activo' })
+    setConfirmarBorrar(false)   // ← fix: evita que aparezca el panel de borrar
+    setErrorBorrar('')
     setModo('nuevo')
   }
 
@@ -307,11 +319,15 @@ export default function Clientes() {
         setClienteSeleccionado(data)
         await cargarDatosCliente(data)
         setModo('ver')
+      } else if (error) {
+        alert('Error al crear cliente: ' + error.message)
       }
     } else {
-      await supabase.from('clientes').update(form).eq('id', clienteSeleccionado.id)
-      setClienteSeleccionado({ ...clienteSeleccionado, ...form })
-      setModo('ver')
+      const { error } = await supabase.from('clientes').update(form).eq('id', clienteSeleccionado.id)
+      if (!error) {
+        setClienteSeleccionado({ ...clienteSeleccionado, ...form })
+        setModo('ver')
+      }
     }
     setCargando(false)
   }
@@ -342,27 +358,34 @@ export default function Clientes() {
     setBorrando(false)
   }
 
-  async function guardarPlan(formPlan, planId) {
-    const payload = { ...formPlan, cliente_id: clienteSeleccionado.id }
+  async function guardarPlan(payload: any, planId?: string) {
+    const data = { ...payload, cliente_id: clienteSeleccionado.id }
+    let error: any = null
     if (planId) {
-      await supabase.from('contratos').update(payload).eq('id', planId)
+      const res = await supabase.from('contratos').update(data).eq('id', planId)
+      error = res.error
     } else {
-      await supabase.from('contratos').insert(payload)
+      const res = await supabase.from('contratos').insert(data)
+      error = res.error
+    }
+    if (error) {
+      alert('Error al guardar el plan: ' + error.message)
+      return
     }
     setModalPlan(null)
     await cargarDatosCliente(clienteSeleccionado)
     await cargarDatosBase()
   }
 
-  const porcentaje = (p) => Math.min((p.clases_tomadas / p.total_clases) * 100, 100)
-  const colorBarra = (p) => {
+  const porcentaje = (p: any) => Math.min((p.clases_tomadas / p.total_clases) * 100, 100)
+  const colorBarra = (p: any) => {
     const pct = porcentaje(p)
     if (pct >= 100) return '#ef4444'
     if (pct >= 75) return '#f59e0b'
     return TEAL
   }
 
-  function infoUltimoCliente(c) {
+  function infoUltimoCliente(c: any) {
     const contratos = c.contratos || []
     if (!contratos.length) return { sede: '—', plan: '—', fecha: '—' }
     const ult = contratos[0]
@@ -397,7 +420,7 @@ export default function Clientes() {
             <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontSize: '18px' }}>🔍</span>
           </div>
 
-          {cargando && <div style={{ textAlign: 'center', padding: '32px', color: '#666' }}>Buscando...</div>}
+          {cargando && <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>Buscando...</div>}
 
           {busqueda.length >= 2 && clientes.map((c: any) => (
             <div key={c.id} onClick={() => seleccionarCliente(c)} style={{
@@ -433,7 +456,7 @@ export default function Clientes() {
             </div>
           )}
 
-          {/* Tabla últimos 20 clientes */}
+          {/* Últimos 20 clientes */}
           {busqueda.length < 2 && (
             <>
               <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#555', fontWeight: '600' }}>
@@ -480,12 +503,10 @@ export default function Clientes() {
         </>
       )}
 
-      {/* NUEVO CLIENTE */}
       {modo === 'nuevo' && (
         <FormCliente modo={modo} form={form} setForm={setForm} cargando={cargando} onGuardar={guardar} onVolver={() => setModo('lista')} />
       )}
 
-      {/* EDITAR CLIENTE */}
       {modo === 'editar' && (
         <FormCliente modo={modo} form={form} setForm={setForm} cargando={cargando} onGuardar={guardar} onVolver={() => setModo('ver')} />
       )}
@@ -538,9 +559,7 @@ export default function Clientes() {
           {confirmarBorrar && (
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', padding: '20px 24px', marginBottom: '24px' }}>
               <p style={{ margin: '0 0 6px', fontSize: '16px', color: '#991b1b', fontWeight: '700' }}>¿Borrar a {form.nombre}?</p>
-              <p style={{ margin: '0 0 14px', fontSize: '13px', color: '#666' }}>
-                Esta acción no se puede deshacer.
-              </p>
+              <p style={{ margin: '0 0 14px', fontSize: '13px', color: '#666' }}>Esta acción no se puede deshacer.</p>
               {errorBorrar && (
                 <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#dc2626', fontWeight: '500', background: '#fee2e2', padding: '10px 14px', borderRadius: '8px' }}>
                   ⚠️ {errorBorrar}
@@ -583,11 +602,8 @@ export default function Clientes() {
                       {p.estado}
                     </span>
                   </p>
-                  <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>🏫 {p.sedes?.nombre || '—'} · {p.tipo_plan}</p>
-                  <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>
-                    📅 Inicio: {p.fecha_inicio || '—'} · {p.duracion_min || '—'} min/clase
-                    {p.fecha_vencimiento ? ` · Vence: ${p.fecha_vencimiento}` : ''}
-                  </p>
+                  <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>👤 {p.profesores?.nombre || '—'} · 🏫 {p.sedes?.nombre || '—'}</p>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>📅 {p.fecha_inicio || '—'} · {p.tipo_plan} · {p.duracion_min} min/clase</p>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
                   <p style={{ margin: 0, fontSize: '26px', fontWeight: '700', color: colorBarra(p) }}>
@@ -649,6 +665,7 @@ export default function Clientes() {
       {modalPlan !== null && (
         <ModalPlan
           plan={modalPlan}
+          profesores={profesores}
           instrumentos={instrumentos}
           sedes={sedes}
           onGuardar={guardarPlan}
