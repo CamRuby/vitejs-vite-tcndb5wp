@@ -105,6 +105,9 @@ export default function Horarios() {
   const [recurrente, setRecurrente] = useState(false)
   const [semanasRecurrencia, setSemanasRecurrencia] = useState(4)
 
+  // Aviso de diferencias al crear clase
+  const [avisoCrear, setAvisoCrear] = useState<string[]>([])
+
   // Modal editar
   const [modalEditar, setModalEditar] = useState(false)
   const [claseEditando, setClaseEditando] = useState<any>(null)
@@ -264,11 +267,32 @@ export default function Horarios() {
     return null
   }
 
+  // ── Calcular avisos de diferencias con el plan ──
+  function calcularAvisosCrear(contrato: any, profIdActual: string, durActual: string, salonSede: string) {
+    if (!contrato) { setAvisoCrear([]); return }
+    const avisos: string[] = []
+    if (contrato.profesor_id && profIdActual && contrato.profesor_id !== profIdActual) {
+      const nombrePlan = profesores.find(p => p.id === contrato.profesor_id)?.nombre || 'del plan'
+      const nombreActual = profesores.find(p => p.id === profIdActual)?.nombre || 'seleccionado'
+      avisos.push(`el profesor (plan: ${nombrePlan} → esta clase: ${nombreActual})`)
+    }
+    if (contrato.duracion_min && durActual && String(contrato.duracion_min) !== durActual) {
+      avisos.push(`la duración (plan: ${contrato.duracion_min} min → esta clase: ${durActual} min)`)
+    }
+    if (contrato.sede_id && salonSede && contrato.sede_id !== salonSede) {
+      const nombreSedePlan = sedes.find(s => s.id === contrato.sede_id)?.nombre || 'del plan'
+      const nombreSedeActual = sedes.find(s => s.id === salonSede)?.nombre || 'del salón'
+      avisos.push(`la sede (plan: ${nombreSedePlan} → esta clase: ${nombreSedeActual})`)
+    }
+    setAvisoCrear(avisos)
+  }
+
   async function buscarClientes(texto: string) {
     setBusquedaCliente(texto)
     setClienteSeleccionado(null)
     setContratos([])
     setContratoSeleccionado(null)
+    setAvisoCrear([])
     if (texto.length < 2) { setClientesBuscados([]); return }
     const { data } = await supabase.from('clientes').select('id, nombre, grupo_whatsapp')
       .ilike('nombre', `%${texto}%`).eq('estado', 'activo').limit(10)
@@ -280,13 +304,15 @@ export default function Horarios() {
     setBusquedaCliente(c.nombre)
     setClientesBuscados([])
     const { data } = await supabase.from('contratos')
-      .select('id, total_clases, clases_tomadas, duracion_min, instrumentos(nombre), profesores(id, nombre)')
+      .select('id, total_clases, clases_tomadas, duracion_min, sede_id, instrumentos(nombre), profesores(id, nombre)')
       .eq('cliente_id', c.id).eq('estado', 'activo')
     setContratos(data || [])
     if (data?.length) {
-      setContratoSeleccionado(data[0])
-      setDuracion(String((data[0] as any).duracion_min || 60))
-      setProfesorId((data[0] as any).profesores?.id || '')
+      const ct = data[0] as any
+      setContratoSeleccionado(ct)
+      setDuracion(String(ct.duracion_min || 60))
+      setProfesorId(ct.profesores?.id || '')
+      calcularAvisosCrear(ct, ct.profesores?.id || '', String(ct.duracion_min || 60), slotSeleccionado?.salon?.sede_id || '')
     }
   }
 
@@ -296,6 +322,7 @@ export default function Horarios() {
       setContratoSeleccionado(ct)
       setDuracion(String(ct.duracion_min || 60))
       setProfesorId(ct.profesores?.id || '')
+      calcularAvisosCrear(ct, ct.profesores?.id || '', String(ct.duracion_min || 60), slotSeleccionado?.salon?.sede_id || '')
     }
   }
 
@@ -313,6 +340,7 @@ export default function Horarios() {
     setRecurrente(false)
     setSemanasRecurrencia(4)
     setError('')
+    setAvisoCrear([])
   }
 
   function abrirClaseExistente(e: React.MouseEvent, clase: any) {
@@ -407,7 +435,6 @@ export default function Horarios() {
     }
 
     if (alcance === 'futuras' && claseEditando.patron_id) {
-      // Primero obtenemos los IDs de las clases futuras de la serie
       const { data: clasesFuturas, error: errorBuscar } = await supabase
         .from('clases')
         .select('id')
@@ -421,42 +448,19 @@ export default function Horarios() {
       }
 
       const ids = clasesFuturas.map((c: any) => c.id)
-
       const { error } = await supabase
         .from('clases')
-        .update({
-          hora: editHora + ':00',
-          duracion_min: parseInt(editDuracion),
-          profesor_id: editProfesorId,
-          salon_id: editSalonId,
-          estado: editEstado
-        })
+        .update({ hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado })
         .in('id', ids)
 
-      if (error) {
-        setEditError('Error: ' + error.message)
-        setEditGuardando(false)
-        return
-      }
+      if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
     } else {
-      // Solo esta clase — actualiza todo incluyendo fecha
       const { error } = await supabase
         .from('clases')
-        .update({
-          hora: editHora + ':00',
-          duracion_min: parseInt(editDuracion),
-          profesor_id: editProfesorId,
-          salon_id: editSalonId,
-          estado: editEstado,
-          fecha: editFecha
-        })
+        .update({ hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha })
         .eq('id', claseEditando.id)
 
-      if (error) {
-        setEditError('Error: ' + error.message)
-        setEditGuardando(false)
-        return
-      }
+      if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
     }
 
     setModalEditar(false)
@@ -467,8 +471,7 @@ export default function Horarios() {
   async function borrarClase(alcance: 'esta' | 'futuras') {
     setEditGuardando(true)
     if (alcance === 'futuras' && claseEditando.patron_id) {
-      await supabase.from('clases').delete()
-        .eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
+      await supabase.from('clases').delete().eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
     } else {
       await supabase.from('clases').delete().eq('id', claseEditando.id)
     }
@@ -683,6 +686,8 @@ export default function Horarios() {
               <button onClick={() => setModalAbierto(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ padding: '20px 24px', maxHeight: '75vh', overflowY: 'auto' }}>
+
+              {/* Búsqueda cliente */}
               <div style={{ marginBottom: '14px', position: 'relative' }}>
                 <label style={labelStyle}>Cliente</label>
                 <input placeholder="Buscar cliente..." value={busquedaCliente}
@@ -701,6 +706,8 @@ export default function Horarios() {
                   </div>
                 )}
               </div>
+
+              {/* Plan */}
               {contratos.length > 0 && (
                 <div style={{ marginBottom: '14px' }}>
                   <label style={labelStyle}>Plan</label>
@@ -713,18 +720,28 @@ export default function Horarios() {
                   </select>
                 </div>
               )}
+
+              {/* Profesor */}
               <div style={{ marginBottom: '14px' }}>
                 <label style={labelStyle}>Profesor</label>
-                <select value={profesorId} onChange={e => setProfesorId(e.target.value)} style={fieldStyle}>
+                <select value={profesorId} onChange={e => {
+                  setProfesorId(e.target.value)
+                  calcularAvisosCrear(contratoSeleccionado, e.target.value, duracion, slotSeleccionado?.salon?.sede_id || '')
+                }} style={fieldStyle}>
                   <option value="">— Seleccionar profesor —</option>
                   {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
               </div>
+
+              {/* Duración */}
               <div style={{ marginBottom: '14px' }}>
                 <label style={labelStyle}>Duración</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   {DURACIONES.map(d => (
-                    <button key={d} onClick={() => setDuracion(d)} style={{
+                    <button key={d} onClick={() => {
+                      setDuracion(d)
+                      calcularAvisosCrear(contratoSeleccionado, profesorId, d, slotSeleccionado?.salon?.sede_id || '')
+                    }} style={{
                       flex: 1, padding: '9px', border: `1px solid ${duracion === d ? TEAL : TEAL_MID}`,
                       borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
                       background: duracion === d ? TEAL : 'white', color: duracion === d ? 'white' : '#333',
@@ -733,6 +750,23 @@ export default function Horarios() {
                   ))}
                 </div>
               </div>
+
+              {/* ── Aviso de diferencias con el plan ── */}
+              {avisoCrear.length > 0 && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px' }}>
+                  <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: '600', color: '#92400e' }}>⚠️ Estás modificando:</p>
+                  <ul style={{ margin: '0', paddingLeft: '18px' }}>
+                    {avisoCrear.map((a, i) => (
+                      <li key={i} style={{ fontSize: '13px', color: '#78350f', marginBottom: '2px' }}>{a}</li>
+                    ))}
+                  </ul>
+                  <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#92400e' }}>
+                    Este cambio aplica solo para esta clase. Si quieres que cambie para todas las demás, edita el plan del cliente.
+                  </p>
+                </div>
+              )}
+
+              {/* Recurrencia */}
               <div style={{ marginBottom: '20px', background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#333' }}>
                   <input type="checkbox" checked={recurrente} onChange={e => setRecurrente(e.target.checked)} />
@@ -760,7 +794,9 @@ export default function Horarios() {
                   </div>
                 )}
               </div>
+
               {error && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{error}</p>}
+
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button onClick={guardarClase} disabled={guardando} style={{
                   flex: 1, padding: '11px', background: TEAL, color: 'white',
@@ -904,25 +940,13 @@ export default function Horarios() {
                       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         {claseEditando.recurrente && claseEditando.patron_id ? (
                           <>
-                            <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{
-                              flex: 1, padding: '8px', background: '#dc2626', color: 'white',
-                              border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500'
-                            }}>Borrar solo esta</button>
-                            <button onClick={() => borrarClase('futuras')} disabled={editGuardando} style={{
-                              flex: 1, padding: '8px', background: '#991b1b', color: 'white',
-                              border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500'
-                            }}>Borrar esta y siguientes</button>
+                            <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Borrar solo esta</button>
+                            <button onClick={() => borrarClase('futuras')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#991b1b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Borrar esta y siguientes</button>
                           </>
                         ) : (
-                          <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{
-                            flex: 1, padding: '8px', background: '#dc2626', color: 'white',
-                            border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
-                          }}>Sí, borrar clase</button>
+                          <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>Sí, borrar clase</button>
                         )}
-                        <button onClick={() => setConfirmarBorrar(false)} style={{
-                          padding: '8px 14px', background: 'white', color: '#333',
-                          border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px'
-                        }}>Cancelar</button>
+                        <button onClick={() => setConfirmarBorrar(false)} style={{ padding: '8px 14px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Cancelar</button>
                       </div>
                     </div>
                   )}
