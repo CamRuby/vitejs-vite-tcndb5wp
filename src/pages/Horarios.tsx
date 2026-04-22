@@ -393,6 +393,7 @@ export default function Horarios() {
   }
 
   async function guardarEdicion(alcance: 'esta' | 'futuras') {
+    alert('alcance: ' + alcance + ' | patron_id: ' + claseEditando.patron_id + ' | fecha: ' + claseEditando.fecha)
     setEditGuardando(true)
     setEditError('')
 
