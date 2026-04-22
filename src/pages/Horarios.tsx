@@ -393,11 +393,9 @@ export default function Horarios() {
   }
 
   async function guardarEdicion(alcance: 'esta' | 'futuras') {
-    alert('alcance: ' + alcance + ' | patron_id: ' + claseEditando.patron_id + ' | fecha: ' + claseEditando.fecha)
     setEditGuardando(true)
     setEditError('')
 
-    // Validar conflicto solo para la clase actual
     const conflicto = await verificarTodos(
       editSalonId, editProfesorId, claseEditando.contratos?.id || '',
       editFecha, editHora, parseInt(editDuracion), claseEditando.id
@@ -409,8 +407,21 @@ export default function Horarios() {
     }
 
     if (alcance === 'futuras' && claseEditando.patron_id) {
-      // Actualiza hora, duración, profesor, salón y estado en TODAS las clases futuras de la serie
-      // La fecha NO se propaga (cada clase mantiene su propia fecha)
+      // Primero obtenemos los IDs de las clases futuras de la serie
+      const { data: clasesFuturas, error: errorBuscar } = await supabase
+        .from('clases')
+        .select('id')
+        .eq('patron_id', claseEditando.patron_id)
+        .gte('fecha', claseEditando.fecha)
+
+      if (errorBuscar || !clasesFuturas || clasesFuturas.length === 0) {
+        setEditError('No se encontraron clases futuras en la serie.')
+        setEditGuardando(false)
+        return
+      }
+
+      const ids = clasesFuturas.map((c: any) => c.id)
+
       const { error } = await supabase
         .from('clases')
         .update({
@@ -420,8 +431,7 @@ export default function Horarios() {
           salon_id: editSalonId,
           estado: editEstado
         })
-        .eq('patron_id', claseEditando.patron_id)
-        .gte('fecha', claseEditando.fecha)
+        .in('id', ids)
 
       if (error) {
         setEditError('Error: ' + error.message)
