@@ -13,7 +13,6 @@ const estiloInput = {
   outline: 'none'
 }
 const labelStyle = { fontWeight: '500' as const, fontSize: '13px', color: '#555' }
-
 const CLASES_PRESET = [4, 8, 16, 20, 40, 80]
 
 // ── Formulario cliente ──
@@ -38,12 +37,9 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
           ].map(f => (
             <div key={f.key}>
               <label style={labelStyle}>{f.label}</label>
-              <input
-                type={f.type}
-                value={form[f.key]}
+              <input type={f.type} value={form[f.key]}
                 onChange={e => setForm({ ...form, [f.key]: e.target.value })}
-                style={estiloInput}
-              />
+                style={estiloInput} />
             </div>
           ))}
           <div>
@@ -154,22 +150,18 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
                       color: !clasesManual && fp.total_clases === n ? 'white' : '#333',
                     }}>{n}</button>
                 ))}
-                <button type="button"
-                  onClick={() => setClasesManual(true)}
-                  style={{
-                    padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
-                    border: `2px solid ${clasesManual ? TEAL : TEAL_MID}`,
-                    background: clasesManual ? TEAL : 'white',
-                    color: clasesManual ? 'white' : '#666',
-                  }}>Otro</button>
+                <button type="button" onClick={() => setClasesManual(true)} style={{
+                  padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+                  border: `2px solid ${clasesManual ? TEAL : TEAL_MID}`,
+                  background: clasesManual ? TEAL : 'white',
+                  color: clasesManual ? 'white' : '#666',
+                }}>Otro</button>
               </div>
               {clasesManual && (
                 <input type="number" min={1} placeholder="Ingresa el número"
                   value={fp.total_clases}
                   onChange={e => setFp({ ...fp, total_clases: e.target.value })}
-                  style={{ ...estiloInput, marginTop: '10px' }}
-                  autoFocus
-                />
+                  style={{ ...estiloInput, marginTop: '10px' }} autoFocus />
               )}
             </div>
 
@@ -183,15 +175,13 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
             <div>
               <label style={labelStyle}>Valor del plan ($)</label>
               <input type="number" min={0} value={fp.valor_plan}
-                onChange={e => setFp({ ...fp, valor_plan: e.target.value })}
-                style={estiloInput} />
+                onChange={e => setFp({ ...fp, valor_plan: e.target.value })} style={estiloInput} />
             </div>
 
             <div>
               <label style={labelStyle}>Fecha de inicio</label>
               <input type="date" value={fp.fecha_inicio}
-                onChange={e => setFp({ ...fp, fecha_inicio: e.target.value })}
-                style={estiloInput} />
+                onChange={e => setFp({ ...fp, fecha_inicio: e.target.value })} style={estiloInput} />
             </div>
 
             <div>
@@ -207,11 +197,9 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
               <div style={{ gridColumn: '1 / -1' }}>
                 <label style={labelStyle}>Clases tomadas</label>
                 <input type="number" min={0} value={fp.clases_tomadas}
-                  onChange={e => setFp({ ...fp, clases_tomadas: e.target.value })}
-                  style={estiloInput} />
+                  onChange={e => setFp({ ...fp, clases_tomadas: e.target.value })} style={estiloInput} />
               </div>
             )}
-
           </div>
 
           {error && <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '12px' }}>{error}</p>}
@@ -235,6 +223,7 @@ export default function Clientes() {
   const [busqueda, setBusqueda] = useState('')
   const [clientes, setClientes] = useState<any[]>([])
   const [ultimosClientes, setUltimosClientes] = useState<any[]>([])
+  const [ultimosPlanes, setUltimosPlanes] = useState<any[]>([])
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null)
   const [planes, setPlanes] = useState<any[]>([])
   const [clases, setClases] = useState<any[]>([])
@@ -257,21 +246,27 @@ export default function Clientes() {
   }, [busqueda])
 
   async function cargarDatosBase() {
-    const [{ data: ins }, { data: sed }, { data: pro }, { data: ult }] = await Promise.all([
+    const [{ data: ins }, { data: sed }, { data: pro }, { data: ult }, { data: planes30 }] = await Promise.all([
       supabase.from('instrumentos').select('id, nombre').order('nombre'),
       supabase.from('sedes').select('id, nombre').order('nombre'),
       supabase.from('profesores').select('id, nombre').order('nombre'),
       supabase
         .from('clientes')
-        .select('id, nombre, estado, created_at, contratos(id, fecha_inicio, tipo_plan, sedes(nombre))')
+        .select('id, nombre, telefono, email, grupo_whatsapp, estado, created_at')
         .not('created_at', 'is', null)
         .order('created_at', { ascending: false })
-        .limit(20),
+        .limit(30),
+      supabase
+        .from('contratos')
+        .select('id, total_clases, duracion_min, valor_plan, fecha_inicio, clientes(nombre), instrumentos(nombre), sedes(nombre)')
+        .order('fecha_inicio', { ascending: false })
+        .limit(30),
     ])
     setInstrumentos(ins || [])
     setSedes(sed || [])
     setProfesores(pro || [])
     setUltimosClientes(ult || [])
+    setUltimosPlanes(planes30 || [])
   }
 
   async function buscarClientes() {
@@ -405,18 +400,19 @@ export default function Clientes() {
     return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`
   }
 
-  function infoUltimoContrato(c: any) {
-    const contratos = c.contratos || []
-    if (!contratos.length) return { sede: '—', plan: '—', fecha: '—' }
-    const ult = contratos[0]
-    return { sede: ult.sedes?.nombre || '—', plan: ult.tipo_plan || '—', fecha: ult.fecha_inicio || '—' }
+  // Estilo cabecera de tabla compartido
+  const thStyle: React.CSSProperties = {
+    padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap'
+  }
+  const tdStyle: React.CSSProperties = {
+    padding: '10px 12px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap'
   }
 
   return (
-    <div style={{ padding: '32px', maxWidth: '1400px' }}>
+    <div style={{ padding: '24px 32px', maxWidth: '1600px', height: '100vh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
 
       {/* ENCABEZADO */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '28px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: '26px', color: '#1a1a1a' }}>Clientes</h2>
           <p style={{ margin: '4px 0 0', color: '#666', fontSize: '14px' }}>Busca, crea y gestiona clientes</p>
@@ -428,8 +424,10 @@ export default function Clientes() {
 
       {/* LISTA */}
       {modo === 'lista' && (
-        <>
-          <div style={{ position: 'relative', marginBottom: '24px' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+          {/* Buscador */}
+          <div style={{ position: 'relative', marginBottom: '16px', flexShrink: 0 }}>
             <input
               placeholder="Buscar cliente por nombre..."
               value={busqueda}
@@ -440,92 +438,125 @@ export default function Clientes() {
             <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontSize: '18px' }}>🔍</span>
           </div>
 
-          {cargando && <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>Buscando...</div>}
-
-          {busqueda.length >= 2 && clientes.map((c: any) => (
-            <div key={c.id} onClick={() => seleccionarCliente(c)} style={{
-              background: 'white', borderRadius: '12px', padding: '16px 20px', marginBottom: '8px',
-              cursor: 'pointer', border: '1px solid #eef2f7', boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-            }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = TEAL_MID)}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = '#eef2f7')}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: TEAL_LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: '600', color: TEAL }}>
-                  {c.nombre.charAt(0).toUpperCase()}
+          {/* Resultados búsqueda */}
+          {busqueda.length >= 2 && (
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {cargando && <div style={{ textAlign: 'center', padding: '24px', color: '#666' }}>Buscando...</div>}
+              {clientes.map((c: any) => (
+                <div key={c.id} onClick={() => seleccionarCliente(c)} style={{
+                  background: 'white', borderRadius: '12px', padding: '14px 20px', marginBottom: '8px',
+                  cursor: 'pointer', border: '1px solid #eef2f7', boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = TEAL_MID)}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = '#eef2f7')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: TEAL_LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', fontWeight: '600', color: TEAL }}>
+                      {c.nombre.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p style={{ margin: 0, fontWeight: '600', fontSize: '15px', color: '#1a1a1a' }}>{c.nombre}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#888' }}>{c.telefono || '—'} · {c.grupo_whatsapp || '—'}</p>
+                    </div>
+                  </div>
+                  <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '500', background: c.estado === 'activo' ? TEAL_LIGHT : '#fee2e2', color: c.estado === 'activo' ? TEAL : '#991b1b' }}>
+                    {c.estado === 'activo' ? 'Activo' : 'Inactivo'}
+                  </span>
                 </div>
-                <div>
-                  <p style={{ margin: 0, fontWeight: '600', fontSize: '15px', color: '#1a1a1a' }}>{c.nombre}</p>
-                  <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#888' }}>💬 {c.grupo_whatsapp || '—'}</p>
+              ))}
+              {clientes.length === 0 && !cargando && (
+                <div style={{ textAlign: 'center', padding: '32px', color: '#888' }}>
+                  <p style={{ fontSize: '28px', margin: '0 0 8px' }}>🔍</p>
+                  <p style={{ margin: 0 }}>No se encontraron clientes</p>
                 </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '500', background: c.estado === 'activo' ? TEAL_LIGHT : '#fee2e2', color: c.estado === 'activo' ? TEAL : '#991b1b' }}>
-                  {c.estado === 'activo' ? 'Activo' : 'Inactivo'}
-                </span>
-                <span style={{ color: '#ccc', fontSize: '18px' }}>›</span>
-              </div>
-            </div>
-          ))}
-
-          {busqueda.length >= 2 && clientes.length === 0 && !cargando && (
-            <div style={{ textAlign: 'center', padding: '32px', color: '#888' }}>
-              <p style={{ fontSize: '28px', margin: '0 0 8px' }}>🔍</p>
-              <p style={{ margin: 0 }}>No se encontraron clientes con ese nombre</p>
+              )}
             </div>
           )}
 
-          {/* Tabla últimos 20 clientes */}
+          {/* Pantalla dividida: últimos clientes | últimos planes */}
           {busqueda.length < 2 && (
-            <>
-              <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#555', fontWeight: '600' }}>
-                Últimos 20 clientes registrados
-              </h3>
-              <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: TEAL_LIGHT }}>
-                      {['Fecha de ingreso', 'Nombre', 'Sede', 'Tipo de plan', 'Inicio del plan', 'Estado'].map(h => (
-                        <th key={h} style={{ padding: '11px 16px', textAlign: 'left', fontSize: '13px', color: TEAL, fontWeight: '600' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ultimosClientes.length === 0 && (
+            <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', overflow: 'hidden' }}>
+
+              {/* ── Últimos 30 clientes ── */}
+              <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <h3 style={{ margin: '0 0 10px', fontSize: '14px', color: '#555', fontWeight: '600', flexShrink: 0 }}>
+                  🧑 Últimos 30 clientes registrados
+                </h3>
+                <div style={{ flex: 1, overflowY: 'auto', background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
                       <tr>
-                        <td colSpan={6} style={{ padding: '32px', textAlign: 'center', color: '#aaa' }}>
-                          Los clientes nuevos aparecerán aquí
-                        </td>
+                        {['Nombre', 'Teléfono', 'Correo', 'WhatsApp', 'Fecha ingreso'].map(h => (
+                          <th key={h} style={thStyle}>{h}</th>
+                        ))}
                       </tr>
-                    )}
-                    {ultimosClientes.map((c: any, i) => {
-                      const info = infoUltimoContrato(c)
-                      return (
+                    </thead>
+                    <tbody>
+                      {ultimosClientes.length === 0 && (
+                        <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>
+                          Los clientes nuevos aparecerán aquí
+                        </td></tr>
+                      )}
+                      {ultimosClientes.map((c: any, i) => (
                         <tr key={c.id} onClick={() => seleccionarCliente(c)}
                           style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc', cursor: 'pointer' }}
                           onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)}
                           onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafbfc')}
                         >
-                          <td style={{ padding: '11px 16px', fontSize: '13px', color: '#888' }}>{formatFechaCorta(c.created_at)}</td>
-                          <td style={{ padding: '11px 16px', fontSize: '14px', fontWeight: '500', color: '#1a1a1a' }}>{c.nombre}</td>
-                          <td style={{ padding: '11px 16px', fontSize: '14px', color: '#555' }}>{info.sede}</td>
-                          <td style={{ padding: '11px 16px', fontSize: '14px', color: '#555' }}>{info.plan}</td>
-                          <td style={{ padding: '11px 16px', fontSize: '14px', color: '#555' }}>{info.fecha}</td>
-                          <td style={{ padding: '11px 16px' }}>
-                            <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '500', background: c.estado === 'activo' ? TEAL_LIGHT : '#fee2e2', color: c.estado === 'activo' ? TEAL : '#991b1b' }}>
-                              {c.estado === 'activo' ? 'Activo' : 'Inactivo'}
-                            </span>
-                          </td>
+                          <td style={{ ...tdStyle, fontWeight: '500', color: TEAL }}>{c.nombre}</td>
+                          <td style={tdStyle}>{c.telefono || '—'}</td>
+                          <td style={{ ...tdStyle, maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.email || '—'}</td>
+                          <td style={tdStyle}>{c.grupo_whatsapp || '—'}</td>
+                          <td style={{ ...tdStyle, color: '#888' }}>{formatFechaCorta(c.created_at)}</td>
                         </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </>
+
+              {/* ── Últimos 30 planes ── */}
+              <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <h3 style={{ margin: '0 0 10px', fontSize: '14px', color: '#555', fontWeight: '600', flexShrink: 0 }}>
+                  📋 Últimos 30 planes creados
+                </h3>
+                <div style={{ flex: 1, overflowY: 'auto', background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
+                      <tr>
+                        {['Cliente', 'Sede', 'Instrumento', 'Clases', 'Duración', 'Valor', 'Inicio'].map(h => (
+                          <th key={h} style={thStyle}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ultimosPlanes.length === 0 && (
+                        <tr><td colSpan={6} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>
+                          Los planes nuevos aparecerán aquí
+                        </td></tr>
+                      )}
+                      {ultimosPlanes.map((p: any, i) => (
+                        <tr key={p.id}
+                          style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc' }}
+                        >
+                          <td style={{ ...tdStyle, fontWeight: '500', color: TEAL }}>{p.clientes?.nombre || '—'}</td>
+                          <td style={tdStyle}>{p.sedes?.nombre || '—'}</td>
+                          <td style={tdStyle}>{p.instrumentos?.nombre || '—'}</td>
+                          <td style={{ ...tdStyle, textAlign: 'center' }}>{p.total_clases}</td>
+                          <td style={{ ...tdStyle, textAlign: 'center' }}>{p.duracion_min} min</td>
+                          <td style={tdStyle}>{p.valor_plan ? `$${p.valor_plan.toLocaleString()}` : '—'}</td>
+                          <td style={{ ...tdStyle, color: '#888' }}>{p.fecha_inicio || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
           )}
-        </>
+        </div>
       )}
 
       {modo === 'nuevo' && (
@@ -538,7 +569,7 @@ export default function Clientes() {
 
       {/* VER CLIENTE */}
       {modo === 'ver' && clienteSeleccionado && (
-        <div>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
           <button onClick={() => { setModo('lista'); setBusqueda(''); setClientes([]) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: TEAL, fontSize: '14px', marginBottom: '20px', padding: 0, fontWeight: '500' }}>
             ← Volver a la lista
           </button>
