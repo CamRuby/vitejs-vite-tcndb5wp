@@ -13,19 +13,18 @@ const estiloInput = {
   outline: 'none'
 }
 
-const labelStyle = {
-  fontWeight: '500' as const, fontSize: '13px', color: '#555'
-}
+const labelStyle = { fontWeight: '500' as const, fontSize: '13px', color: '#555' }
 
-// ── Formulario cliente (fuera del componente principal para evitar bug de input) ──
+const TIPOS_PLAN = ['Plan mensual', 'Plan semestral', 'Plan anual', 'Taller']
+
+// ── Formulario cliente ──
 function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
   return (
     <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.08)' }}>
       <div style={{ background: TEAL, padding: '20px 28px' }}>
-        <button onClick={onVolver} style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: 'rgba(255,255,255,0.8)', fontSize: '14px', padding: 0, marginBottom: '8px'
-        }}>← Volver</button>
+        <button onClick={onVolver} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', fontSize: '14px', padding: 0, marginBottom: '8px' }}>
+          ← Volver
+        </button>
         <h3 style={{ margin: 0, color: 'white', fontSize: '20px' }}>
           {modo === 'nuevo' ? 'Nuevo cliente' : 'Editar cliente'}
         </h3>
@@ -57,16 +56,12 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
           </div>
         </div>
         <div style={{ marginTop: '28px', display: 'flex', gap: '12px' }}>
-          <button onClick={onGuardar} disabled={cargando} style={{
-            padding: '11px 28px', background: TEAL, color: 'white',
-            border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500'
-          }}>
+          <button onClick={onGuardar} disabled={cargando} style={{ padding: '11px 28px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
             {cargando ? 'Guardando...' : 'Guardar'}
           </button>
-          <button onClick={onVolver} style={{
-            padding: '11px 28px', background: '#f1f5f9', color: '#334155',
-            border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px'
-          }}>Cancelar</button>
+          <button onClick={onVolver} style={{ padding: '11px 28px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px' }}>
+            Cancelar
+          </button>
         </div>
       </div>
     </div>
@@ -74,29 +69,34 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
 }
 
 // ── Modal plan ──
-function ModalPlan({ plan, profesores, instrumentos, onGuardar, onCerrar }) {
+function ModalPlan({ plan, instrumentos, sedes, onGuardar, onCerrar }) {
   const esNuevo = !plan?.id
   const [formPlan, setFormPlan] = useState({
+    tipo_plan: plan?.tipo_plan || 'Plan mensual',
     instrumento_id: plan?.instrumento_id || '',
-    profesor_id: plan?.profesor_id || '',
+    sede_id: plan?.sede_id || '',
     total_clases: plan?.total_clases || 4,
     clases_tomadas: plan?.clases_tomadas || 0,
     valor_plan: plan?.valor_plan || '',
-    tipo_plan: plan?.tipo_plan || 'paquete',
     duracion_min: plan?.duracion_min || 60,
     fecha_inicio: plan?.fecha_inicio || new Date().toISOString().split('T')[0],
+    fecha_vencimiento: plan?.fecha_vencimiento || '',
     estado: plan?.estado || 'activo',
   })
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
+  const esTaller = formPlan.tipo_plan === 'Taller'
+
   async function guardar() {
     if (!formPlan.instrumento_id) { setError('Selecciona un instrumento'); return }
-    if (!formPlan.profesor_id) { setError('Selecciona un profesor'); return }
+    if (!formPlan.sede_id) { setError('Selecciona una sede'); return }
     if (!formPlan.total_clases) { setError('Ingresa el número de clases'); return }
     setGuardando(true)
     setError('')
-    await onGuardar(formPlan, plan?.id)
+    const payload = { ...formPlan }
+    if (!esTaller) payload.fecha_vencimiento = null
+    await onGuardar(payload, plan?.id)
     setGuardando(false)
   }
 
@@ -104,13 +104,18 @@ function ModalPlan({ plan, profesores, instrumentos, onGuardar, onCerrar }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
         <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>
-            {esNuevo ? 'Nuevo plan' : 'Editar plan'}
-          </h3>
+          <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>{esNuevo ? 'Nuevo plan' : 'Editar plan'}</h3>
           <button onClick={onCerrar} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
         </div>
         <div style={{ padding: '24px', maxHeight: '75vh', overflowY: 'auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Tipo de plan *</label>
+              <select value={formPlan.tipo_plan} onChange={e => setFormPlan({ ...formPlan, tipo_plan: e.target.value })} style={estiloInput}>
+                {TIPOS_PLAN.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
 
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Instrumento *</label>
@@ -121,10 +126,10 @@ function ModalPlan({ plan, profesores, instrumentos, onGuardar, onCerrar }) {
             </div>
 
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Profesor *</label>
-              <select value={formPlan.profesor_id} onChange={e => setFormPlan({ ...formPlan, profesor_id: e.target.value })} style={estiloInput}>
+              <label style={labelStyle}>Sede *</label>
+              <select value={formPlan.sede_id} onChange={e => setFormPlan({ ...formPlan, sede_id: e.target.value })} style={estiloInput}>
                 <option value="">— Seleccionar —</option>
-                {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                {sedes.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
             </div>
 
@@ -150,16 +155,6 @@ function ModalPlan({ plan, profesores, instrumentos, onGuardar, onCerrar }) {
             </div>
 
             <div>
-              <label style={labelStyle}>Tipo de plan</label>
-              <select value={formPlan.tipo_plan} onChange={e => setFormPlan({ ...formPlan, tipo_plan: e.target.value })} style={estiloInput}>
-                <option value="paquete">Paquete</option>
-                <option value="mensual">Mensual</option>
-                <option value="semestral">Semestral</option>
-                <option value="anual">Anual</option>
-              </select>
-            </div>
-
-            <div>
               <label style={labelStyle}>Valor del plan ($)</label>
               <input type="number" min={0} value={formPlan.valor_plan}
                 onChange={e => setFormPlan({ ...formPlan, valor_plan: parseInt(e.target.value) || 0 })}
@@ -173,6 +168,15 @@ function ModalPlan({ plan, profesores, instrumentos, onGuardar, onCerrar }) {
                 style={estiloInput} />
             </div>
 
+            {esTaller && (
+              <div>
+                <label style={labelStyle}>Fecha de vencimiento</label>
+                <input type="date" value={formPlan.fecha_vencimiento}
+                  onChange={e => setFormPlan({ ...formPlan, fecha_vencimiento: e.target.value })}
+                  style={estiloInput} />
+              </div>
+            )}
+
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Estado del plan</label>
               <select value={formPlan.estado} onChange={e => setFormPlan({ ...formPlan, estado: e.target.value })} style={estiloInput}>
@@ -181,21 +185,18 @@ function ModalPlan({ plan, profesores, instrumentos, onGuardar, onCerrar }) {
                 <option value="completado">Completado</option>
               </select>
             </div>
+
           </div>
 
           {error && <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '12px' }}>{error}</p>}
 
           <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-            <button onClick={guardar} disabled={guardando} style={{
-              flex: 1, padding: '11px', background: TEAL, color: 'white',
-              border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500'
-            }}>
+            <button onClick={guardar} disabled={guardando} style={{ flex: 1, padding: '11px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
               {guardando ? 'Guardando...' : esNuevo ? 'Crear plan' : 'Guardar cambios'}
             </button>
-            <button onClick={onCerrar} style={{
-              padding: '11px 18px', background: '#f1f5f9', color: '#334155',
-              border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px'
-            }}>Cancelar</button>
+            <button onClick={onCerrar} style={{ padding: '11px 18px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+              Cancelar
+            </button>
           </div>
         </div>
       </div>
@@ -207,32 +208,40 @@ function ModalPlan({ plan, profesores, instrumentos, onGuardar, onCerrar }) {
 export default function Clientes() {
   const [busqueda, setBusqueda] = useState('')
   const [clientes, setClientes] = useState([])
+  const [ultimosClientes, setUltimosClientes] = useState([])
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null)
   const [planes, setPlanes] = useState([])
   const [clases, setClases] = useState([])
   const [modo, setModo] = useState('lista')
   const [cargando, setCargando] = useState(false)
   const [form, setForm] = useState({ nombre: '', telefono: '', email: '', grupo_whatsapp: '', estado: 'activo' })
-  const [profesores, setProfesores] = useState([])
   const [instrumentos, setInstrumentos] = useState([])
-  const [modalPlan, setModalPlan] = useState<any>(null) // null = cerrado, {} = nuevo, {id,...} = editar
+  const [sedes, setSedes] = useState([])
+  const [modalPlan, setModalPlan] = useState<any>(null)
+  const [confirmarBorrar, setConfirmarBorrar] = useState(false)
+  const [errorBorrar, setErrorBorrar] = useState('')
+  const [borrando, setBorrando] = useState(false)
 
-  useEffect(() => {
-    cargarProfesoresInstrumentos()
-  }, [])
+  useEffect(() => { cargarDatosBase() }, [])
 
   useEffect(() => {
     if (busqueda.length >= 2) buscarClientes()
     else setClientes([])
   }, [busqueda])
 
-  async function cargarProfesoresInstrumentos() {
-    const [{ data: p }, { data: i }] = await Promise.all([
-      supabase.from('profesores').select('id, nombre').order('nombre'),
+  async function cargarDatosBase() {
+    const [{ data: ins }, { data: sed }, { data: ult }] = await Promise.all([
       supabase.from('instrumentos').select('id, nombre').order('nombre'),
+      supabase.from('sedes').select('id, nombre').order('nombre'),
+      supabase
+        .from('clientes')
+        .select(`id, nombre, estado, created_at, contratos ( id, fecha_inicio, tipo_plan, sedes (nombre) )`)
+        .order('created_at', { ascending: false })
+        .limit(20),
     ])
-    setProfesores(p || [])
-    setInstrumentos(i || [])
+    setInstrumentos(ins || [])
+    setSedes(sed || [])
+    setUltimosClientes(ult || [])
   }
 
   async function buscarClientes() {
@@ -250,18 +259,15 @@ export default function Clientes() {
   async function cargarDatosCliente(c) {
     const { data: planesData } = await supabase
       .from('contratos')
-      .select(`
-        id, total_clases, clases_tomadas, valor_plan, tipo_plan, estado,
-        fecha_inicio, duracion_min, instrumento_id, profesor_id,
-        profesores (nombre),
-        instrumentos (nombre)
-      `)
+      .select(`id, total_clases, clases_tomadas, valor_plan, tipo_plan, estado,
+        fecha_inicio, fecha_vencimiento, duracion_min, instrumento_id, sede_id,
+        instrumentos (nombre), sedes (nombre)`)
       .eq('cliente_id', c.id)
       .order('fecha_inicio', { ascending: false })
     setPlanes(planesData || [])
 
-    const { data: contratosCliente } = await supabase.from('contratos').select('id').eq('cliente_id', c.id)
-    const ids = (contratosCliente || []).map(ct => ct.id)
+    const { data: ctList } = await supabase.from('contratos').select('id').eq('cliente_id', c.id)
+    const ids = (ctList || []).map((ct: any) => ct.id)
     if (ids.length > 0) {
       const { data: clasesData } = await supabase
         .from('clases')
@@ -280,6 +286,8 @@ export default function Clientes() {
     setClienteSeleccionado(c)
     setForm({ nombre: c.nombre || '', telefono: c.telefono || '', email: c.email || '', grupo_whatsapp: c.grupo_whatsapp || '', estado: c.estado || 'activo' })
     await cargarDatosCliente(c)
+    setConfirmarBorrar(false)
+    setErrorBorrar('')
     setModo('ver')
   }
 
@@ -295,6 +303,7 @@ export default function Clientes() {
     if (modo === 'nuevo') {
       const { data, error } = await supabase.from('clientes').insert(form).select().single()
       if (!error && data) {
+        await cargarDatosBase()
         setClienteSeleccionado(data)
         await cargarDatosCliente(data)
         setModo('ver')
@@ -307,11 +316,34 @@ export default function Clientes() {
     setCargando(false)
   }
 
-  async function guardarPlan(formPlan, planId) {
-    const payload = {
-      ...formPlan,
-      cliente_id: clienteSeleccionado.id,
+  async function intentarBorrarCliente() {
+    setBorrando(true)
+    setErrorBorrar('')
+    const { data: ctList } = await supabase.from('contratos').select('id').eq('cliente_id', clienteSeleccionado.id)
+    const ids = (ctList || []).map((ct: any) => ct.id)
+    if (ids.length > 0) {
+      const hoy = new Date().toISOString().split('T')[0]
+      const { data: pendientes } = await supabase
+        .from('clases').select('id')
+        .in('contrato_id', ids)
+        .in('estado', ['programada', 'confirmada'])
+        .gte('fecha', hoy)
+      if (pendientes && pendientes.length > 0) {
+        setErrorBorrar(`Este cliente tiene ${pendientes.length} clase(s) programada(s) o confirmada(s). Bórralas primero desde el horario.`)
+        setBorrando(false)
+        return
+      }
     }
+    await supabase.from('clientes').delete().eq('id', clienteSeleccionado.id)
+    await cargarDatosBase()
+    setModo('lista')
+    setBusqueda('')
+    setClientes([])
+    setBorrando(false)
+  }
+
+  async function guardarPlan(formPlan, planId) {
+    const payload = { ...formPlan, cliente_id: clienteSeleccionado.id }
     if (planId) {
       await supabase.from('contratos').update(payload).eq('id', planId)
     } else {
@@ -319,6 +351,7 @@ export default function Clientes() {
     }
     setModalPlan(null)
     await cargarDatosCliente(clienteSeleccionado)
+    await cargarDatosBase()
   }
 
   const porcentaje = (p) => Math.min((p.clases_tomadas / p.total_clases) * 100, 100)
@@ -327,6 +360,13 @@ export default function Clientes() {
     if (pct >= 100) return '#ef4444'
     if (pct >= 75) return '#f59e0b'
     return TEAL
+  }
+
+  function infoUltimoCliente(c) {
+    const contratos = c.contratos || []
+    if (!contratos.length) return { sede: '—', plan: '—', fecha: '—' }
+    const ult = contratos[0]
+    return { sede: ult.sedes?.nombre || '—', plan: ult.tipo_plan || '—', fecha: ult.fecha_inicio || '—' }
   }
 
   return (
@@ -338,17 +378,15 @@ export default function Clientes() {
           <h2 style={{ margin: 0, fontSize: '26px', color: '#1a1a1a' }}>Clientes</h2>
           <p style={{ margin: '4px 0 0', color: '#666', fontSize: '14px' }}>Busca, crea y gestiona clientes</p>
         </div>
-        <button onClick={nuevoCliente} style={{
-          padding: '11px 22px', background: TEAL, color: 'white',
-          border: 'none', borderRadius: '10px', cursor: 'pointer',
-          fontSize: '15px', fontWeight: '500'
-        }}>+ Nuevo cliente</button>
+        <button onClick={nuevoCliente} style={{ padding: '11px 22px', background: TEAL, color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
+          + Nuevo cliente
+        </button>
       </div>
 
       {/* LISTA */}
       {modo === 'lista' && (
         <>
-          <div style={{ position: 'relative', marginBottom: '20px' }}>
+          <div style={{ position: 'relative', marginBottom: '24px' }}>
             <input
               placeholder="Buscar cliente por nombre..."
               value={busqueda}
@@ -361,11 +399,10 @@ export default function Clientes() {
 
           {cargando && <div style={{ textAlign: 'center', padding: '32px', color: '#666' }}>Buscando...</div>}
 
-          {clientes.map(c => (
+          {busqueda.length >= 2 && clientes.map((c: any) => (
             <div key={c.id} onClick={() => seleccionarCliente(c)} style={{
-              background: 'white', borderRadius: '12px', padding: '16px 20px',
-              marginBottom: '8px', cursor: 'pointer', border: '1px solid #eef2f7',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+              background: 'white', borderRadius: '12px', padding: '16px 20px', marginBottom: '8px',
+              cursor: 'pointer', border: '1px solid #eef2f7', boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center'
             }}
               onMouseEnter={e => (e.currentTarget.style.borderColor = TEAL_MID)}
@@ -381,7 +418,7 @@ export default function Clientes() {
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '500', background: c.estado === 'activo' ? '#e8f5f5' : '#fee2e2', color: c.estado === 'activo' ? TEAL : '#991b1b' }}>
+                <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '500', background: c.estado === 'activo' ? TEAL_LIGHT : '#fee2e2', color: c.estado === 'activo' ? TEAL : '#991b1b' }}>
                   {c.estado === 'activo' ? 'Activo' : 'Inactivo'}
                 </span>
                 <span style={{ color: '#ccc', fontSize: '18px' }}>›</span>
@@ -390,43 +427,75 @@ export default function Clientes() {
           ))}
 
           {busqueda.length >= 2 && clientes.length === 0 && !cargando && (
-            <div style={{ textAlign: 'center', padding: '48px', color: '#888' }}>
-              <p style={{ fontSize: '32px', margin: '0 0 8px' }}>🔍</p>
+            <div style={{ textAlign: 'center', padding: '32px', color: '#888' }}>
+              <p style={{ fontSize: '28px', margin: '0 0 8px' }}>🔍</p>
               <p style={{ margin: 0 }}>No se encontraron clientes con ese nombre</p>
             </div>
           )}
+
+          {/* Tabla últimos 20 clientes */}
           {busqueda.length < 2 && (
-            <div style={{ textAlign: 'center', padding: '48px', color: '#aaa' }}>
-              <p style={{ fontSize: '40px', margin: '0 0 8px' }}>🎵</p>
-              <p style={{ margin: 0, fontSize: '15px' }}>Escribe al menos 2 letras para buscar</p>
-            </div>
+            <>
+              <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#555', fontWeight: '600' }}>
+                Últimos 20 clientes registrados
+              </h3>
+              <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: TEAL_LIGHT }}>
+                      {['Nombre', 'Sede', 'Tipo de plan', 'Inicio del plan', 'Estado'].map(h => (
+                        <th key={h} style={{ padding: '11px 16px', textAlign: 'left', fontSize: '13px', color: TEAL, fontWeight: '600' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ultimosClientes.length === 0 && (
+                      <tr><td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: '#888' }}>Sin datos</td></tr>
+                    )}
+                    {ultimosClientes.map((c: any, i) => {
+                      const info = infoUltimoCliente(c)
+                      return (
+                        <tr key={c.id} onClick={() => seleccionarCliente(c)}
+                          style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc', cursor: 'pointer' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)}
+                          onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafbfc')}
+                        >
+                          <td style={{ padding: '11px 16px', fontSize: '14px', fontWeight: '500', color: '#1a1a1a' }}>{c.nombre}</td>
+                          <td style={{ padding: '11px 16px', fontSize: '14px', color: '#555' }}>{info.sede}</td>
+                          <td style={{ padding: '11px 16px', fontSize: '14px', color: '#555' }}>{info.plan}</td>
+                          <td style={{ padding: '11px 16px', fontSize: '14px', color: '#555' }}>{info.fecha}</td>
+                          <td style={{ padding: '11px 16px' }}>
+                            <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '500', background: c.estado === 'activo' ? TEAL_LIGHT : '#fee2e2', color: c.estado === 'activo' ? TEAL : '#991b1b' }}>
+                              {c.estado === 'activo' ? 'Activo' : 'Inactivo'}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </>
       )}
 
       {/* NUEVO CLIENTE */}
       {modo === 'nuevo' && (
-        <FormCliente
-          modo={modo} form={form} setForm={setForm} cargando={cargando}
-          onGuardar={guardar} onVolver={() => setModo('lista')}
-        />
+        <FormCliente modo={modo} form={form} setForm={setForm} cargando={cargando} onGuardar={guardar} onVolver={() => setModo('lista')} />
       )}
 
       {/* EDITAR CLIENTE */}
       {modo === 'editar' && (
-        <FormCliente
-          modo={modo} form={form} setForm={setForm} cargando={cargando}
-          onGuardar={guardar} onVolver={() => setModo('ver')}
-        />
+        <FormCliente modo={modo} form={form} setForm={setForm} cargando={cargando} onGuardar={guardar} onVolver={() => setModo('ver')} />
       )}
 
       {/* VER CLIENTE */}
       {modo === 'ver' && clienteSeleccionado && (
         <div>
-          <button onClick={() => { setModo('lista'); setBusqueda(''); setClientes([]) }} style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: TEAL, fontSize: '14px', marginBottom: '20px', padding: 0, fontWeight: '500'
-          }}>← Volver a la lista</button>
+          <button onClick={() => { setModo('lista'); setBusqueda(''); setClientes([]) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: TEAL, fontSize: '14px', marginBottom: '20px', padding: 0, fontWeight: '500' }}>
+            ← Volver a la lista
+          </button>
 
           {/* Tarjeta cliente */}
           <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.08)', marginBottom: '24px' }}>
@@ -442,9 +511,14 @@ export default function Clientes() {
                   </span>
                 </div>
               </div>
-              <button onClick={() => setModo('editar')} style={{ padding: '8px 18px', background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
-                Editar
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={() => setModo('editar')} style={{ padding: '8px 18px', background: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                  Editar
+                </button>
+                <button onClick={() => { setConfirmarBorrar(true); setErrorBorrar('') }} style={{ padding: '8px 18px', background: 'rgba(220,38,38,0.3)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                  Borrar
+                </button>
+              </div>
             </div>
             <div style={{ padding: '20px 28px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
               {[
@@ -460,15 +534,37 @@ export default function Clientes() {
             </div>
           </div>
 
+          {/* Confirmación borrar */}
+          {confirmarBorrar && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', padding: '20px 24px', marginBottom: '24px' }}>
+              <p style={{ margin: '0 0 6px', fontSize: '16px', color: '#991b1b', fontWeight: '700' }}>¿Borrar a {form.nombre}?</p>
+              <p style={{ margin: '0 0 14px', fontSize: '13px', color: '#666' }}>
+                Esta acción no se puede deshacer.
+              </p>
+              {errorBorrar && (
+                <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#dc2626', fontWeight: '500', background: '#fee2e2', padding: '10px 14px', borderRadius: '8px' }}>
+                  ⚠️ {errorBorrar}
+                </p>
+              )}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={intentarBorrarCliente} disabled={borrando} style={{ padding: '9px 22px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
+                  {borrando ? 'Verificando...' : 'Sí, borrar cliente'}
+                </button>
+                <button onClick={() => { setConfirmarBorrar(false); setErrorBorrar('') }} style={{ padding: '9px 22px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Planes */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <h3 style={{ margin: 0, fontSize: '20px', color: '#1a1a1a' }}>
               Planes <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({planes.length})</span>
             </h3>
-            <button onClick={() => setModalPlan({})} style={{
-              padding: '8px 18px', background: TEAL, color: 'white',
-              border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500'
-            }}>+ Nuevo plan</button>
+            <button onClick={() => setModalPlan({})} style={{ padding: '8px 18px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
+              + Nuevo plan
+            </button>
           </div>
 
           {planes.length === 0 && (
@@ -477,7 +573,7 @@ export default function Clientes() {
             </div>
           )}
 
-          {planes.map(p => (
+          {planes.map((p: any) => (
             <div key={p.id} style={{ background: 'white', borderRadius: '18px', padding: '20px 24px', border: '1px solid #eef2f7', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', marginBottom: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
                 <div>
@@ -487,17 +583,19 @@ export default function Clientes() {
                       {p.estado}
                     </span>
                   </p>
-                  <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>👤 {p.profesores?.nombre || '—'}</p>
-                  <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>📅 {p.fecha_inicio || '—'} · {p.tipo_plan} · {p.duracion_min || '—'} min/clase</p>
+                  <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>🏫 {p.sedes?.nombre || '—'} · {p.tipo_plan}</p>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>
+                    📅 Inicio: {p.fecha_inicio || '—'} · {p.duracion_min || '—'} min/clase
+                    {p.fecha_vencimiento ? ` · Vence: ${p.fecha_vencimiento}` : ''}
+                  </p>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
                   <p style={{ margin: 0, fontSize: '26px', fontWeight: '700', color: colorBarra(p) }}>
                     {p.clases_tomadas}<span style={{ fontSize: '14px', color: '#aaa', fontWeight: '400' }}>/{p.total_clases}</span>
                   </p>
-                  <button onClick={() => setModalPlan(p)} style={{
-                    padding: '5px 14px', background: TEAL_LIGHT, color: TEAL,
-                    border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500'
-                  }}>Editar plan</button>
+                  <button onClick={() => setModalPlan(p)} style={{ padding: '5px 14px', background: TEAL_LIGHT, color: TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>
+                    Editar plan
+                  </button>
                 </div>
               </div>
               <div style={{ background: '#f1f5f9', borderRadius: '6px', height: '8px', overflow: 'hidden' }}>
@@ -527,7 +625,7 @@ export default function Clientes() {
                 {clases.length === 0 && (
                   <tr><td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#888' }}>Sin clases registradas</td></tr>
                 )}
-                {clases.map((c, i) => (
+                {clases.map((c: any, i) => (
                   <tr key={c.id} style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc' }}>
                     <td style={{ padding: '12px 16px', fontSize: '14px', color: TEAL, fontWeight: '600' }}>{c.numero_en_plan || '—'}</td>
                     <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.fecha}</td>
@@ -551,8 +649,8 @@ export default function Clientes() {
       {modalPlan !== null && (
         <ModalPlan
           plan={modalPlan}
-          profesores={profesores}
           instrumentos={instrumentos}
+          sedes={sedes}
           onGuardar={guardarPlan}
           onCerrar={() => setModalPlan(null)}
         />
