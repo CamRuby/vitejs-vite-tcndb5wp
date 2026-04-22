@@ -26,6 +26,7 @@ const VISTAS = [
 function colorEstadoPlan(e: string) {
   if (e === 'completado') return { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
   if (e === 'aplazado')   return { bg: '#fef3c7', color: '#92400e', border: '#fde68a' }
+  if (e === 'archivado')  return { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' }
   return { bg: TEAL_LIGHT, color: TEAL, border: TEAL_MID }
 }
 
@@ -355,12 +356,13 @@ export default function Clientes() {
       const { data } = await supabase.from('contratos').select(planSelect).eq('estado', 'aplazado').order('fecha_inicio', { ascending: false })
       setDatosVista(data || [])
     } else if (vista === 'reactivacion') {
-      const { data: completados } = await supabase.from('contratos').select(planSelect).eq('estado', 'completado').order('fecha_inicio', { ascending: false })
-      if (!completados?.length) { setDatosVista([]); setCargandoVista(false); return }
-      const clienteIds = [...new Set(completados.map((p: any) => p.cliente_id))]
+      // Planes archivados cuyo cliente NO tiene plan activo actualmente
+      const { data: archivados } = await supabase.from('contratos').select(planSelect).eq('estado', 'archivado').order('fecha_inicio', { ascending: false })
+      if (!archivados?.length) { setDatosVista([]); setCargandoVista(false); return }
+      const clienteIds = [...new Set(archivados.map((p: any) => p.cliente_id))]
       const { data: activos } = await supabase.from('contratos').select('cliente_id').eq('estado', 'activo').in('cliente_id', clienteIds)
       const clientesConActivo = new Set((activos || []).map((p: any) => p.cliente_id))
-      setDatosVista(completados.filter((p: any) => !clientesConActivo.has(p.cliente_id)))
+      setDatosVista(archivados.filter((p: any) => !clientesConActivo.has(p.cliente_id)))
     }
     setCargandoVista(false)
   }
@@ -474,11 +476,17 @@ export default function Clientes() {
   async function guardarPlan(payload: any, planId?: string) {
     const registro = { ...payload, cliente_id: clienteSeleccionado.id }
     if (planId) {
+      // Edición de plan existente
       const { error } = await supabase.from('contratos').update(registro).eq('id', planId)
       if (error) { alert('Error al actualizar plan: ' + error.message); return }
     } else {
+      // Plan nuevo (incluyendo renovación)
       const { error } = await supabase.from('contratos').insert(registro)
       if (error) { alert('Error al crear plan: ' + error.message); return }
+      // Si es renovación, archivar el plan anterior
+      if (esRenovacion && modalPlan?.id) {
+        await supabase.from('contratos').update({ estado: 'archivado' }).eq('id', modalPlan.id)
+      }
     }
     setModalPlan(null)
     setEsRenovacion(false)
@@ -505,9 +513,9 @@ export default function Clientes() {
   const thStyle: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }
   const tdStyle: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }
 
-  // Solo mostrar planes activos/aplazados en la vista principal; los completados van al historial
-  const planesActivos = planes.filter(p => (p.estado || 'activo') !== 'completado')
-  const planesCompletados = planes.filter(p => p.estado === 'completado')
+  // Planes visibles: todo excepto 'archivado'. Historial: solo 'archivado'
+  const planesActivos = planes.filter(p => (p.estado || 'activo') !== 'archivado')
+  const planesArchivados = planes.filter(p => p.estado === 'archivado')
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: '1600px', height: '100vh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
@@ -669,9 +677,9 @@ export default function Clientes() {
               <h3 style={{ margin: 0, fontSize: '20px', color: '#1a1a1a' }}>
                 Planes activos <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({planesActivos.length})</span>
               </h3>
-              {planesCompletados.length > 0 && (
+              {planesArchivados.length > 0 && (
                 <button onClick={() => setModalHistorial(true)} style={{ padding: '5px 14px', background: '#f1f5f9', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
-                  📋 Ver historial ({planesCompletados.length} completados)
+                  📋 Ver historial ({planesArchivados.length} archivados)
                 </button>
               )}
             </div>
@@ -727,6 +735,19 @@ export default function Clientes() {
                       </button>
                     )
                   })}
+                  {/* Botones de acción para plan completado */}
+                  {p.estado === 'completado' && (
+                    <>
+                      <button onClick={() => { setEsRenovacion(true); setModalPlan(p) }}
+                        style={{ marginLeft: '8px', padding: '5px 16px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                        🔄 Renovar plan
+                      </button>
+                      <button onClick={() => cambiarEstadoPlan(p.id, 'archivado')}
+                        style={{ padding: '5px 16px', background: '#f1f5f9', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>
+                        📁 Archivar
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )
@@ -775,7 +796,7 @@ export default function Clientes() {
 
       {/* MODAL HISTORIAL PLANES */}
       {modalHistorial && (
-        <ModalHistorialPlanes planes={planes} onCerrar={() => setModalHistorial(false)} />
+        <ModalHistorialPlanes planes={planesArchivados} onCerrar={() => setModalHistorial(false)} />
       )}
     </div>
   )
