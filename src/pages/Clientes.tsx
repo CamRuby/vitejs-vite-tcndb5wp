@@ -15,6 +15,14 @@ const estiloInput = {
 const labelStyle = { fontWeight: '500' as const, fontSize: '13px', color: '#555' }
 const CLASES_PRESET = [4, 8, 16, 20, 40, 80]
 
+const VISTAS = [
+  { value: 'clientes',       label: '👤 Últimos 30 clientes registrados' },
+  { value: 'planes',         label: '📋 Últimos 30 planes creados' },
+  { value: 'completados',    label: '✅ Planes completados' },
+  { value: 'aplazados',      label: '⏸ Planes aplazados' },
+  { value: 'reactivacion',   label: '🔄 Planes pendientes de reactivación' },
+]
+
 // ── Formulario cliente ──
 function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
   return (
@@ -64,18 +72,18 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
 }
 
 // ── Modal plan ──
-function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar }) {
-  const esNuevo = !plan?.id
+function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar, esRenovacion = false }) {
+  const esNuevo = !plan?.id || esRenovacion
   const [fp, setFp] = useState({
     instrumento_id: plan?.instrumento_id || '',
     profesor_id:    plan?.profesor_id    || '',
     sede_id:        plan?.sede_id        || '',
     total_clases:   plan?.total_clases   || 4,
-    clases_tomadas: plan?.clases_tomadas || 0,
+    clases_tomadas: 0,
     valor_plan:     plan?.valor_plan     || '',
     duracion_min:   plan?.duracion_min   || 60,
-    fecha_inicio:   plan?.fecha_inicio   || new Date().toISOString().split('T')[0],
-    estado:         plan?.estado         || 'activo',
+    fecha_inicio:   new Date().toISOString().split('T')[0],
+    estado:         'activo',
   })
   const [clasesManual, setClasesManual] = useState(!CLASES_PRESET.includes(plan?.total_clases || 4))
   const [guardando, setGuardando] = useState(false)
@@ -99,15 +107,20 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
       duracion_min:   Number(fp.duracion_min),
       fecha_inicio:   fp.fecha_inicio,
       estado:         fp.estado,
-    }, plan?.id)
+    }, esRenovacion ? undefined : plan?.id)
     setGuardando(false)
   }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
       <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-        <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>{esNuevo ? 'Crear plan' : 'Editar plan'}</h3>
+        <div style={{ background: esRenovacion ? '#0f766e' : TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>
+              {esRenovacion ? '🔄 Renovar plan' : esNuevo ? 'Crear plan' : 'Editar plan'}
+            </h3>
+            {esRenovacion && <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '12px' }}>Las características se heredan del plan anterior</p>}
+          </div>
           <button onClick={onCerrar} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
         </div>
         <div style={{ padding: '24px', maxHeight: '78vh', overflowY: 'auto' }}>
@@ -184,17 +197,8 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
                 onChange={e => setFp({ ...fp, fecha_inicio: e.target.value })} style={estiloInput} />
             </div>
 
-            <div>
-              <label style={labelStyle}>Estado</label>
-              <select value={fp.estado} onChange={e => setFp({ ...fp, estado: e.target.value })} style={estiloInput}>
-                <option value="activo">Activo</option>
-                <option value="inactivo">Inactivo</option>
-                <option value="completado">Completado</option>
-              </select>
-            </div>
-
             {!esNuevo && (
-              <div style={{ gridColumn: '1 / -1' }}>
+              <div>
                 <label style={labelStyle}>Clases tomadas</label>
                 <input type="number" min={0} value={fp.clases_tomadas}
                   onChange={e => setFp({ ...fp, clases_tomadas: e.target.value })} style={estiloInput} />
@@ -205,8 +209,8 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
           {error && <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '12px' }}>{error}</p>}
 
           <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-            <button onClick={guardar} disabled={guardando} style={{ flex: 1, padding: '11px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
-              {guardando ? 'Guardando...' : esNuevo ? 'Crear plan' : 'Guardar cambios'}
+            <button onClick={guardar} disabled={guardando} style={{ flex: 1, padding: '11px', background: esRenovacion ? '#0f766e' : TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
+              {guardando ? 'Guardando...' : esRenovacion ? 'Crear renovación' : esNuevo ? 'Crear plan' : 'Guardar cambios'}
             </button>
             <button onClick={onCerrar} style={{ padding: '11px 18px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
               Cancelar
@@ -218,12 +222,68 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
   )
 }
 
+// ── Tabla de planes reutilizable ──
+function TablaPlanesVista({ planes, onVerCliente }: { planes: any[], onVerCliente: (clienteId: string) => void }) {
+  const thStyle: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }
+  const tdStyle: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }
+
+  const colorEstado = (e: string) => {
+    if (e === 'completado') return { bg: '#dcfce7', color: '#166534' }
+    if (e === 'aplazado')   return { bg: '#fef3c7', color: '#92400e' }
+    return { bg: TEAL_LIGHT, color: TEAL }
+  }
+
+  return (
+    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
+          <tr>
+            {['Cliente', 'Instrumento', 'Sede', 'Clases', 'Duración', 'Valor', 'Inicio', 'Estado'].map(h => (
+              <th key={h} style={thStyle}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {planes.length === 0 && (
+            <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin registros</td></tr>
+          )}
+          {planes.map((p: any, i) => {
+            const est = colorEstado(p.estado)
+            return (
+              <tr key={p.id}
+                onClick={() => onVerCliente(p.cliente_id)}
+                style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc', cursor: 'pointer' }}
+                onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)}
+                onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafbfc')}
+              >
+                <td style={{ ...tdStyle, fontWeight: '600', color: TEAL }}>{p.clientes?.nombre || '—'}</td>
+                <td style={tdStyle}>{p.instrumentos?.nombre || '—'}</td>
+                <td style={tdStyle}>{p.sedes?.nombre || '—'}</td>
+                <td style={{ ...tdStyle, textAlign: 'center' }}>{p.clases_tomadas}/{p.total_clases}</td>
+                <td style={{ ...tdStyle, textAlign: 'center' }}>{p.duracion_min} min</td>
+                <td style={tdStyle}>{p.valor_plan ? `$${Number(p.valor_plan).toLocaleString()}` : '—'}</td>
+                <td style={{ ...tdStyle, color: '#888' }}>{p.fecha_inicio || '—'}</td>
+                <td style={tdStyle}>
+                  <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600', background: est.bg, color: est.color }}>
+                    {p.estado || 'activo'}
+                  </span>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 // ── Componente principal ──
 export default function Clientes() {
   const [busqueda, setBusqueda] = useState('')
   const [clientes, setClientes] = useState<any[]>([])
-  const [ultimosClientes, setUltimosClientes] = useState<any[]>([])
-  const [ultimosPlanes, setUltimosPlanes] = useState<any[]>([])
+  const [vistaActual, setVistaActual] = useState('clientes')
+  const [datosVista, setDatosVista] = useState<any[]>([])
+  const [cargandoVista, setCargandoVista] = useState(false)
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null)
   const [planes, setPlanes] = useState<any[]>([])
   const [clases, setClases] = useState<any[]>([])
@@ -234,39 +294,95 @@ export default function Clientes() {
   const [instrumentos, setInstrumentos] = useState<any[]>([])
   const [sedes, setSedes] = useState<any[]>([])
   const [modalPlan, setModalPlan] = useState<any>(null)
+  const [esRenovacion, setEsRenovacion] = useState(false)
   const [confirmarBorrar, setConfirmarBorrar] = useState(false)
   const [errorBorrar, setErrorBorrar] = useState('')
   const [borrando, setBorrando] = useState(false)
 
-  useEffect(() => { cargarDatosBase() }, [])
-
+  useEffect(() => { cargarBase() }, [])
+  useEffect(() => { cargarVista(vistaActual) }, [vistaActual])
   useEffect(() => {
     if (busqueda.length >= 2) buscarClientes()
     else setClientes([])
   }, [busqueda])
 
-  async function cargarDatosBase() {
-    const [{ data: ins }, { data: sed }, { data: pro }, { data: ult }, { data: planes30 }] = await Promise.all([
+  async function cargarBase() {
+    const [{ data: ins }, { data: sed }, { data: pro }] = await Promise.all([
       supabase.from('instrumentos').select('id, nombre').order('nombre'),
       supabase.from('sedes').select('id, nombre').order('nombre'),
       supabase.from('profesores').select('id, nombre').order('nombre'),
-      supabase
-        .from('clientes')
-        .select('id, nombre, telefono, email, grupo_whatsapp, estado, created_at')
-        .not('created_at', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(30),
-      supabase
-        .from('contratos')
-        .select('id, total_clases, duracion_min, valor_plan, fecha_inicio, clientes(nombre), instrumentos(nombre), sedes(nombre)')
-        .order('fecha_inicio', { ascending: false })
-        .limit(30),
     ])
     setInstrumentos(ins || [])
     setSedes(sed || [])
     setProfesores(pro || [])
-    setUltimosClientes(ult || [])
-    setUltimosPlanes(planes30 || [])
+    cargarVista('clientes')
+  }
+
+  async function cargarVista(vista: string) {
+    setCargandoVista(true)
+    const planSelect = 'id, cliente_id, total_clases, clases_tomadas, duracion_min, valor_plan, fecha_inicio, estado, instrumento_id, profesor_id, sede_id, clientes(id, nombre), instrumentos(nombre), sedes(nombre)'
+
+    if (vista === 'clientes') {
+      const { data } = await supabase
+        .from('clientes')
+        .select('id, nombre, telefono, email, grupo_whatsapp, estado, created_at')
+        .not('created_at', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(30)
+      setDatosVista(data || [])
+
+    } else if (vista === 'planes') {
+      const { data } = await supabase
+        .from('contratos')
+        .select(planSelect)
+        .order('fecha_inicio', { ascending: false })
+        .limit(30)
+      setDatosVista(data || [])
+
+    } else if (vista === 'completados') {
+      const { data } = await supabase
+        .from('contratos')
+        .select(planSelect)
+        .eq('estado', 'completado')
+        .order('fecha_inicio', { ascending: false })
+      setDatosVista(data || [])
+
+    } else if (vista === 'aplazados') {
+      const { data } = await supabase
+        .from('contratos')
+        .select(planSelect)
+        .eq('estado', 'aplazado')
+        .order('fecha_inicio', { ascending: false })
+      setDatosVista(data || [])
+
+    } else if (vista === 'reactivacion') {
+      // Planes completados cuyo cliente NO tiene ningún plan activo
+      const { data: completados } = await supabase
+        .from('contratos')
+        .select(planSelect)
+        .eq('estado', 'completado')
+        .order('fecha_inicio', { ascending: false })
+
+      if (!completados?.length) { setDatosVista([]); setCargandoVista(false); return }
+
+      // IDs de clientes con planes completados
+      const clienteIds = [...new Set(completados.map((p: any) => p.cliente_id))]
+
+      // Clientes que tienen al menos un plan activo
+      const { data: activos } = await supabase
+        .from('contratos')
+        .select('cliente_id')
+        .eq('estado', 'activo')
+        .in('cliente_id', clienteIds)
+
+      const clientesConActivo = new Set((activos || []).map((p: any) => p.cliente_id))
+
+      // Solo los completados cuyo cliente NO tiene plan activo
+      const pendientes = completados.filter((p: any) => !clientesConActivo.has(p.cliente_id))
+      setDatosVista(pendientes)
+    }
+
+    setCargandoVista(false)
   }
 
   async function buscarClientes() {
@@ -304,6 +420,11 @@ export default function Clientes() {
     }
   }
 
+  async function seleccionarClientePorId(clienteId: string) {
+    const { data } = await supabase.from('clientes').select('*').eq('id', clienteId).single()
+    if (data) seleccionarCliente(data)
+  }
+
   async function seleccionarCliente(c: any) {
     setClienteSeleccionado(c)
     setForm({ nombre: c.nombre || '', telefono: c.telefono || '', email: c.email || '', grupo_whatsapp: c.grupo_whatsapp || '', estado: c.estado || 'activo' })
@@ -327,21 +448,15 @@ export default function Clientes() {
     if (modo === 'nuevo') {
       const { data, error } = await supabase.from('clientes').insert(form).select().single()
       if (!error && data) {
-        await cargarDatosBase()
         setClienteSeleccionado(data)
         await cargarDatosCliente(data)
         setModo('ver')
-      } else if (error) {
-        alert('Error al crear cliente: ' + error.message)
-      }
+        cargarVista(vistaActual)
+      } else if (error) alert('Error al crear cliente: ' + error.message)
     } else {
       const { error } = await supabase.from('clientes').update(form).eq('id', clienteSeleccionado.id)
-      if (!error) {
-        setClienteSeleccionado({ ...clienteSeleccionado, ...form })
-        setModo('ver')
-      } else {
-        alert('Error al actualizar: ' + error.message)
-      }
+      if (!error) { setClienteSeleccionado({ ...clienteSeleccionado, ...form }); setModo('ver') }
+      else alert('Error al actualizar: ' + error.message)
     }
     setCargando(false)
   }
@@ -365,11 +480,18 @@ export default function Clientes() {
       }
     }
     await supabase.from('clientes').delete().eq('id', clienteSeleccionado.id)
-    await cargarDatosBase()
+    cargarVista(vistaActual)
     setModo('lista')
     setBusqueda('')
     setClientes([])
     setBorrando(false)
+  }
+
+  async function cambiarEstadoPlan(planId: string, nuevoEstado: string) {
+    const { error } = await supabase.from('contratos').update({ estado: nuevoEstado }).eq('id', planId)
+    if (error) { alert('Error: ' + error.message); return }
+    await cargarDatosCliente(clienteSeleccionado)
+    cargarVista(vistaActual)
   }
 
   async function guardarPlan(payload: any, planId?: string) {
@@ -382,16 +504,9 @@ export default function Clientes() {
       if (error) { alert('Error al crear plan: ' + error.message); return }
     }
     setModalPlan(null)
+    setEsRenovacion(false)
     await cargarDatosCliente(clienteSeleccionado)
-    await cargarDatosBase()
-  }
-
-  const porcentaje = (p: any) => Math.min((p.clases_tomadas / p.total_clases) * 100, 100)
-  const colorBarra = (p: any) => {
-    const pct = porcentaje(p)
-    if (pct >= 100) return '#ef4444'
-    if (pct >= 75) return '#f59e0b'
-    return TEAL
+    cargarVista(vistaActual)
   }
 
   function formatFechaCorta(iso: string) {
@@ -400,13 +515,24 @@ export default function Clientes() {
     return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`
   }
 
-  // Estilo cabecera de tabla compartido
-  const thStyle: React.CSSProperties = {
-    padding: '10px 12px', textAlign: 'left', fontSize: '12px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap'
+  const porcentaje = (p: any) => Math.min((p.clases_tomadas / p.total_clases) * 100, 100)
+  const colorBarra = (p: any) => {
+    if (p.estado === 'completado') return '#166534'
+    if (p.estado === 'aplazado')   return '#92400e'
+    const pct = porcentaje(p)
+    if (pct >= 100) return '#ef4444'
+    if (pct >= 75)  return '#f59e0b'
+    return TEAL
   }
-  const tdStyle: React.CSSProperties = {
-    padding: '10px 12px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap'
+
+  const colorEstadoPlan = (e: string) => {
+    if (e === 'completado') return { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
+    if (e === 'aplazado')   return { bg: '#fef3c7', color: '#92400e', border: '#fde68a' }
+    return { bg: TEAL_LIGHT, color: TEAL, border: TEAL_MID }
   }
+
+  const thStyle: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }
+  const tdStyle: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: '1600px', height: '100vh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
@@ -424,18 +550,29 @@ export default function Clientes() {
 
       {/* LISTA */}
       {modo === 'lista' && (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', gap: '16px' }}>
 
-          {/* Buscador */}
-          <div style={{ position: 'relative', marginBottom: '16px', flexShrink: 0 }}>
-            <input
-              placeholder="Buscar cliente por nombre..."
-              value={busqueda}
-              onChange={e => setBusqueda(e.target.value)}
-              autoFocus
-              style={{ ...estiloInput, marginTop: 0, paddingLeft: '44px', fontSize: '16px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}
-            />
-            <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontSize: '18px' }}>🔍</span>
+          {/* Buscador + selector de vista */}
+          <div style={{ display: 'flex', gap: '12px', flexShrink: 0 }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <input
+                placeholder="Buscar cliente por nombre..."
+                value={busqueda}
+                onChange={e => setBusqueda(e.target.value)}
+                autoFocus
+                style={{ ...estiloInput, marginTop: 0, paddingLeft: '44px', fontSize: '15px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}
+              />
+              <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontSize: '18px' }}>🔍</span>
+            </div>
+            {busqueda.length < 2 && (
+              <select
+                value={vistaActual}
+                onChange={e => setVistaActual(e.target.value)}
+                style={{ padding: '10px 14px', border: `2px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '14px', fontWeight: '500', color: '#333', background: 'white', cursor: 'pointer', minWidth: '280px' }}
+              >
+                {VISTAS.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+              </select>
+            )}
           </div>
 
           {/* Resultados búsqueda */}
@@ -474,39 +611,35 @@ export default function Clientes() {
             </div>
           )}
 
-          {/* Pantalla dividida: últimos clientes | últimos planes */}
+          {/* Vista seleccionada */}
           {busqueda.length < 2 && (
-            <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', overflow: 'hidden' }}>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {cargandoVista && <div style={{ textAlign: 'center', padding: '32px', color: '#666' }}>Cargando...</div>}
 
-              {/* ── Últimos 30 clientes ── */}
-              <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <h3 style={{ margin: '0 0 10px', fontSize: '14px', color: '#555', fontWeight: '600', flexShrink: 0 }}>
-                  🧑 Últimos 30 clientes registrados
-                </h3>
-                <div style={{ flex: 1, overflowY: 'auto', background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+              {/* Vista clientes */}
+              {!cargandoVista && vistaActual === 'clientes' && (
+                <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
                       <tr>
-                        {['Nombre', 'Teléfono', 'Correo', 'WhatsApp', 'Fecha ingreso'].map(h => (
+                        {['Nombre', 'Teléfono', 'Correo electrónico', 'Grupo WhatsApp', 'Fecha ingreso'].map(h => (
                           <th key={h} style={thStyle}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {ultimosClientes.length === 0 && (
-                        <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>
-                          Los clientes nuevos aparecerán aquí
-                        </td></tr>
+                      {datosVista.length === 0 && (
+                        <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Los clientes nuevos aparecerán aquí</td></tr>
                       )}
-                      {ultimosClientes.map((c: any, i) => (
+                      {datosVista.map((c: any, i) => (
                         <tr key={c.id} onClick={() => seleccionarCliente(c)}
                           style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc', cursor: 'pointer' }}
                           onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)}
                           onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafbfc')}
                         >
-                          <td style={{ ...tdStyle, fontWeight: '500', color: TEAL }}>{c.nombre}</td>
+                          <td style={{ ...tdStyle, fontWeight: '600', color: TEAL }}>{c.nombre}</td>
                           <td style={tdStyle}>{c.telefono || '—'}</td>
-                          <td style={{ ...tdStyle, maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.email || '—'}</td>
+                          <td style={tdStyle}>{c.email || '—'}</td>
                           <td style={tdStyle}>{c.grupo_whatsapp || '—'}</td>
                           <td style={{ ...tdStyle, color: '#888' }}>{formatFechaCorta(c.created_at)}</td>
                         </tr>
@@ -514,46 +647,12 @@ export default function Clientes() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              )}
 
-              {/* ── Últimos 30 planes ── */}
-              <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <h3 style={{ margin: '0 0 10px', fontSize: '14px', color: '#555', fontWeight: '600', flexShrink: 0 }}>
-                  📋 Últimos 30 planes creados
-                </h3>
-                <div style={{ flex: 1, overflowY: 'auto', background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
-                      <tr>
-                        {['Cliente', 'Sede', 'Instrumento', 'Clases', 'Duración', 'Valor', 'Inicio'].map(h => (
-                          <th key={h} style={thStyle}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ultimosPlanes.length === 0 && (
-                        <tr><td colSpan={6} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>
-                          Los planes nuevos aparecerán aquí
-                        </td></tr>
-                      )}
-                      {ultimosPlanes.map((p: any, i) => (
-                        <tr key={p.id}
-                          style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc' }}
-                        >
-                          <td style={{ ...tdStyle, fontWeight: '500', color: TEAL }}>{p.clientes?.nombre || '—'}</td>
-                          <td style={tdStyle}>{p.sedes?.nombre || '—'}</td>
-                          <td style={tdStyle}>{p.instrumentos?.nombre || '—'}</td>
-                          <td style={{ ...tdStyle, textAlign: 'center' }}>{p.total_clases}</td>
-                          <td style={{ ...tdStyle, textAlign: 'center' }}>{p.duracion_min} min</td>
-                          <td style={tdStyle}>{p.valor_plan ? `$${p.valor_plan.toLocaleString()}` : '—'}</td>
-                          <td style={{ ...tdStyle, color: '#888' }}>{p.fecha_inicio || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
+              {/* Vista planes */}
+              {!cargandoVista && vistaActual !== 'clientes' && (
+                <TablaPlanesVista planes={datosVista} onVerCliente={seleccionarClientePorId} />
+              )}
             </div>
           )}
         </div>
@@ -574,6 +673,7 @@ export default function Clientes() {
             ← Volver a la lista
           </button>
 
+          {/* Tarjeta cliente */}
           <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.08)', marginBottom: '24px' }}>
             <div style={{ background: TEAL, padding: '24px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -610,6 +710,7 @@ export default function Clientes() {
             </div>
           </div>
 
+          {/* Confirmar borrar */}
           {confirmarBorrar && (
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', padding: '20px 24px', marginBottom: '24px' }}>
               <p style={{ margin: '0 0 6px', fontSize: '16px', color: '#991b1b', fontWeight: '700' }}>¿Borrar a {form.nombre}?</p>
@@ -630,16 +731,16 @@ export default function Clientes() {
             </div>
           )}
 
+          {/* Planes */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <h3 style={{ margin: 0, fontSize: '20px', color: '#1a1a1a' }}>
               Planes <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({planes.length})</span>
             </h3>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <button onClick={() => setModalPlan({})} style={{ padding: '8px 18px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
+              <button onClick={() => { setEsRenovacion(false); setModalPlan({}) }} style={{ padding: '8px 18px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
                 + Crear plan
               </button>
-              <button style={{ padding: '8px 18px', background: 'white', color: TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}
-                onClick={() => alert('Próximamente: inscripción a talleres')}>
+              <button onClick={() => alert('Próximamente: inscripción a talleres')} style={{ padding: '8px 18px', background: 'white', color: TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
                 + Asignar a taller
               </button>
             </div>
@@ -651,38 +752,73 @@ export default function Clientes() {
             </div>
           )}
 
-          {planes.map((p: any) => (
-            <div key={p.id} style={{ background: 'white', borderRadius: '18px', padding: '20px 24px', border: '1px solid #eef2f7', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', marginBottom: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-                <div>
-                  <p style={{ margin: '0 0 4px', fontWeight: '600', fontSize: '16px', color: '#1a1a1a' }}>
-                    {p.instrumentos?.nombre || '—'}
-                    <span style={{ marginLeft: '8px', padding: '2px 10px', borderRadius: '20px', fontSize: '11px', background: p.estado === 'activo' ? TEAL_LIGHT : '#f1f5f9', color: p.estado === 'activo' ? TEAL : '#999', fontWeight: '500' }}>
-                      {p.estado}
-                    </span>
-                  </p>
-                  <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>👤 {p.profesores?.nombre || '—'} · 🏫 {p.sedes?.nombre || '—'}</p>
-                  <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>📅 {p.fecha_inicio || '—'} · {p.duracion_min} min/clase</p>
+          {planes.map((p: any) => {
+            const est = colorEstadoPlan(p.estado || 'activo')
+            return (
+              <div key={p.id} style={{ background: 'white', borderRadius: '18px', padding: '20px 24px', border: `1px solid ${est.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <p style={{ margin: 0, fontWeight: '600', fontSize: '16px', color: '#1a1a1a' }}>
+                        {p.instrumentos?.nombre || '—'}
+                      </p>
+                      <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', background: est.bg, color: est.color, fontWeight: '600' }}>
+                        {p.estado || 'activo'}
+                      </span>
+                    </div>
+                    <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>👤 {p.profesores?.nombre || '—'} · 🏫 {p.sedes?.nombre || '—'}</p>
+                    <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>📅 {p.fecha_inicio || '—'} · {p.duracion_min} min/clase</p>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                    <p style={{ margin: 0, fontSize: '26px', fontWeight: '700', color: colorBarra(p) }}>
+                      {p.clases_tomadas}<span style={{ fontSize: '14px', color: '#aaa', fontWeight: '400' }}>/{p.total_clases}</span>
+                    </p>
+                    <button onClick={() => { setEsRenovacion(false); setModalPlan(p) }} style={{ padding: '5px 14px', background: TEAL_LIGHT, color: TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>
+                      Editar
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-                  <p style={{ margin: 0, fontSize: '26px', fontWeight: '700', color: colorBarra(p) }}>
-                    {p.clases_tomadas}<span style={{ fontSize: '14px', color: '#aaa', fontWeight: '400' }}>/{p.total_clases}</span>
-                  </p>
-                  <button onClick={() => setModalPlan(p)} style={{ padding: '5px 14px', background: TEAL_LIGHT, color: TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>
-                    Editar plan
-                  </button>
-                </div>
-              </div>
-              <div style={{ background: '#f1f5f9', borderRadius: '6px', height: '8px', overflow: 'hidden' }}>
-                <div style={{ height: '8px', borderRadius: '6px', width: `${porcentaje(p)}%`, background: colorBarra(p), transition: 'width 0.5s ease' }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
-                <span style={{ fontSize: '12px', color: '#999' }}>{p.total_clases - p.clases_tomadas} clases restantes</span>
-                <span style={{ fontSize: '14px', color: '#555', fontWeight: '500' }}>${p.valor_plan?.toLocaleString() || '—'}</span>
-              </div>
-            </div>
-          ))}
 
+                {/* Barra progreso */}
+                <div style={{ background: '#f1f5f9', borderRadius: '6px', height: '8px', overflow: 'hidden', marginBottom: '8px' }}>
+                  <div style={{ height: '8px', borderRadius: '6px', width: `${porcentaje(p)}%`, background: colorBarra(p), transition: 'width 0.5s ease' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', color: '#999' }}>{p.total_clases - p.clases_tomadas} clases restantes</span>
+                  <span style={{ fontSize: '14px', color: '#555', fontWeight: '500' }}>${p.valor_plan?.toLocaleString() || '—'}</span>
+                </div>
+
+                {/* Botones de estado */}
+                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', color: '#999', marginRight: '4px' }}>Cambiar estado:</span>
+                  {['activo', 'aplazado', 'completado'].map(est2 => (
+                    <button key={est2} onClick={() => cambiarEstadoPlan(p.id, est2)}
+                      disabled={(p.estado || 'activo') === est2}
+                      style={{
+                        padding: '5px 12px', borderRadius: '8px', cursor: (p.estado || 'activo') === est2 ? 'default' : 'pointer',
+                        fontSize: '12px', fontWeight: '500', border: '1px solid',
+                        borderColor: (p.estado || 'activo') === est2 ? colorEstadoPlan(est2).border : '#e2e8f0',
+                        background: (p.estado || 'activo') === est2 ? colorEstadoPlan(est2).bg : 'white',
+                        color: (p.estado || 'activo') === est2 ? colorEstadoPlan(est2).color : '#666',
+                        opacity: (p.estado || 'activo') === est2 ? 1 : 0.8,
+                      }}>
+                      {est2.charAt(0).toUpperCase() + est2.slice(1)}
+                    </button>
+                  ))}
+
+                  {/* Botón renovar — solo si el plan está completado */}
+                  {p.estado === 'completado' && (
+                    <button onClick={() => { setEsRenovacion(true); setModalPlan(p) }}
+                      style={{ marginLeft: 'auto', padding: '6px 16px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                      🔄 Renovar plan
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Histórico clases */}
           <h3 style={{ margin: '32px 0 14px', fontSize: '18px', color: '#1a1a1a' }}>
             Histórico de clases <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({clases.length})</span>
           </h3>
@@ -719,14 +855,16 @@ export default function Clientes() {
         </div>
       )}
 
+      {/* MODAL PLAN */}
       {modalPlan !== null && (
         <ModalPlan
           plan={modalPlan}
           profesores={profesores}
           instrumentos={instrumentos}
           sedes={sedes}
+          esRenovacion={esRenovacion}
           onGuardar={guardarPlan}
-          onCerrar={() => setModalPlan(null)}
+          onCerrar={() => { setModalPlan(null); setEsRenovacion(false) }}
         />
       )}
     </div>
