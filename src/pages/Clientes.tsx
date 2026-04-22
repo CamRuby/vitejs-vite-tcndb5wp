@@ -13,9 +13,10 @@ const estiloInput = {
   outline: 'none'
 }
 const labelStyle = { fontWeight: '500' as const, fontSize: '13px', color: '#555' }
-const TIPOS_PLAN = ['Plan mensual', 'Plan semestral', 'Plan anual']
 
-// ── Formulario cliente (fuera del componente principal para evitar bug de input) ──
+const CLASES_PRESET = [4, 8, 16, 20, 40, 80]
+
+// ── Formulario cliente ──
 function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
   return (
     <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.08)' }}>
@@ -66,11 +67,10 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
   )
 }
 
-// ── Modal plan ──
+// ── Modal crear/editar plan ──
 function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar }) {
   const esNuevo = !plan?.id
   const [fp, setFp] = useState({
-    tipo_plan:      plan?.tipo_plan      || 'Plan mensual',
     instrumento_id: plan?.instrumento_id || '',
     profesor_id:    plan?.profesor_id    || '',
     sede_id:        plan?.sede_id        || '',
@@ -81,6 +81,7 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
     fecha_inicio:   plan?.fecha_inicio   || new Date().toISOString().split('T')[0],
     estado:         plan?.estado         || 'activo',
   })
+  const [clasesManual, setClasesManual] = useState(!CLASES_PRESET.includes(plan?.total_clases || 4))
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
@@ -88,11 +89,11 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
     if (!fp.instrumento_id) { setError('Selecciona un instrumento'); return }
     if (!fp.profesor_id)    { setError('Selecciona un profesor'); return }
     if (!fp.sede_id)        { setError('Selecciona una sede'); return }
-    if (!fp.total_clases)   { setError('Ingresa el número de clases'); return }
+    if (!fp.total_clases || Number(fp.total_clases) < 1) { setError('Ingresa el número de clases'); return }
     setGuardando(true)
     setError('')
-    const payload: any = {
-      tipo_plan:      fp.tipo_plan,
+    await onGuardar({
+      tipo_plan:      'regular',
       instrumento_id: fp.instrumento_id,
       profesor_id:    fp.profesor_id,
       sede_id:        fp.sede_id,
@@ -102,28 +103,19 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
       duracion_min:   Number(fp.duracion_min),
       fecha_inicio:   fp.fecha_inicio,
       estado:         fp.estado,
-    }
-    await onGuardar(payload, plan?.id)
+    }, plan?.id)
     setGuardando(false)
   }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '520px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+      <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
         <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>{esNuevo ? 'Nuevo plan' : 'Editar plan'}</h3>
+          <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>{esNuevo ? 'Crear plan' : 'Editar plan'}</h3>
           <button onClick={onCerrar} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
         </div>
         <div style={{ padding: '24px', maxHeight: '78vh', overflowY: 'auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-
-            {/* Tipo de plan — siempre primero */}
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Tipo de plan *</label>
-              <select value={fp.tipo_plan} onChange={e => setFp({ ...fp, tipo_plan: e.target.value })} style={estiloInput}>
-                {TIPOS_PLAN.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
 
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Instrumento *</label>
@@ -149,11 +141,37 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
               </select>
             </div>
 
-            <div>
+            {/* Número de clases con presets */}
+            <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Número de clases *</label>
-              <input type="number" min={1} value={fp.total_clases}
-                onChange={e => setFp({ ...fp, total_clases: e.target.value })}
-                style={estiloInput} />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                {CLASES_PRESET.map(n => (
+                  <button key={n} type="button"
+                    onClick={() => { setFp({ ...fp, total_clases: n }); setClasesManual(false) }}
+                    style={{
+                      padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '600',
+                      border: `2px solid ${!clasesManual && fp.total_clases === n ? TEAL : TEAL_MID}`,
+                      background: !clasesManual && fp.total_clases === n ? TEAL : 'white',
+                      color: !clasesManual && fp.total_clases === n ? 'white' : '#333',
+                    }}>{n}</button>
+                ))}
+                <button type="button"
+                  onClick={() => setClasesManual(true)}
+                  style={{
+                    padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+                    border: `2px solid ${clasesManual ? TEAL : TEAL_MID}`,
+                    background: clasesManual ? TEAL : 'white',
+                    color: clasesManual ? 'white' : '#666',
+                  }}>Otro</button>
+              </div>
+              {clasesManual && (
+                <input type="number" min={1} placeholder="Ingresa el número"
+                  value={fp.total_clases}
+                  onChange={e => setFp({ ...fp, total_clases: e.target.value })}
+                  style={{ ...estiloInput, marginTop: '10px' }}
+                  autoFocus
+                />
+              )}
             </div>
 
             <div>
@@ -177,24 +195,24 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar 
                 style={estiloInput} />
             </div>
 
-            {/* Clases tomadas solo al editar */}
-            {!esNuevo && (
-              <div>
-                <label style={labelStyle}>Clases tomadas</label>
-                <input type="number" min={0} value={fp.clases_tomadas}
-                  onChange={e => setFp({ ...fp, clases_tomadas: e.target.value })}
-                  style={estiloInput} />
-              </div>
-            )}
-
-            <div style={{ gridColumn: !esNuevo ? '2 / 3' : '1 / -1' }}>
-              <label style={labelStyle}>Estado del plan</label>
+            <div>
+              <label style={labelStyle}>Estado</label>
               <select value={fp.estado} onChange={e => setFp({ ...fp, estado: e.target.value })} style={estiloInput}>
                 <option value="activo">Activo</option>
                 <option value="inactivo">Inactivo</option>
                 <option value="completado">Completado</option>
               </select>
             </div>
+
+            {/* Clases tomadas solo al editar */}
+            {!esNuevo && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={labelStyle}>Clases tomadas</label>
+                <input type="number" min={0} value={fp.clases_tomadas}
+                  onChange={e => setFp({ ...fp, clases_tomadas: e.target.value })}
+                  style={estiloInput} />
+              </div>
+            )}
 
           </div>
 
@@ -282,7 +300,7 @@ export default function Clientes() {
     if (ids.length > 0) {
       const { data: clasesData } = await supabase
         .from('clases')
-        .select('id, fecha, duracion_min, numero_en_plan, modalidad, estado, profesores(nombre), salones(nombre), contratos(instrumentos(nombre))')
+        .select('id, fecha, duracion_min, numero_en_plan, estado, profesores(nombre), salones(nombre), contratos(instrumentos(nombre))')
         .in('contrato_id', ids)
         .order('fecha', { ascending: false })
         .limit(50)
@@ -304,7 +322,7 @@ export default function Clientes() {
   function nuevoCliente() {
     setClienteSeleccionado(null)
     setForm({ nombre: '', telefono: '', email: '', grupo_whatsapp: '', estado: 'activo' })
-    setConfirmarBorrar(false)   // ← fix: evita que aparezca el panel de borrar
+    setConfirmarBorrar(false)
     setErrorBorrar('')
     setModo('nuevo')
   }
@@ -327,6 +345,8 @@ export default function Clientes() {
       if (!error) {
         setClienteSeleccionado({ ...clienteSeleccionado, ...form })
         setModo('ver')
+      } else {
+        alert('Error al actualizar: ' + error.message)
       }
     }
     setCargando(false)
@@ -345,7 +365,7 @@ export default function Clientes() {
         .in('estado', ['programada', 'confirmada'])
         .gte('fecha', hoy)
       if (pendientes && pendientes.length > 0) {
-        setErrorBorrar(`Este cliente tiene ${pendientes.length} clase(s) programada(s) o confirmada(s). Bórralas primero desde el horario.`)
+        setErrorBorrar(`Este cliente tiene ${pendientes.length} clase(s) programada(s). Bórralas primero desde Horarios.`)
         setBorrando(false)
         return
       }
@@ -359,18 +379,13 @@ export default function Clientes() {
   }
 
   async function guardarPlan(payload: any, planId?: string) {
-    const data = { ...payload, cliente_id: clienteSeleccionado.id }
-    let error: any = null
+    const registro = { ...payload, cliente_id: clienteSeleccionado.id }
     if (planId) {
-      const res = await supabase.from('contratos').update(data).eq('id', planId)
-      error = res.error
+      const { error } = await supabase.from('contratos').update(registro).eq('id', planId)
+      if (error) { alert('Error al actualizar plan: ' + error.message); return }
     } else {
-      const res = await supabase.from('contratos').insert(data)
-      error = res.error
-    }
-    if (error) {
-      alert('Error al guardar el plan: ' + error.message)
-      return
+      const { error } = await supabase.from('contratos').insert(registro)
+      if (error) { alert('Error al crear plan: ' + error.message); return }
     }
     setModalPlan(null)
     await cargarDatosCliente(clienteSeleccionado)
@@ -456,12 +471,9 @@ export default function Clientes() {
             </div>
           )}
 
-          {/* Últimos 20 clientes */}
           {busqueda.length < 2 && (
             <>
-              <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#555', fontWeight: '600' }}>
-                Últimos 20 clientes registrados
-              </h3>
+              <h3 style={{ margin: '0 0 12px', fontSize: '15px', color: '#555', fontWeight: '600' }}>Últimos 20 clientes registrados</h3>
               <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
@@ -576,14 +588,20 @@ export default function Clientes() {
             </div>
           )}
 
-          {/* Planes */}
+          {/* Planes — botones de acción */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <h3 style={{ margin: 0, fontSize: '20px', color: '#1a1a1a' }}>
               Planes <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({planes.length})</span>
             </h3>
-            <button onClick={() => setModalPlan({})} style={{ padding: '8px 18px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
-              + Nuevo plan
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => setModalPlan({})} style={{ padding: '8px 18px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
+                + Crear plan
+              </button>
+              <button style={{ padding: '8px 18px', background: 'white', color: TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}
+                onClick={() => alert('Próximamente: inscripción a talleres')}>
+                + Asignar a taller
+              </button>
+            </div>
           </div>
 
           {planes.length === 0 && (
@@ -603,7 +621,7 @@ export default function Clientes() {
                     </span>
                   </p>
                   <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>👤 {p.profesores?.nombre || '—'} · 🏫 {p.sedes?.nombre || '—'}</p>
-                  <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>📅 {p.fecha_inicio || '—'} · {p.tipo_plan} · {p.duracion_min} min/clase</p>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>📅 {p.fecha_inicio || '—'} · {p.duracion_min} min/clase</p>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
                   <p style={{ margin: 0, fontSize: '26px', fontWeight: '700', color: colorBarra(p) }}>
