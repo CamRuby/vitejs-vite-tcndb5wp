@@ -305,6 +305,7 @@ export default function Clientes() {
   const [inscripcionesTalleres, setInscripcionesTalleres] = useState<any[]>([])
   const [sesionesPorInscripcion, setSesionesPorInscripcion] = useState<Record<string, any[]>>({})
   const [inscripcionExpandida, setInscripcionExpandida] = useState<string | null>(null)
+  const [modalHistorialTalleres, setModalHistorialTalleres] = useState(false)
   const [modo, setModo] = useState('lista')
   const [cargando, setCargando] = useState(false)
   const [form, setForm] = useState({ nombre: '', telefono: '', email: '', grupo_whatsapp: '', estado: 'activo' })
@@ -901,9 +902,16 @@ export default function Clientes() {
           {/* Histórico de clases */}
           {/* ── Talleres inscritos ── */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '32px 0 14px' }}>
-            <h3 style={{ margin: 0, fontSize: '20px', color: '#1a1a1a' }}>
-              Talleres <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({inscripcionesTalleres.length})</span>
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '20px', color: '#1a1a1a' }}>
+                Talleres activos <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({inscripcionesTalleres.filter((i: any) => i.estado !== 'archivado').length})</span>
+              </h3>
+              {inscripcionesTalleres.filter((i: any) => i.estado === 'archivado').length > 0 && (
+                <button onClick={() => setModalHistorialTalleres(true)} style={{ padding: '5px 14px', background: '#f1f5f9', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+                  📁 Ver historial ({inscripcionesTalleres.filter((i: any) => i.estado === 'archivado').length} archivados)
+                </button>
+              )}
+            </div>
           </div>
 
           {inscripcionesTalleres.length === 0 && (
@@ -1029,27 +1037,7 @@ export default function Clientes() {
             )
           })}
 
-          {/* Historial inscripciones archivadas */}
-          {inscripcionesTalleres.filter((i: any) => i.estado === 'archivado').length > 0 && (
-            <div style={{ marginBottom: '16px' }}>
-              <p style={{ fontSize: '13px', color: '#aaa', fontWeight: '500', margin: '0 0 8px' }}>
-                📁 {inscripcionesTalleres.filter((i: any) => i.estado === 'archivado').length} inscripción(es) archivada(s)
-              </p>
-              {inscripcionesTalleres.filter((i: any) => i.estado === 'archivado').map((ins: any) => {
-                const fechaMes = ins.mes ? new Date(ins.mes + 'T12:00:00') : null
-                const mesLabel = fechaMes ? `${fechaMes.getDate()} de ${['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][fechaMes.getMonth()]} ${fechaMes.getFullYear()}` : '—'
-                return (
-                  <div key={ins.id} style={{ background: '#fafbfc', borderRadius: '10px', padding: '12px 16px', border: '1px solid #f1f5f9', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <p style={{ margin: 0, fontSize: '13px', fontWeight: '500', color: '#888' }}>🎸 {ins.talleres?.nombre || '—'}</p>
-                      <p style={{ margin: 0, fontSize: '12px', color: '#aaa' }}>Desde: {mesLabel}</p>
-                    </div>
-                    <span style={{ fontSize: '13px', color: '#aaa' }}>${ins.valor_pagado ? Number(ins.valor_pagado).toLocaleString() : '—'}</span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+
 
           <h3 style={{ margin: '32px 0 14px', fontSize: '18px', color: '#1a1a1a' }}>
             Histórico de clases <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({clases.length})</span>
@@ -1086,6 +1074,44 @@ export default function Clientes() {
       )}
 
       {/* MODAL PLAN */}
+      {/* MODAL HISTORIAL TALLERES ARCHIVADOS */}
+      {modalHistorialTalleres && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
+          <div style={{ background: 'white', borderRadius: '16px', width: '95%', maxWidth: '700px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+            <div style={{ background: '#7c3aed', padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>📁 Historial de talleres archivados</h3>
+              <button onClick={() => setModalHistorialTalleres(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead style={{ position: 'sticky', top: 0, background: '#f3e8ff', zIndex: 1 }}>
+                  <tr>
+                    {['Taller', 'Sede / Salón', 'Día / Hora', 'Desde', 'Valor pagado'].map(h => (
+                      <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', color: '#7c3aed', fontWeight: '600' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {inscripcionesTalleres.filter((i: any) => i.estado === 'archivado').map((ins: any, idx) => {
+                    const fechaMes = ins.mes ? new Date(ins.mes + 'T12:00:00') : null
+                    const mesLabel = fechaMes ? `${fechaMes.getDate()}/${fechaMes.getMonth()+1}/${fechaMes.getFullYear()}` : '—'
+                    return (
+                      <tr key={ins.id} style={{ borderTop: '1px solid #f8fafc', background: idx % 2 === 0 ? 'white' : '#fafbfc' }}>
+                        <td style={{ padding: '11px 16px', fontSize: '14px', fontWeight: '500', color: '#333' }}>🎸 {ins.talleres?.nombre || '—'}</td>
+                        <td style={{ padding: '11px 16px', fontSize: '13px', color: '#555' }}>{ins.talleres?.salones?.nombre} — {ins.talleres?.salones?.sedes?.nombre}</td>
+                        <td style={{ padding: '11px 16px', fontSize: '13px', color: '#555' }}>{ins.talleres?.dia_semana} {ins.talleres?.hora?.substring(0,5)}</td>
+                        <td style={{ padding: '11px 16px', fontSize: '13px', color: '#888' }}>{mesLabel}</td>
+                        <td style={{ padding: '11px 16px', fontSize: '13px', color: '#555', fontWeight: '500' }}>${ins.valor_pagado ? Number(ins.valor_pagado).toLocaleString() : '—'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL ASIGNAR A TALLER */}
       {modalTaller && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
