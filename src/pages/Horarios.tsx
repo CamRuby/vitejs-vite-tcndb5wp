@@ -259,7 +259,7 @@ export default function Horarios() {
     if (!ids.length) return
     const { data } = await supabase
       .from('talleres')
-      .select('id, nombre, profesor_id, salon_id, dia_semana, hora, duracion_min, valor_mensual, profesores(nombre), salones(id, nombre)')
+      .select('id, nombre, profesor_id, salon_id, dia_semana, hora, duracion_min, valor_mensual, profesores(nombre), salones(id, nombre, sede_id)')
       .in('salon_id', ids)
     setTalleres(data || [])
     if (data?.length) {
@@ -1158,14 +1158,8 @@ export default function Horarios() {
                       <select value={teSalonId} onChange={e => setTeSalonId(e.target.value)} style={fieldStyle}>
                         <option value="">— Seleccionar —</option>
                         {todosSalones
-                          .filter((s: any) => {
-                            const sedeTaller = todosSalones.find((x: any) => x.id === tallerViendo?.salon_id)?.sede_id
-                            return s.sede_id === sedeTaller
-                          })
-                          .map((s: any) => {
-                            const nombreSede = sedes.find((sd: any) => sd.id === s.sede_id)?.nombre || ''
-                            return <option key={s.id} value={s.id}>{s.nombre} — {nombreSede}</option>
-                          })
+                          .filter((s: any) => s.sede_id === tallerViendo?.salones?.sede_id)
+                          .map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)
                         }
                       </select>
                     </div>
