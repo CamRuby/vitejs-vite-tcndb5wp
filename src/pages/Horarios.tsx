@@ -1157,7 +1157,16 @@ export default function Horarios() {
                       <label style={labelStyle}>Salón *</label>
                       <select value={teSalonId} onChange={e => setTeSalonId(e.target.value)} style={fieldStyle}>
                         <option value="">— Seleccionar —</option>
-                        {todosSalones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                        {todosSalones
+                          .filter((s: any) => {
+                            const sedeTaller = todosSalones.find((x: any) => x.id === tallerViendo?.salon_id)?.sede_id
+                            return s.sede_id === sedeTaller
+                          })
+                          .map((s: any) => {
+                            const nombreSede = sedes.find((sd: any) => sd.id === s.sede_id)?.nombre || ''
+                            return <option key={s.id} value={s.id}>{s.nombre} — {nombreSede}</option>
+                          })
+                        }
                       </select>
                     </div>
                     <div>
