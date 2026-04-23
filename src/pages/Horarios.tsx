@@ -128,10 +128,22 @@ export default function Horarios() {
   const [tallerError, setTallerError] = useState('')
   const [tallerGuardando, setTallerGuardando] = useState(false)
 
-  // Modal ver taller
+  // Modal ver/editar taller
   const [modalVerTaller, setModalVerTaller] = useState(false)
   const [tallerViendo, setTallerViendo] = useState<any>(null)
   const [inscritosDelTaller, setInscritosDelTaller] = useState<any[]>([])
+  const [modoEdicionTaller, setModoEdicionTaller] = useState(false)
+  const [teNombre, setTeNombre] = useState('')
+  const [teProfesorId, setTeProfesorId] = useState('')
+  const [teSalonId, setTeSalonId] = useState('')
+  const [teDiaSemana, setTeDiaSemana] = useState('')
+  const [teHora, setTeHora] = useState('')
+  const [teDuracion, setTeDuracion] = useState('60')
+  const [teValor, setTeValor] = useState('')
+  const [teGuardando, setTeGuardando] = useState(false)
+  const [teError, setTeError] = useState('')
+  const [confirmarBorrarTaller, setConfirmarBorrarTaller] = useState(false)
+  const [todosSalones, setTodosSalones] = useState<any[]>([])
 
   // Modal editar clase
   const [modalEditar, setModalEditar] = useState(false)
@@ -198,9 +210,14 @@ export default function Horarios() {
     return skip
   }, [clases, talleres, columns])
 
-  useEffect(() => { cargarSedes(); cargarProfesores() }, [])
-  useEffect(() => { if (sedeSeleccionada) { cargarSalones(); cargarClases() } }, [sedeSeleccionada, fechaBase, diaSeleccionado, vista])
-  useEffect(() => { if (salones.length > 0 && sedeSeleccionada) cargarTalleres() }, [salones, sedeSeleccionada])
+  useEffect(() => { cargarSedes(); cargarProfesores(); cargarTodosSalones() }, [])
+  useEffect(() => { if (sedeSeleccionada) { setTalleres([]); setInscritosPorTaller({}); cargarSalones(); cargarClases() } }, [sedeSeleccionada, fechaBase, diaSeleccionado, vista])
+  useEffect(() => { if (salones.length > 0 && sedeSeleccionada) cargarTalleres() }, [salones])
+
+  async function cargarTodosSalones() {
+    const { data } = await supabase.from('salones').select('id, nombre, sede_id').order('nombre')
+    setTodosSalones(data || [])
+  }
 
   async function cargarSedes() {
     const { data } = await supabase.from('sedes').select('id, nombre').order('nombre')
@@ -432,6 +449,16 @@ export default function Horarios() {
   async function abrirTaller(e: React.MouseEvent, taller: any) {
     e.stopPropagation()
     setTallerViendo(taller)
+    setModoEdicionTaller(false)
+    setConfirmarBorrarTaller(false)
+    setTeNombre(taller.nombre || '')
+    setTeProfesorId(taller.profesor_id || '')
+    setTeSalonId(taller.salon_id || '')
+    setTeDiaSemana(taller.dia_semana || '')
+    setTeHora(taller.hora?.substring(0, 5) || '')
+    setTeDuracion(String(taller.duracion_min || 60))
+    setTeValor(taller.valor_mensual !== null && taller.valor_mensual !== undefined ? String(taller.valor_mensual) : '')
+    setTeError('')
     const hoy = new Date()
     const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
     const { data } = await supabase
@@ -442,6 +469,35 @@ export default function Horarios() {
       .gte('mes', mes)
     setInscritosDelTaller(data || [])
     setModalVerTaller(true)
+  }
+
+  async function guardarEdicionTaller() {
+    if (!teNombre.trim()) { setTeError('El nombre es obligatorio'); return }
+    if (!teProfesorId) { setTeError('Selecciona un profesor'); return }
+    if (!teSalonId) { setTeError('Selecciona un salón'); return }
+    setTeGuardando(true)
+    setTeError('')
+    const { error } = await supabase.from('talleres').update({
+      nombre: teNombre.trim(),
+      profesor_id: teProfesorId,
+      salon_id: teSalonId,
+      dia_semana: teDiaSemana,
+      hora: teHora + ':00',
+      duracion_min: parseInt(teDuracion),
+      valor_mensual: teValor !== '' ? Number(teValor) : null
+    }).eq('id', tallerViendo.id)
+    if (error) { setTeError('Error: ' + error.message); setTeGuardando(false); return }
+    setModalVerTaller(false)
+    await cargarTalleres()
+    setTeGuardando(false)
+  }
+
+  async function borrarTaller() {
+    setTeGuardando(true)
+    await supabase.from('talleres').delete().eq('id', tallerViendo.id)
+    setModalVerTaller(false)
+    await cargarTalleres()
+    setTeGuardando(false)
   }
 
   async function crearTaller() {
@@ -1036,45 +1092,139 @@ export default function Horarios() {
         </div>
       )}
 
-      {/* ══ MODAL VER TALLER ══ */}
+      {/* ══ MODAL VER / EDITAR TALLER ══ */}
       {modalVerTaller && tallerViendo && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-            <div style={{ background: TALLER_COLOR, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ background: TALLER_COLOR, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
               <div>
                 <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>🎸 {tallerViendo.nombre}</h3>
                 <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
                   {tallerViendo.profesores?.nombre} · {tallerViendo.salones?.nombre} · {tallerViendo.dia_semana} {tallerViendo.hora?.substring(0, 5)}
                 </p>
               </div>
-              <button onClick={() => setModalVerTaller(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
-            </div>
-            <div style={{ padding: '20px 24px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                <p style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
-                  Inscritos este mes <span style={{ color: TALLER_COLOR }}>({inscritosDelTaller.length})</span>
-                </p>
-                {tallerViendo.valor_mensual && (
-                  <span style={{ fontSize: '14px', color: '#555' }}>${Number(tallerViendo.valor_mensual).toLocaleString()}/mes</span>
-                )}
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button onClick={() => { setModoEdicionTaller(!modoEdicionTaller); setConfirmarBorrarTaller(false) }}
+                  style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px' }}>
+                  {modoEdicionTaller ? '👁 Ver inscritos' : '✏️ Editar'}
+                </button>
+                <button onClick={() => setModalVerTaller(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
               </div>
-              {inscritosDelTaller.length === 0
-                ? <p style={{ textAlign: 'center', color: '#aaa', padding: '24px 0', fontSize: '14px' }}>Sin inscritos este mes</p>
-                : <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                    {inscritosDelTaller.map((ins: any, i) => (
-                      <div key={ins.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: i % 2 === 0 ? '#fafbfc' : 'white', marginBottom: '4px' }}>
-                        <div>
-                          <p style={{ margin: 0, fontWeight: '500', fontSize: '14px' }}>{ins.clientes?.nombre || '—'}</p>
-                          <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>{ins.clientes?.telefono || '—'}</p>
-                        </div>
-                        {ins.valor_pagado && <span style={{ fontSize: '13px', color: '#555' }}>${Number(ins.valor_pagado).toLocaleString()}</span>}
-                      </div>
-                    ))}
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px' }}>
+              {!modoEdicionTaller ? (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                    <p style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
+                      Inscritos este mes <span style={{ color: TALLER_COLOR }}>({inscritosDelTaller.length})</span>
+                    </p>
+                    {tallerViendo.valor_mensual && (
+                      <span style={{ fontSize: '14px', color: '#555' }}>${Number(tallerViendo.valor_mensual).toLocaleString()}/mes</span>
+                    )}
                   </div>
-              }
-              <button onClick={() => setModalVerTaller(false)} style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
-                Cerrar
-              </button>
+                  {inscritosDelTaller.length === 0
+                    ? <p style={{ textAlign: 'center', color: '#aaa', padding: '24px 0', fontSize: '14px' }}>Sin inscritos este mes</p>
+                    : inscritosDelTaller.map((ins: any, i) => (
+                        <div key={ins.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: i % 2 === 0 ? '#fafbfc' : 'white', marginBottom: '4px' }}>
+                          <div>
+                            <p style={{ margin: 0, fontWeight: '500', fontSize: '14px' }}>{ins.clientes?.nombre || '—'}</p>
+                            <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>{ins.clientes?.telefono || '—'}</p>
+                          </div>
+                          {ins.valor_pagado && <span style={{ fontSize: '13px', color: '#555' }}>${Number(ins.valor_pagado).toLocaleString()}</span>}
+                        </div>
+                      ))
+                  }
+                  <button onClick={() => setModalVerTaller(false)} style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                    Cerrar
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={labelStyle}>Nombre del taller *</label>
+                      <input value={teNombre} onChange={e => setTeNombre(e.target.value)} style={fieldStyle} />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={labelStyle}>Profesor *</label>
+                      <select value={teProfesorId} onChange={e => setTeProfesorId(e.target.value)} style={fieldStyle}>
+                        <option value="">— Seleccionar —</option>
+                        {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={labelStyle}>Salón *</label>
+                      <select value={teSalonId} onChange={e => setTeSalonId(e.target.value)} style={fieldStyle}>
+                        <option value="">— Seleccionar —</option>
+                        {todosSalones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Día de la semana</label>
+                      <select value={teDiaSemana} onChange={e => setTeDiaSemana(e.target.value)} style={fieldStyle}>
+                        {['lunes','martes','miércoles','jueves','viernes','sábado'].map(d => (
+                          <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Hora de inicio</label>
+                      <select value={teHora} onChange={e => setTeHora(e.target.value)} style={fieldStyle}>
+                        {HORAS.map(h => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={labelStyle}>Duración</label>
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                        {DURACIONES.map(d => (
+                          <button key={d} onClick={() => setTeDuracion(d)} style={{
+                            flex: 1, padding: '9px', border: `2px solid ${teDuracion === d ? TALLER_COLOR : TEAL_MID}`,
+                            borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+                            background: teDuracion === d ? TALLER_BG : 'white',
+                            color: teDuracion === d ? TALLER_COLOR : '#333',
+                            fontWeight: teDuracion === d ? '600' : '400'
+                          }}>{d}min</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={labelStyle}>Valor mensual ($)</label>
+                      <input type="number" min={0} value={teValor} onChange={e => setTeValor(e.target.value)} placeholder="Opcional" style={fieldStyle} />
+                    </div>
+                  </div>
+
+                  {teError && <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '12px' }}>{teError}</p>}
+
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                    <button onClick={guardarEdicionTaller} disabled={teGuardando} style={{ flex: 1, padding: '10px', background: TALLER_COLOR, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
+                      {teGuardando ? 'Guardando...' : 'Guardar cambios'}
+                    </button>
+                    <button onClick={() => setModoEdicionTaller(false)} style={{ padding: '10px 16px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                      Cancelar
+                    </button>
+                  </div>
+
+                  {!confirmarBorrarTaller ? (
+                    <button onClick={() => setConfirmarBorrarTaller(true)} style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                      Borrar taller
+                    </button>
+                  ) : (
+                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '14px', marginTop: '10px' }}>
+                      <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#991b1b', fontWeight: '700' }}>¿Borrar el taller "{tallerViendo.nombre}"?</p>
+                      <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#666' }}>Se eliminará permanentemente con todas sus inscripciones.</p>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={borrarTaller} disabled={teGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+                          Sí, borrar
+                        </button>
+                        <button onClick={() => setConfirmarBorrarTaller(false)} style={{ padding: '8px 14px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
