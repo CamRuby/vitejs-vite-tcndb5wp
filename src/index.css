@@ -45,8 +45,8 @@
   }
 }
 #root {
-  width: 1400px%;
-  max-width: 100%;
+  width: 1400px;
+  max-width: 1400px;
   margin: 0 auto;
   text-align: center;
   border-inline: none;
