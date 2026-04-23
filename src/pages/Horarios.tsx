@@ -135,6 +135,9 @@ export default function Horarios() {
   const [modalVerTaller, setModalVerTaller] = useState(false)
   const [tallerViendo, setTallerViendo] = useState<any>(null)
   const [inscritosDelTaller, setInscritosDelTaller] = useState<any[]>([])
+  const [sesionActual, setSesionActual] = useState<any>(null)
+  const [fechaSesionViendo, setFechaSesionViendo] = useState<string>('')
+  const [guardandoSesion, setGuardandoSesion] = useState(false)
   const [modoEdicionTaller, setModoEdicionTaller] = useState(false)
   const [teNombre, setTeNombre] = useState('')
   const [teProfesorId, setTeProfesorId] = useState('')
@@ -450,9 +453,10 @@ export default function Horarios() {
     setModalEditar(true)
   }
 
-  async function abrirTaller(e: React.MouseEvent, taller: any) {
+  async function abrirTaller(e: React.MouseEvent, taller: any, fechaCol: string) {
     e.stopPropagation()
     setTallerViendo(taller)
+    setFechaSesionViendo(fechaCol)
     setModoEdicionTaller(false)
     setConfirmarBorrarTaller(false)
     setTeNombre(taller.nombre || '')
@@ -463,6 +467,7 @@ export default function Horarios() {
     setTeDuracion(String(taller.duracion_min || 60))
     setTeValor(taller.valor_mensual !== null && taller.valor_mensual !== undefined ? String(taller.valor_mensual) : '')
     setTeError('')
+    // Cargar inscritos activos del mes
     const hoy = new Date()
     const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
     const { data } = await supabase
@@ -472,7 +477,60 @@ export default function Horarios() {
       .eq('estado', 'activo')
       .gte('mes', mes)
     setInscritosDelTaller(data || [])
+    // Cargar sesión de esta fecha específica
+    const { data: sesion } = await supabase
+      .from('taller_sesiones')
+      .select('id, fecha, estado')
+      .eq('taller_id', taller.id)
+      .eq('fecha', fechaCol)
+      .single()
+    setSesionActual(sesion || null)
     setModalVerTaller(true)
+  }
+
+  async function marcarSesion(nuevoEstado: string) {
+    setGuardandoSesion(true)
+    let sesionId = sesionActual?.id
+
+    if (sesionActual) {
+      const { error } = await supabase
+        .from('taller_sesiones')
+        .update({ estado: nuevoEstado })
+        .eq('id', sesionActual.id)
+      if (!error) setSesionActual({ ...sesionActual, estado: nuevoEstado })
+    } else {
+      const { data, error } = await supabase
+        .from('taller_sesiones')
+        .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: nuevoEstado })
+        .select().single()
+      if (!error && data) {
+        setSesionActual(data)
+        sesionId = data.id
+      }
+    }
+
+    // Si se marca como "dada", crear asistencias para todos los inscritos activos
+    if (nuevoEstado === 'dada' && sesionId) {
+      // Verificar si ya existen asistencias para esta sesión
+      const { data: existentes } = await supabase
+        .from('taller_asistencias')
+        .select('id')
+        .eq('sesion_id', sesionId)
+
+      if (!existentes || existentes.length === 0) {
+        // Crear una asistencia por cada inscrito activo
+        if (inscritosDelTaller.length > 0) {
+          const asistencias = inscritosDelTaller.map((ins: any) => ({
+            sesion_id: sesionId,
+            inscripcion_id: ins.id,
+            asistio: true
+          }))
+          await supabase.from('taller_asistencias').insert(asistencias)
+        }
+      }
+    }
+
+    setGuardandoSesion(false)
   }
 
   async function guardarEdicionTaller() {
@@ -811,7 +869,7 @@ export default function Horarios() {
                     >
                       {/* Taller */}
                       {taller && (
-                        <div onClick={e => abrirTaller(e, taller)} title="Clic para ver inscritos"
+                        <div onClick={e => abrirTaller(e, taller, col.fecha)} title="Clic para ver inscritos"
                           style={{
                             background: TALLER_BG, color: TALLER_COLOR,
                             border: `1px solid ${TALLER_BORDER}`,
@@ -1134,6 +1192,44 @@ export default function Horarios() {
             <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px' }}>
               {!modoEdicionTaller ? (
                 <>
+                  {/* Panel estado de la sesión */}
+                  <div style={{ background: '#fafbfc', border: '1px solid #eef2f7', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#555' }}>
+                        Sesión del {fechaSesionViendo}
+                      </p>
+                      <span style={{
+                        padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600',
+                        background: sesionActual?.estado === 'dada' ? '#fefce8' : sesionActual?.estado === 'cancelada' ? '#fee2e2' : '#eff6ff',
+                        color: sesionActual?.estado === 'dada' ? '#854d0e' : sesionActual?.estado === 'cancelada' ? '#991b1b' : '#1d4ed8'
+                      }}>
+                        {sesionActual?.estado || 'programada'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {[
+                        { est: 'programada', label: 'Programada', bg: '#eff6ff', color: '#1d4ed8' },
+                        { est: 'dada', label: 'Dada', bg: '#fefce8', color: '#854d0e' },
+                        { est: 'cancelada', label: 'Cancelada', bg: '#fee2e2', color: '#991b1b' },
+                      ].map(op => {
+                        const esActual = (sesionActual?.estado || 'programada') === op.est
+                        return (
+                          <button key={op.est} onClick={() => !esActual && marcarSesion(op.est)}
+                            disabled={guardandoSesion || esActual}
+                            style={{
+                              flex: 1, padding: '6px', borderRadius: '8px', cursor: esActual ? 'default' : 'pointer',
+                              fontSize: '12px', fontWeight: '600',
+                              border: `1px solid ${esActual ? op.color : '#e2e8f0'}`,
+                              background: esActual ? op.bg : 'white',
+                              color: esActual ? op.color : '#666'
+                            }}>
+                            {op.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                     <p style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
                       Inscritos este mes <span style={{ color: TALLER_COLOR }}>({inscritosDelTaller.length})</span>
