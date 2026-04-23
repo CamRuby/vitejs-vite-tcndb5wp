@@ -4,23 +4,21 @@ import Clientes from './pages/Clientes'
 import Profesores from './pages/Profesores'
 import Horarios from './pages/Horarios'
 import Reportes from './pages/Reportes'
-
 const MENU = [
   { id: 'clientes', label: 'Clientes' },
   { id: 'profesores', label: 'Profesores' },
   { id: 'horarios', label: 'Horarios' },
   { id: 'reportes', label: 'Reportes' },
 ]
-
 export default function Dashboard({ usuario }: { usuario: any }) {
   const [seccion, setSeccion] = useState('clientes')
-
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+    <div style={{ display: 'flex', height: '100vh', fontFamily: 'sans-serif', overflow: 'hidden' }}>
       
       {/* Menú lateral */}
       <div style={{
         width: '220px',
+        flexShrink: 0,
         background: '#1e293b',
         color: 'white',
         display: 'flex',
@@ -33,7 +31,6 @@ export default function Dashboard({ usuario }: { usuario: any }) {
             {usuario.email}
           </p>
         </div>
-
         <nav style={{ flex: 1, padding: '16px 0' }}>
           {MENU.map(item => (
             <button
@@ -56,7 +53,6 @@ export default function Dashboard({ usuario }: { usuario: any }) {
             </button>
           ))}
         </nav>
-
         <div style={{ padding: '16px 24px', borderTop: '1px solid #334155' }}>
           <button
             onClick={() => supabase.auth.signOut()}
@@ -77,11 +73,11 @@ export default function Dashboard({ usuario }: { usuario: any }) {
       </div>
 
       {/* Contenido principal */}
-      <div style={{ flex: 1, background: '#f8fafc', overflow: 'auto' }}>
-      {seccion === 'clientes' && <Clientes />}
-      {seccion === 'profesores' && <Profesores />}
-      {seccion === 'horarios' && <Horarios />}
-      {seccion === 'reportes' && <Reportes />}
+      <div style={{ flex: 1, minWidth: 0, background: '#f8fafc', overflow: 'auto' }}>
+        {seccion === 'clientes' && <Clientes />}
+        {seccion === 'profesores' && <Profesores />}
+        {seccion === 'horarios' && <Horarios />}
+        {seccion === 'reportes' && <Reportes />}
       </div>
     </div>
   )
