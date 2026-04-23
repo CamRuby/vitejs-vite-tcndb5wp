@@ -664,7 +664,7 @@ export default function Clientes() {
   const planesArchivados = planes.filter(p => p.estado === 'archivado')
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: '1600px', height: '100vh', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ padding: '24px 32px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
 
       {/* ENCABEZADO */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
