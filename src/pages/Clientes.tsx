@@ -302,6 +302,9 @@ export default function Clientes() {
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null)
   const [planes, setPlanes] = useState<any[]>([])
   const [clases, setClases] = useState<any[]>([])
+  const [inscripcionesTalleres, setInscripcionesTalleres] = useState<any[]>([])
+  const [sesionesPorInscripcion, setSesionesPorInscripcion] = useState<Record<string, any[]>>({})
+  const [inscripcionExpandida, setInscripcionExpandida] = useState<string | null>(null)
   const [modo, setModo] = useState('lista')
   const [cargando, setCargando] = useState(false)
   const [form, setForm] = useState({ nombre: '', telefono: '', email: '', grupo_whatsapp: '', estado: 'activo' })
@@ -381,6 +384,14 @@ export default function Clientes() {
   }
 
   async function cargarDatosCliente(c: any) {
+    // Inscripciones a talleres
+    const { data: talleresData } = await supabase
+      .from('taller_inscripciones')
+      .select('id, mes, valor_pagado, estado, taller_id, talleres(nombre, dia_semana, hora, duracion_min, salones(nombre, sedes(nombre)))')
+      .eq('cliente_id', c.id)
+      .order('mes', { ascending: false })
+    setInscripcionesTalleres(talleresData || [])
+
     const { data: planesData } = await supabase
       .from('contratos')
       .select('id, total_clases, clases_tomadas, valor_plan, tipo_plan, estado, fecha_inicio, duracion_min, instrumento_id, profesor_id, sede_id, instrumentos(nombre), profesores(nombre), sedes(nombre)')
@@ -477,6 +488,90 @@ export default function Clientes() {
       await cargarDatosCliente(clienteSeleccionado)
     }
     cargarVista(vistaActual)
+  }
+
+  async function cargarSesionesInscripcion(inscripcionId: string, tallerId: string) {
+    if (sesionesPorInscripcion[inscripcionId]) {
+      // Toggle: si ya está expandida, colapsar
+      setInscripcionExpandida(prev => prev === inscripcionId ? null : inscripcionId)
+      return
+    }
+    // Buscar sesiones dadas del taller con la asistencia de esta inscripción
+    const { data: sesiones } = await supabase
+      .from('taller_sesiones')
+      .select('id, fecha, estado')
+      .eq('taller_id', tallerId)
+      .eq('estado', 'dada')
+      .order('fecha', { ascending: false })
+
+    if (!sesiones || sesiones.length === 0) {
+      setSesionesPorInscripcion(prev => ({ ...prev, [inscripcionId]: [] }))
+      setInscripcionExpandida(inscripcionId)
+      return
+    }
+
+    // Para cada sesión, buscar si tiene asistencia registrada
+    const sesionIds = sesiones.map((s: any) => s.id)
+    const { data: asistencias } = await supabase
+      .from('taller_asistencias')
+      .select('id, sesion_id, asistio')
+      .eq('inscripcion_id', inscripcionId)
+      .in('sesion_id', sesionIds)
+
+    const asistenciaMap: Record<string, any> = {}
+    ;(asistencias || []).forEach((a: any) => { asistenciaMap[a.sesion_id] = a })
+
+    const resultado = sesiones.map((s: any) => ({
+      ...s,
+      asistencia: asistenciaMap[s.id] || null
+    }))
+
+    setSesionesPorInscripcion(prev => ({ ...prev, [inscripcionId]: resultado }))
+    setInscripcionExpandida(inscripcionId)
+  }
+
+  async function toggleAsistencia(inscripcionId: string, sesion: any, asistio: boolean) {
+    if (sesion.asistencia) {
+      // Actualizar
+      await supabase.from('taller_asistencias').update({ asistio }).eq('id', sesion.asistencia.id)
+    } else {
+      // Crear
+      await supabase.from('taller_asistencias').insert({ sesion_id: sesion.id, inscripcion_id: inscripcionId, asistio })
+    }
+    // Refrescar sesiones
+    setSesionesPorInscripcion(prev => ({
+      ...prev,
+      [inscripcionId]: (prev[inscripcionId] || []).map((s: any) =>
+        s.id === sesion.id
+          ? { ...s, asistencia: { ...(s.asistencia || {}), asistio } }
+          : s
+      )
+    }))
+  }
+
+  async function cambiarEstadoInscripcion(inscripcionId: string, nuevoEstado: string) {
+    setInscripcionesTalleres(prev => prev.map(i => i.id === inscripcionId ? { ...i, estado: nuevoEstado } : i))
+    const { error } = await supabase.from('taller_inscripciones').update({ estado: nuevoEstado }).eq('id', inscripcionId)
+    if (error) {
+      alert('Error: ' + error.message)
+      await cargarDatosCliente(clienteSeleccionado)
+    }
+  }
+
+  async function renovarInscripcionTaller(inscripcion: any) {
+    const hoy = new Date()
+    const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+    const { error } = await supabase.from('taller_inscripciones').insert({
+      taller_id: inscripcion.taller_id,
+      cliente_id: clienteSeleccionado.id,
+      mes: mes,
+      valor_pagado: inscripcion.valor_pagado,
+      estado: 'activo'
+    })
+    if (error) { alert('Error al renovar: ' + error.message); return }
+    // Archivar la inscripción anterior automáticamente
+    await supabase.from('taller_inscripciones').update({ estado: 'archivado' }).eq('id', inscripcion.id)
+    await cargarDatosCliente(clienteSeleccionado)
   }
 
   async function abrirModalTaller() {
@@ -804,6 +899,158 @@ export default function Clientes() {
           })}
 
           {/* Histórico de clases */}
+          {/* ── Talleres inscritos ── */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '32px 0 14px' }}>
+            <h3 style={{ margin: 0, fontSize: '20px', color: '#1a1a1a' }}>
+              Talleres <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({inscripcionesTalleres.length})</span>
+            </h3>
+          </div>
+
+          {inscripcionesTalleres.length === 0 && (
+            <div style={{ background: 'white', borderRadius: '12px', padding: '24px', textAlign: 'center', color: '#888', marginBottom: '24px' }}>
+              Sin inscripciones a talleres
+            </div>
+          )}
+
+          {/* Inscripciones activas y completadas (no archivadas) */}
+          {inscripcionesTalleres.filter((i: any) => i.estado !== 'archivado').map((ins: any) => {
+            const esActivo = ins.estado === 'activo'
+            const esCompletado = ins.estado === 'completado'
+            const fechaMes = ins.mes ? new Date(ins.mes + 'T12:00:00') : null
+            const mesLabel = fechaMes ? `${fechaMes.getDate()} de ${['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][fechaMes.getMonth()]} ${fechaMes.getFullYear()}` : '—'
+            const colorEstado = esActivo
+              ? { bg: '#f3e8ff', color: '#7c3aed', border: '#d8b4fe' }
+              : esCompletado
+              ? { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
+              : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' }
+            return (
+              <div key={ins.id} style={{
+                background: 'white', borderRadius: '14px', padding: '16px 20px',
+                border: `1px solid ${colorEstado.border}`,
+                boxShadow: '0 1px 4px rgba(0,0,0,0.05)', marginBottom: '10px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <p style={{ margin: 0, fontWeight: '600', fontSize: '16px', color: '#1a1a1a' }}>
+                        🎸 {ins.talleres?.nombre || '—'}
+                      </p>
+                      <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600', background: colorEstado.bg, color: colorEstado.color }}>
+                        {ins.estado}
+                      </span>
+                    </div>
+                    <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>
+                      🏫 {ins.talleres?.salones?.nombre} — {ins.talleres?.salones?.sedes?.nombre}
+                    </p>
+                    <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>
+                      📅 Desde: {mesLabel} · {ins.talleres?.dia_semana} {ins.talleres?.hora?.substring(0,5)} · {ins.talleres?.duracion_min} min
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#7c3aed' }}>
+                      ${ins.valor_pagado ? Number(ins.valor_pagado).toLocaleString() : '—'}
+                    </p>
+                    <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#aaa' }}>valor pagado</p>
+                  </div>
+                </div>
+
+                {/* Botones de estado */}
+                <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '12px', color: '#999' }}>Estado:</span>
+                  {['activo', 'completado'].map(est => {
+                    const esActual = ins.estado === est
+                    const c2 = est === 'activo'
+                      ? { bg: '#f3e8ff', color: '#7c3aed', border: '#d8b4fe' }
+                      : { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
+                    return (
+                      <button key={est} onClick={() => !esActual && cambiarEstadoInscripcion(ins.id, est)}
+                        disabled={esActual}
+                        style={{
+                          padding: '5px 14px', borderRadius: '8px', cursor: esActual ? 'default' : 'pointer',
+                          fontSize: '12px', fontWeight: '600',
+                          border: `1px solid ${esActual ? c2.border : '#e2e8f0'}`,
+                          background: esActual ? c2.bg : 'white',
+                          color: esActual ? c2.color : '#666'
+                        }}>
+                        {est.charAt(0).toUpperCase() + est.slice(1)}
+                      </button>
+                    )
+                  })}
+                  <button onClick={() => cargarSesionesInscripcion(ins.id, ins.taller_id)}
+                    style={{ padding: '5px 14px', background: inscripcionExpandida === ins.id ? '#f3e8ff' : 'white', color: '#7c3aed', border: '1px solid #d8b4fe', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>
+                    {inscripcionExpandida === ins.id ? '▲ Ocultar sesiones' : '▼ Ver sesiones'}
+                  </button>
+                  {esCompletado && (
+                    <>
+                      <button onClick={() => renovarInscripcionTaller(ins)}
+                        style={{ marginLeft: 'auto', padding: '5px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                        🔄 Renovar
+                      </button>
+                      <button onClick={() => cambiarEstadoInscripcion(ins.id, 'archivado')}
+                        style={{ padding: '5px 14px', background: '#f1f5f9', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>
+                        📁 Archivar
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Panel de sesiones */}
+                {inscripcionExpandida === ins.id && (
+                  <div style={{ marginTop: '12px', background: '#fafbfc', borderRadius: '10px', padding: '12px 14px' }}>
+                    <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: '600', color: '#555' }}>
+                      Sesiones registradas
+                    </p>
+                    {!sesionesPorInscripcion[ins.id] || sesionesPorInscripcion[ins.id].length === 0 ? (
+                      <p style={{ margin: 0, fontSize: '13px', color: '#aaa', textAlign: 'center', padding: '12px 0' }}>
+                        Sin sesiones dadas aún
+                      </p>
+                    ) : (
+                      sesionesPorInscripcion[ins.id].map((sesion: any) => {
+                        const asistio = sesion.asistencia?.asistio !== false
+                        return (
+                          <div key={sesion.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', borderRadius: '8px', background: 'white', marginBottom: '6px', border: '1px solid #f1f5f9' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <span style={{ fontSize: '13px', color: '#555', fontWeight: '500' }}>{sesion.fecha}</span>
+                              <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600', background: asistio ? '#dcfce7' : '#fee2e2', color: asistio ? '#166534' : '#991b1b' }}>
+                                {asistio ? '✓ Asistió' : '✗ No asistió'}
+                              </span>
+                            </div>
+                            <button onClick={() => toggleAsistencia(ins.id, sesion, !asistio)}
+                              style={{ padding: '4px 12px', background: 'white', color: '#555', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontSize: '11px' }}>
+                              {asistio ? 'Marcar no asistió' : 'Marcar asistió'}
+                            </button>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {/* Historial inscripciones archivadas */}
+          {inscripcionesTalleres.filter((i: any) => i.estado === 'archivado').length > 0 && (
+            <div style={{ marginBottom: '16px' }}>
+              <p style={{ fontSize: '13px', color: '#aaa', fontWeight: '500', margin: '0 0 8px' }}>
+                📁 {inscripcionesTalleres.filter((i: any) => i.estado === 'archivado').length} inscripción(es) archivada(s)
+              </p>
+              {inscripcionesTalleres.filter((i: any) => i.estado === 'archivado').map((ins: any) => {
+                const fechaMes = ins.mes ? new Date(ins.mes + 'T12:00:00') : null
+                const mesLabel = fechaMes ? `${fechaMes.getDate()} de ${['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][fechaMes.getMonth()]} ${fechaMes.getFullYear()}` : '—'
+                return (
+                  <div key={ins.id} style={{ background: '#fafbfc', borderRadius: '10px', padding: '12px 16px', border: '1px solid #f1f5f9', marginBottom: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '13px', fontWeight: '500', color: '#888' }}>🎸 {ins.talleres?.nombre || '—'}</p>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#aaa' }}>Desde: {mesLabel}</p>
+                    </div>
+                    <span style={{ fontSize: '13px', color: '#aaa' }}>${ins.valor_pagado ? Number(ins.valor_pagado).toLocaleString() : '—'}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           <h3 style={{ margin: '32px 0 14px', fontSize: '18px', color: '#1a1a1a' }}>
             Histórico de clases <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({clases.length})</span>
           </h3>
