@@ -6,6 +6,10 @@ const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
 const ROW_H = 20
 
+const TALLER_BG     = '#f3e8ff'
+const TALLER_COLOR  = '#7c3aed'
+const TALLER_BORDER = '#d8b4fe'
+
 const HORAS = Array.from({ length: 57 }, (_, i) => {
   const totalMin = 7 * 60 + i * 15
   const h = Math.floor(totalMin / 60)
@@ -17,6 +21,11 @@ const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const DIAS_LARGO = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 const DURACIONES = ['30', '45', '60', '90']
+
+// Mapeo nombre día → número getDay()
+const DIA_NUM: Record<string, number> = {
+  'domingo': 0, 'lunes': 1, 'martes': 2, 'miércoles': 3, 'jueves': 4, 'viernes': 5, 'sábado': 6
+}
 
 function formatFecha(d: Date): string {
   const y = d.getFullYear()
@@ -88,11 +97,16 @@ export default function Horarios() {
   const [salones, setSalones] = useState<any[]>([])
   const [profesores, setProfesores] = useState<any[]>([])
   const [clases, setClases] = useState<any[]>([])
+  const [talleres, setTalleres] = useState<any[]>([])
+  const [inscritosPorTaller, setInscritosPorTaller] = useState<Record<string, number>>({})
   const [cargando, setCargando] = useState(false)
 
-  // Modal crear
+  // Modal crear — tipo clase o taller
+  const [tipoModal, setTipoModal] = useState<'clase' | 'taller'>('clase')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [slotSeleccionado, setSlotSeleccionado] = useState<any>(null)
+
+  // Clase
   const [busquedaCliente, setBusquedaCliente] = useState('')
   const [clientesBuscados, setClientesBuscados] = useState<any[]>([])
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null)
@@ -104,11 +118,22 @@ export default function Horarios() {
   const [error, setError] = useState('')
   const [recurrente, setRecurrente] = useState(false)
   const [semanasRecurrencia, setSemanasRecurrencia] = useState(4)
-
-  // Aviso de diferencias al crear clase
   const [avisoCrear, setAvisoCrear] = useState<string[]>([])
 
-  // Modal editar
+  // Taller nuevo
+  const [tallerNombre, setTallerNombre] = useState('')
+  const [tallerProfesorId, setTallerProfesorId] = useState('')
+  const [tallerDuracion, setTallerDuracion] = useState('60')
+  const [tallerValor, setTallerValor] = useState('')
+  const [tallerError, setTallerError] = useState('')
+  const [tallerGuardando, setTallerGuardando] = useState(false)
+
+  // Modal ver taller
+  const [modalVerTaller, setModalVerTaller] = useState(false)
+  const [tallerViendo, setTallerViendo] = useState<any>(null)
+  const [inscritosDelTaller, setInscritosDelTaller] = useState<any[]>([])
+
+  // Modal editar clase
   const [modalEditar, setModalEditar] = useState(false)
   const [claseEditando, setClaseEditando] = useState<any>(null)
   const [editProfesorId, setEditProfesorId] = useState('')
@@ -141,6 +166,7 @@ export default function Horarios() {
 
   const skipSet = useMemo(() => {
     const skip = new Set<string>()
+    // Clases regulares
     clases.forEach((c: any) => {
       const salonId = c.salones?.id
       if (!salonId || !c.fecha || !c.hora || c.estado === 'cancelada') return
@@ -153,11 +179,28 @@ export default function Horarios() {
         skip.add(`${salonId}-${c.fecha}-${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`)
       }
     })
+    // Talleres — ocupan su slot en cada columna que coincida con su día de semana
+    talleres.forEach((t: any) => {
+      if (!t.salon_id || !t.hora) return
+      const tInicio = horaAMinutos(t.hora.substring(0, 5))
+      const numSlots = Math.max(1, Math.round((t.duracion_min || 60) / 15))
+      columns.forEach(col => {
+        if (col.salon.id !== t.salon_id) return
+        if (parseFechaLocal(col.fecha).getDay() !== DIA_NUM[t.dia_semana]) return
+        for (let i = 1; i < numSlots; i++) {
+          const min = tInicio + i * 15
+          const hh = Math.floor(min / 60)
+          const mm = min % 60
+          skip.add(`${t.salon_id}-${col.fecha}-${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`)
+        }
+      })
+    })
     return skip
-  }, [clases])
+  }, [clases, talleres, columns])
 
   useEffect(() => { cargarSedes(); cargarProfesores() }, [])
   useEffect(() => { if (sedeSeleccionada) { cargarSalones(); cargarClases() } }, [sedeSeleccionada, fechaBase, diaSeleccionado, vista])
+  useEffect(() => { if (salones.length > 0 && sedeSeleccionada) cargarTalleres() }, [salones])
 
   async function cargarSedes() {
     const { data } = await supabase.from('sedes').select('id, nombre').order('nombre')
@@ -192,6 +235,30 @@ export default function Horarios() {
       .not('hora', 'is', null)
     setClases((data || []).filter((c: any) => c.salones?.sede_id === sedeSeleccionada))
     setCargando(false)
+  }
+
+  async function cargarTalleres() {
+    const ids = salones.map((s: any) => s.id)
+    if (!ids.length) return
+    const { data } = await supabase
+      .from('talleres')
+      .select('id, nombre, profesor_id, salon_id, dia_semana, hora, duracion_min, valor_mensual, profesores(nombre), salones(id, nombre)')
+      .in('salon_id', ids)
+    setTalleres(data || [])
+    if (data?.length) {
+      // Contar inscritos activos del mes actual
+      const hoy = new Date()
+      const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+      const { data: ins } = await supabase
+        .from('taller_inscripciones')
+        .select('taller_id')
+        .in('taller_id', data.map((t: any) => t.id))
+        .eq('estado', 'activo')
+        .gte('mes', mes)
+      const conteo: Record<string, number> = {}
+      ;(ins || []).forEach((i: any) => { conteo[i.taller_id] = (conteo[i.taller_id] || 0) + 1 })
+      setInscritosPorTaller(conteo)
+    }
   }
 
   async function verificarConflictoSalon(salonId: string, fecha: string, hora: string, durMin: number, excluirId?: string): Promise<string | null> {
@@ -267,7 +334,6 @@ export default function Horarios() {
     return null
   }
 
-  // ── Calcular avisos de diferencias con el plan ──
   function calcularAvisosCrear(contrato: any, profIdActual: string, durActual: string, salonSede: string) {
     if (!contrato) { setAvisoCrear([]); return }
     const avisos: string[] = []
@@ -329,6 +395,7 @@ export default function Horarios() {
   function abrirSlot(salon: any, hora: string, fecha: string) {
     if (esPasado(fecha)) return
     setSlotSeleccionado({ salon, hora, fecha })
+    setTipoModal('clase')
     setModalAbierto(true)
     setBusquedaCliente('')
     setClienteSeleccionado(null)
@@ -341,6 +408,11 @@ export default function Horarios() {
     setSemanasRecurrencia(4)
     setError('')
     setAvisoCrear([])
+    setTallerNombre('')
+    setTallerProfesorId('')
+    setTallerDuracion('60')
+    setTallerValor('')
+    setTallerError('')
   }
 
   function abrirClaseExistente(e: React.MouseEvent, clase: any) {
@@ -355,6 +427,42 @@ export default function Horarios() {
     setEditError('')
     setConfirmarBorrar(false)
     setModalEditar(true)
+  }
+
+  async function abrirTaller(e: React.MouseEvent, taller: any) {
+    e.stopPropagation()
+    setTallerViendo(taller)
+    const hoy = new Date()
+    const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+    const { data } = await supabase
+      .from('taller_inscripciones')
+      .select('id, mes, valor_pagado, estado, clientes(nombre, telefono)')
+      .eq('taller_id', taller.id)
+      .eq('estado', 'activo')
+      .gte('mes', mes)
+    setInscritosDelTaller(data || [])
+    setModalVerTaller(true)
+  }
+
+  async function crearTaller() {
+    if (!tallerNombre.trim()) { setTallerError('El nombre es obligatorio'); return }
+    if (!tallerProfesorId) { setTallerError('Selecciona un profesor'); return }
+    setTallerGuardando(true)
+    setTallerError('')
+    const diaSemana = DIAS_LARGO[parseFechaLocal(slotSeleccionado.fecha).getDay()]
+    const { error } = await supabase.from('talleres').insert({
+      nombre: tallerNombre.trim(),
+      profesor_id: tallerProfesorId,
+      salon_id: slotSeleccionado.salon.id,
+      dia_semana: diaSemana,
+      hora: slotSeleccionado.hora + ':00',
+      duracion_min: parseInt(tallerDuracion),
+      valor_mensual: tallerValor !== '' ? Number(tallerValor) : null
+    })
+    if (error) { setTallerError('Error: ' + error.message); setTallerGuardando(false); return }
+    setModalAbierto(false)
+    await cargarTalleres()
+    setTallerGuardando(false)
   }
 
   async function guardarClase() {
@@ -486,6 +594,15 @@ export default function Horarios() {
     )
   }
 
+  function getTallerSlot(salonId: string, hora: string, fecha: string) {
+    const diaSemana = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
+    return talleres.find(t =>
+      t.salon_id === salonId &&
+      t.dia_semana === diaSemana &&
+      t.hora?.substring(0, 5) === hora
+    ) || null
+  }
+
   const hayEdicionReal = claseEditando && (
     editHora !== claseEditando.hora?.substring(0, 5) ||
     editFecha !== claseEditando.fecha ||
@@ -558,6 +675,10 @@ export default function Horarios() {
             <span style={{ fontSize: '12px' }}>🔁</span>
             <span style={{ fontSize: '12px', color: '#666' }}>Recurrente</span>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: TALLER_BG, border: `1px solid ${TALLER_BORDER}` }} />
+            <span style={{ fontSize: '12px', color: '#666' }}>Taller</span>
+          </div>
         </div>
       </div>
 
@@ -593,24 +714,51 @@ export default function Horarios() {
                   const cellKey = `${col.salon.id}-${col.fecha}-${hora}`
                   if (skipSet.has(cellKey)) return null
                   const cs = getClasesSlot(col.salon.id, hora, col.fecha)
+                  const taller = getTallerSlot(col.salon.id, hora, col.fecha)
                   const mainClass = cs[0]
-                  const rowSpan = mainClass ? Math.max(1, Math.round((mainClass.duracion_min || 60) / 15)) : 1
+                  const rowSpan = taller
+                    ? Math.max(1, Math.round((taller.duracion_min || 60) / 15))
+                    : mainClass ? Math.max(1, Math.round((mainClass.duracion_min || 60) / 15)) : 1
                   const esCeldaPasada = esPasado(col.fecha)
                   return (
                     <td key={cellKey}
                       rowSpan={rowSpan}
-                      onClick={() => { if (!mainClass) abrirSlot(col.salon, hora, col.fecha) }}
+                      onClick={() => { if (!mainClass && !taller) abrirSlot(col.salon, hora, col.fecha) }}
                       style={{
                         padding: 0, height: '1px', verticalAlign: 'top',
                         borderLeft: '1px solid #f1f5f9',
-                        cursor: mainClass ? 'default' : esCeldaPasada ? 'not-allowed' : 'pointer',
+                        cursor: (mainClass || taller) ? 'default' : esCeldaPasada ? 'not-allowed' : 'pointer',
                         width: '160px', minWidth: '160px',
-                        background: esCeldaPasada && !mainClass ? '#fafafa' : undefined
+                        background: esCeldaPasada && !mainClass && !taller ? '#fafafa' : undefined
                       }}
-                      onMouseEnter={e => { if (!mainClass && !esCeldaPasada) e.currentTarget.style.background = TEAL_LIGHT }}
-                      onMouseLeave={e => { if (!mainClass) e.currentTarget.style.background = esCeldaPasada ? '#fafafa' : '' }}
+                      onMouseEnter={e => { if (!mainClass && !taller && !esCeldaPasada) e.currentTarget.style.background = TEAL_LIGHT }}
+                      onMouseLeave={e => { if (!mainClass && !taller) e.currentTarget.style.background = esCeldaPasada ? '#fafafa' : '' }}
                     >
-                      {mainClass && (() => {
+                      {/* Taller */}
+                      {taller && (
+                        <div onClick={e => abrirTaller(e, taller)} title="Clic para ver inscritos"
+                          style={{
+                            background: TALLER_BG, color: TALLER_COLOR,
+                            border: `1px solid ${TALLER_BORDER}`,
+                            borderRadius: '6px', padding: '4px 7px',
+                            fontSize: vista === 'dia' ? '13px' : '11px',
+                            cursor: 'pointer', height: 'calc(100% - 4px)',
+                            overflow: 'hidden', boxSizing: 'border-box', margin: '2px 3px'
+                          }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2px' }}>
+                            <strong>🎸 {taller.nombre}</strong>
+                            <span style={{ fontSize: '11px', fontWeight: '700', whiteSpace: 'nowrap', background: 'rgba(124,58,237,0.15)', padding: '1px 6px', borderRadius: '10px' }}>
+                              {inscritosPorTaller[taller.id] || 0} 👤
+                            </span>
+                          </div>
+                          {vista === 'dia' && (
+                            <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '1px' }}>{taller.profesores?.nombre}</div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Clase regular */}
+                      {mainClass && !taller && (() => {
                         const col2 = getColorEstado(mainClass.estado)
                         const numPlan = mainClass.contratos?.total_clases
                           ? `${mainClass.contratos.clases_tomadas ?? '?'}/${mainClass.contratos.total_clases}`
@@ -622,8 +770,7 @@ export default function Horarios() {
                               border: `1px solid ${col2.border}`,
                               borderRadius: '6px', padding: '4px 7px',
                               fontSize: vista === 'dia' ? '13px' : '11px',
-                              cursor: 'pointer',
-                              height: 'calc(100% - 4px)',
+                              cursor: 'pointer', height: 'calc(100% - 4px)',
                               overflow: 'hidden', boxSizing: 'border-box', margin: '2px 3px'
                             }}
                           >
@@ -675,146 +822,265 @@ export default function Horarios() {
       {modalAbierto && slotSeleccionado && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-            <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ background: tipoModal === 'taller' ? TALLER_COLOR : TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>Asignar clase</h3>
+                <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>
+                  {tipoModal === 'taller' ? '🎸 Nuevo taller' : 'Asignar clase'}
+                </h3>
                 <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.7)', fontSize: '12px' }}>{slotSeleccionado.salon.nombre}</p>
-                <p style={{ margin: '6px 0 0', color: 'white', fontSize: '20px', fontWeight: '700' }}>
+                <p style={{ margin: '6px 0 0', color: 'white', fontSize: '18px', fontWeight: '700' }}>
                   {formatFechaLarga(parseFechaLocal(slotSeleccionado.fecha))} · {slotSeleccionado.hora}
                 </p>
               </div>
               <button onClick={() => setModalAbierto(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
             </div>
-            <div style={{ padding: '20px 24px', maxHeight: '75vh', overflowY: 'auto' }}>
 
-              {/* Búsqueda cliente */}
-              <div style={{ marginBottom: '14px', position: 'relative' }}>
-                <label style={labelStyle}>Cliente</label>
-                <input placeholder="Buscar cliente..." value={busquedaCliente}
-                  onChange={e => buscarClientes(e.target.value)} style={fieldStyle} />
-                {clientesBuscados.length > 0 && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10, maxHeight: '200px', overflow: 'auto' }}>
-                    {clientesBuscados.map((c: any) => (
-                      <div key={c.id} onClick={() => seleccionarCliente(c)}
-                        style={{ padding: '9px 14px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid #f1f5f9' }}
-                        onMouseEnter={e => e.currentTarget.style.background = TEAL_LIGHT}
-                        onMouseLeave={e => e.currentTarget.style.background = 'white'}>
-                        <strong>{c.nombre}</strong>
-                        <div style={{ fontSize: '11px', color: '#888' }}>{c.grupo_whatsapp}</div>
+            {/* Tabs clase / taller */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #eef2f7' }}>
+              {[{ key: 'clase', label: '📚 Clase regular' }, { key: 'taller', label: '🎸 Taller' }].map(op => (
+                <button key={op.key} onClick={() => setTipoModal(op.key as any)} style={{
+                  flex: 1, padding: '12px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: '600',
+                  background: tipoModal === op.key ? (op.key === 'taller' ? TALLER_BG : TEAL_LIGHT) : 'white',
+                  color: tipoModal === op.key ? (op.key === 'taller' ? TALLER_COLOR : TEAL) : '#888',
+                  borderBottom: tipoModal === op.key ? `2px solid ${op.key === 'taller' ? TALLER_COLOR : TEAL}` : '2px solid transparent'
+                }}>{op.label}</button>
+              ))}
+            </div>
+
+            <div style={{ padding: '20px 24px', maxHeight: '65vh', overflowY: 'auto' }}>
+
+              {/* ── Tab Clase regular ── */}
+              {tipoModal === 'clase' && (
+                <>
+                  <div style={{ marginBottom: '14px', position: 'relative' }}>
+                    <label style={labelStyle}>Cliente</label>
+                    <input placeholder="Buscar cliente..." value={busquedaCliente}
+                      onChange={e => buscarClientes(e.target.value)} style={fieldStyle} />
+                    {clientesBuscados.length > 0 && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10, maxHeight: '200px', overflow: 'auto' }}>
+                        {clientesBuscados.map((c: any) => (
+                          <div key={c.id} onClick={() => seleccionarCliente(c)}
+                            style={{ padding: '9px 14px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid #f1f5f9' }}
+                            onMouseEnter={e => e.currentTarget.style.background = TEAL_LIGHT}
+                            onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+                            <strong>{c.nombre}</strong>
+                            <div style={{ fontSize: '11px', color: '#888' }}>{c.grupo_whatsapp}</div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
 
-              {/* Plan */}
-              {contratos.length > 0 && (
-                <div style={{ marginBottom: '14px' }}>
-                  <label style={labelStyle}>Plan</label>
-                  <select value={(contratoSeleccionado as any)?.id || ''} onChange={e => seleccionarContrato(e.target.value)} style={fieldStyle}>
-                    {contratos.map((ct: any) => (
-                      <option key={ct.id} value={ct.id}>
-                        {ct.instrumentos?.nombre || '—'} · {ct.profesores?.nombre || '—'} · {ct.clases_tomadas}/{ct.total_clases} · {ct.duracion_min}min
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Profesor */}
-              <div style={{ marginBottom: '14px' }}>
-                <label style={labelStyle}>Profesor</label>
-                <select value={profesorId} onChange={e => {
-                  setProfesorId(e.target.value)
-                  calcularAvisosCrear(contratoSeleccionado, e.target.value, duracion, slotSeleccionado?.salon?.sede_id || '')
-                }} style={fieldStyle}>
-                  <option value="">— Seleccionar profesor —</option>
-                  {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
-              </div>
-
-              {/* Duración */}
-              <div style={{ marginBottom: '14px' }}>
-                <label style={labelStyle}>Duración</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {DURACIONES.map(d => (
-                    <button key={d} onClick={() => {
-                      setDuracion(d)
-                      calcularAvisosCrear(contratoSeleccionado, profesorId, d, slotSeleccionado?.salon?.sede_id || '')
-                    }} style={{
-                      flex: 1, padding: '9px', border: `1px solid ${duracion === d ? TEAL : TEAL_MID}`,
-                      borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
-                      background: duracion === d ? TEAL : 'white', color: duracion === d ? 'white' : '#333',
-                      fontWeight: duracion === d ? '600' : '400'
-                    }}>{d}min</button>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── Aviso de diferencias con el plan ── */}
-              {avisoCrear.length > 0 && (
-                <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px' }}>
-                  <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: '600', color: '#92400e' }}>⚠️ Estás modificando:</p>
-                  <ul style={{ margin: '0', paddingLeft: '18px' }}>
-                    {avisoCrear.map((a, i) => (
-                      <li key={i} style={{ fontSize: '13px', color: '#78350f', marginBottom: '2px' }}>{a}</li>
-                    ))}
-                  </ul>
-                  <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#92400e' }}>
-                    Este cambio aplica solo para esta clase. Si quieres que cambie para todas las demás, edita el plan del cliente.
-                  </p>
-                </div>
-              )}
-
-              {/* Recurrencia */}
-              <div style={{ marginBottom: '20px', background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#333' }}>
-                  <input type="checkbox" checked={recurrente} onChange={e => setRecurrente(e.target.checked)} />
-                  🔁 Repetir semanalmente
-                </label>
-                {recurrente && (
-                  <div style={{ marginTop: '10px' }}>
-                    <label style={{ ...labelStyle, marginBottom: '6px' }}>¿Cuántas semanas?</label>
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                      {[4, 8, 12, 16].map(n => (
-                        <button key={n} onClick={() => setSemanasRecurrencia(n)} style={{
-                          padding: '6px 12px', border: `1px solid ${semanasRecurrencia === n ? TEAL : TEAL_MID}`,
-                          borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
-                          background: semanasRecurrencia === n ? TEAL : 'white',
-                          color: semanasRecurrencia === n ? 'white' : '#333'
-                        }}>{n} sem</button>
-                      ))}
-                      <input type="number" min={2} max={52} value={semanasRecurrencia}
-                        onChange={e => setSemanasRecurrencia(parseInt(e.target.value) || 4)}
-                        style={{ width: '60px', padding: '6px 8px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px' }} />
+                  {contratos.length > 0 && (
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={labelStyle}>Plan</label>
+                      <select value={(contratoSeleccionado as any)?.id || ''} onChange={e => seleccionarContrato(e.target.value)} style={fieldStyle}>
+                        {contratos.map((ct: any) => (
+                          <option key={ct.id} value={ct.id}>
+                            {ct.instrumentos?.nombre || '—'} · {ct.profesores?.nombre || '—'} · {ct.clases_tomadas}/{ct.total_clases} · {ct.duracion_min}min
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                    <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#666' }}>
-                      Se crearán {semanasRecurrencia} clases · mismo día y hora
-                    </p>
+                  )}
+
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={labelStyle}>Profesor</label>
+                    <select value={profesorId} onChange={e => {
+                      setProfesorId(e.target.value)
+                      calcularAvisosCrear(contratoSeleccionado, e.target.value, duracion, slotSeleccionado?.salon?.sede_id || '')
+                    }} style={fieldStyle}>
+                      <option value="">— Seleccionar profesor —</option>
+                      {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </select>
                   </div>
-                )}
-              </div>
 
-              {error && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{error}</p>}
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={labelStyle}>Duración</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {DURACIONES.map(d => (
+                        <button key={d} onClick={() => {
+                          setDuracion(d)
+                          calcularAvisosCrear(contratoSeleccionado, profesorId, d, slotSeleccionado?.salon?.sede_id || '')
+                        }} style={{
+                          flex: 1, padding: '9px', border: `1px solid ${duracion === d ? TEAL : TEAL_MID}`,
+                          borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+                          background: duracion === d ? TEAL : 'white', color: duracion === d ? 'white' : '#333',
+                          fontWeight: duracion === d ? '600' : '400'
+                        }}>{d}min</button>
+                      ))}
+                    </div>
+                  </div>
 
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={guardarClase} disabled={guardando} style={{
-                  flex: 1, padding: '11px', background: TEAL, color: 'white',
-                  border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500'
-                }}>
-                  {guardando ? 'Verificando...' : recurrente ? `Crear ${semanasRecurrencia} clases` : 'Asignar clase'}
-                </button>
-                <button onClick={() => setModalAbierto(false)} style={{
-                  padding: '11px 18px', background: '#f1f5f9', color: '#334155',
-                  border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px'
-                }}>Cancelar</button>
-              </div>
+                  {avisoCrear.length > 0 && (
+                    <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px' }}>
+                      <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: '600', color: '#92400e' }}>⚠️ Estás modificando:</p>
+                      <ul style={{ margin: '0', paddingLeft: '18px' }}>
+                        {avisoCrear.map((a, i) => (
+                          <li key={i} style={{ fontSize: '13px', color: '#78350f', marginBottom: '2px' }}>{a}</li>
+                        ))}
+                      </ul>
+                      <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#92400e' }}>
+                        Este cambio aplica solo para esta clase. Si quieres que cambie para todas las demás, edita el plan del cliente.
+                      </p>
+                    </div>
+                  )}
+
+                  <div style={{ marginBottom: '20px', background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#333' }}>
+                      <input type="checkbox" checked={recurrente} onChange={e => setRecurrente(e.target.checked)} />
+                      🔁 Repetir semanalmente
+                    </label>
+                    {recurrente && (
+                      <div style={{ marginTop: '10px' }}>
+                        <label style={{ ...labelStyle, marginBottom: '6px' }}>¿Cuántas semanas?</label>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          {[4, 8, 12, 16].map(n => (
+                            <button key={n} onClick={() => setSemanasRecurrencia(n)} style={{
+                              padding: '6px 12px', border: `1px solid ${semanasRecurrencia === n ? TEAL : TEAL_MID}`,
+                              borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+                              background: semanasRecurrencia === n ? TEAL : 'white',
+                              color: semanasRecurrencia === n ? 'white' : '#333'
+                            }}>{n} sem</button>
+                          ))}
+                          <input type="number" min={2} max={52} value={semanasRecurrencia}
+                            onChange={e => setSemanasRecurrencia(parseInt(e.target.value) || 4)}
+                            style={{ width: '60px', padding: '6px 8px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px' }} />
+                        </div>
+                        <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#666' }}>
+                          Se crearán {semanasRecurrencia} clases · mismo día y hora
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {error && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{error}</p>}
+
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={guardarClase} disabled={guardando} style={{
+                      flex: 1, padding: '11px', background: TEAL, color: 'white',
+                      border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500'
+                    }}>
+                      {guardando ? 'Verificando...' : recurrente ? `Crear ${semanasRecurrencia} clases` : 'Asignar clase'}
+                    </button>
+                    <button onClick={() => setModalAbierto(false)} style={{
+                      padding: '11px 18px', background: '#f1f5f9', color: '#334155',
+                      border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px'
+                    }}>Cancelar</button>
+                  </div>
+                </>
+              )}
+
+              {/* ── Tab Taller ── */}
+              {tipoModal === 'taller' && (
+                <>
+                  <div style={{ background: TALLER_BG, borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: TALLER_COLOR }}>
+                    Se repetirá cada <strong>{DIAS_LARGO[parseFechaLocal(slotSeleccionado.fecha).getDay()]}</strong> a las <strong>{slotSeleccionado.hora}</strong> en <strong>{slotSeleccionado.salon.nombre}</strong>
+                  </div>
+
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={labelStyle}>Nombre del taller *</label>
+                    <input value={tallerNombre} onChange={e => setTallerNombre(e.target.value)}
+                      placeholder="Ej: Taller de guitarra eléctrica" style={fieldStyle} />
+                  </div>
+
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={labelStyle}>Profesor *</label>
+                    <select value={tallerProfesorId} onChange={e => setTallerProfesorId(e.target.value)} style={fieldStyle}>
+                      <option value="">— Seleccionar —</option>
+                      {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </select>
+                  </div>
+
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={labelStyle}>Duración</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {DURACIONES.map(d => (
+                        <button key={d} onClick={() => setTallerDuracion(d)} style={{
+                          flex: 1, padding: '9px',
+                          border: `2px solid ${tallerDuracion === d ? TALLER_COLOR : TEAL_MID}`,
+                          borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+                          background: tallerDuracion === d ? TALLER_BG : 'white',
+                          color: tallerDuracion === d ? TALLER_COLOR : '#333',
+                          fontWeight: tallerDuracion === d ? '600' : '400'
+                        }}>{d}min</button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={labelStyle}>Valor mensual ($)</label>
+                    <input type="number" min={0} value={tallerValor}
+                      onChange={e => setTallerValor(e.target.value)}
+                      placeholder="Opcional" style={fieldStyle} />
+                  </div>
+
+                  {tallerError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{tallerError}</p>}
+
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button onClick={crearTaller} disabled={tallerGuardando} style={{
+                      flex: 1, padding: '11px', background: TALLER_COLOR, color: 'white',
+                      border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500'
+                    }}>
+                      {tallerGuardando ? 'Creando...' : 'Crear taller'}
+                    </button>
+                    <button onClick={() => setModalAbierto(false)} style={{
+                      padding: '11px 18px', background: '#f1f5f9', color: '#334155',
+                      border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px'
+                    }}>Cancelar</button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* ══ MODAL EDITAR ══ */}
+      {/* ══ MODAL VER TALLER ══ */}
+      {modalVerTaller && tallerViendo && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+            <div style={{ background: TALLER_COLOR, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>🎸 {tallerViendo.nombre}</h3>
+                <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
+                  {tallerViendo.profesores?.nombre} · {tallerViendo.salones?.nombre} · {tallerViendo.dia_semana} {tallerViendo.hora?.substring(0, 5)}
+                </p>
+              </div>
+              <button onClick={() => setModalVerTaller(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ padding: '20px 24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <p style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
+                  Inscritos este mes <span style={{ color: TALLER_COLOR }}>({inscritosDelTaller.length})</span>
+                </p>
+                {tallerViendo.valor_mensual && (
+                  <span style={{ fontSize: '14px', color: '#555' }}>${Number(tallerViendo.valor_mensual).toLocaleString()}/mes</span>
+                )}
+              </div>
+              {inscritosDelTaller.length === 0
+                ? <p style={{ textAlign: 'center', color: '#aaa', padding: '24px 0', fontSize: '14px' }}>Sin inscritos este mes</p>
+                : <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    {inscritosDelTaller.map((ins: any, i) => (
+                      <div key={ins.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: i % 2 === 0 ? '#fafbfc' : 'white', marginBottom: '4px' }}>
+                        <div>
+                          <p style={{ margin: 0, fontWeight: '500', fontSize: '14px' }}>{ins.clientes?.nombre || '—'}</p>
+                          <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>{ins.clientes?.telefono || '—'}</p>
+                        </div>
+                        {ins.valor_pagado && <span style={{ fontSize: '13px', color: '#555' }}>${Number(ins.valor_pagado).toLocaleString()}</span>}
+                      </div>
+                    ))}
+                  </div>
+              }
+              <button onClick={() => setModalVerTaller(false)} style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ MODAL EDITAR CLASE ══ */}
       {modalEditar && claseEditando && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
