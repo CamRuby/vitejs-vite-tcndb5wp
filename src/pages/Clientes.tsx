@@ -309,6 +309,12 @@ export default function Clientes() {
   const [instrumentos, setInstrumentos] = useState<any[]>([])
   const [sedes, setSedes] = useState<any[]>([])
   const [modalPlan, setModalPlan] = useState<any>(null)
+  const [modalTaller, setModalTaller] = useState(false)
+  const [talleres, setTalleres] = useState<any[]>([])
+  const [tallerSeleccionado, setTallerSeleccionado] = useState('')
+  const [tallerValorPagado, setTallerValorPagado] = useState('')
+  const [tallerGuardando, setTallerGuardando] = useState(false)
+  const [tallerError, setTallerError] = useState('')
   const [esRenovacion, setEsRenovacion] = useState(false)
   const [modalHistorial, setModalHistorial] = useState(false)
   const [confirmarBorrar, setConfirmarBorrar] = useState(false)
@@ -471,6 +477,50 @@ export default function Clientes() {
       await cargarDatosCliente(clienteSeleccionado)
     }
     cargarVista(vistaActual)
+  }
+
+  async function abrirModalTaller() {
+    const { data } = await supabase
+      .from('talleres')
+      .select('id, nombre, dia_semana, hora, duracion_min, valor_mensual, profesores(nombre), salones(nombre, sedes(nombre))')
+      .order('nombre')
+    setTalleres(data || [])
+    setTallerSeleccionado('')
+    setTallerValorPagado('')
+    setTallerError('')
+    setModalTaller(true)
+  }
+
+  async function inscribirEnTaller() {
+    if (!tallerSeleccionado) { setTallerError('Selecciona un taller'); return }
+    setTallerGuardando(true)
+    setTallerError('')
+    // Verificar si ya está inscrito este mes
+    const hoy = new Date()
+    const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+    const { data: yaInscrito } = await supabase
+      .from('taller_inscripciones')
+      .select('id')
+      .eq('taller_id', tallerSeleccionado)
+      .eq('cliente_id', clienteSeleccionado.id)
+      .eq('estado', 'activo')
+      .gte('mes', mes)
+    if (yaInscrito && yaInscrito.length > 0) {
+      setTallerError('Este cliente ya está inscrito en ese taller este mes.')
+      setTallerGuardando(false)
+      return
+    }
+    const taller = talleres.find((t: any) => t.id === tallerSeleccionado)
+    const { error } = await supabase.from('taller_inscripciones').insert({
+      taller_id: tallerSeleccionado,
+      cliente_id: clienteSeleccionado.id,
+      mes: mes,
+      valor_pagado: tallerValorPagado !== '' ? Number(tallerValorPagado) : (taller?.valor_mensual || null),
+      estado: 'activo'
+    })
+    if (error) { setTallerError('Error: ' + error.message); setTallerGuardando(false); return }
+    setModalTaller(false)
+    setTallerGuardando(false)
   }
 
   async function guardarPlan(payload: any, planId?: string) {
@@ -685,7 +735,7 @@ export default function Clientes() {
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button onClick={() => { setEsRenovacion(false); setModalPlan({}) }} style={{ padding: '8px 18px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>+ Crear plan</button>
-              <button onClick={() => alert('Próximamente: inscripción a talleres')} style={{ padding: '8px 18px', background: 'white', color: TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>+ Asignar a taller</button>
+              <button onClick={abrirModalTaller} style={{ padding: '8px 18px', background: 'white', color: TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>+ Asignar a taller</button>
             </div>
           </div>
 
@@ -789,6 +839,55 @@ export default function Clientes() {
       )}
 
       {/* MODAL PLAN */}
+      {/* MODAL ASIGNAR A TALLER */}
+      {modalTaller && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+            <div style={{ background: '#7c3aed', padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>🎸 Asignar a taller</h3>
+                <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>{clienteSeleccionado?.nombre}</p>
+              </div>
+              <button onClick={() => setModalTaller(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ padding: '24px' }}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={labelStyle}>Taller *</label>
+                <select value={tallerSeleccionado} onChange={e => {
+                  setTallerSeleccionado(e.target.value)
+                  const t = talleres.find((x: any) => x.id === e.target.value)
+                  if (t?.valor_mensual) setTallerValorPagado(String(t.valor_mensual))
+                  else setTallerValorPagado('')
+                }} style={estiloInput}>
+                  <option value="">— Seleccionar taller —</option>
+                  {talleres.map((t: any) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nombre} · {t.salones?.nombre} ({t.salones?.sedes?.nombre}) · {t.dia_semana} {t.hora?.substring(0,5)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={labelStyle}>Valor pagado ($)</label>
+                <input type="number" min={0} value={tallerValorPagado}
+                  onChange={e => setTallerValorPagado(e.target.value)}
+                  placeholder="Se toma del taller si se deja vacío"
+                  style={estiloInput} />
+              </div>
+              {tallerError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{tallerError}</p>}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={inscribirEnTaller} disabled={tallerGuardando} style={{ flex: 1, padding: '11px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
+                  {tallerGuardando ? 'Inscribiendo...' : 'Inscribir al mes actual'}
+                </button>
+                <button onClick={() => setModalTaller(false)} style={{ padding: '11px 18px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modalPlan !== null && (
         <ModalPlan plan={modalPlan} profesores={profesores} instrumentos={instrumentos} sedes={sedes}
           esRenovacion={esRenovacion} onGuardar={guardarPlan} onCerrar={() => { setModalPlan(null); setEsRenovacion(false) }} />
