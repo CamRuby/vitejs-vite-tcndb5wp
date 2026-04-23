@@ -69,6 +69,9 @@ function horaAMinutos(hora: string): number {
 function esPasado(fechaStr: string): boolean {
   return fechaStr < formatFecha(new Date())
 }
+function esBloqueada(clase: any): boolean {
+  return clase?.estado === 'dada'
+}
 
 const fieldStyle: React.CSSProperties = {
   width: '100%', padding: '9px 12px', border: `1px solid ${TEAL_MID}`,
@@ -157,6 +160,7 @@ export default function Horarios() {
   const [editError, setEditError] = useState('')
   const [editGuardando, setEditGuardando] = useState(false)
   const [confirmarBorrar, setConfirmarBorrar] = useState(false)
+  const [confirmarDada, setConfirmarDada] = useState(false)
 
   const fechasSemana = getFechasSemana(fechaBase)
 
@@ -410,7 +414,6 @@ export default function Horarios() {
   }
 
   function abrirSlot(salon: any, hora: string, fecha: string) {
-    if (esPasado(fecha)) return
     setSlotSeleccionado({ salon, hora, fecha })
     setTipoModal('clase')
     setModalAbierto(true)
@@ -443,6 +446,7 @@ export default function Horarios() {
     setEditEstado(clase.estado || 'programada')
     setEditError('')
     setConfirmarBorrar(false)
+    setConfirmarDada(false)
     setModalEditar(true)
   }
 
@@ -494,6 +498,21 @@ export default function Horarios() {
 
   async function borrarTaller() {
     setTeGuardando(true)
+    // Verificar inscritos activos
+    const hoy = new Date()
+    const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+    const { data: inscritos } = await supabase
+      .from('taller_inscripciones')
+      .select('id')
+      .eq('taller_id', tallerViendo.id)
+      .eq('estado', 'activo')
+      .gte('mes', mes)
+    if (inscritos && inscritos.length > 0) {
+      setTeError(`No se puede borrar: tiene ${inscritos.length} inscrito(s) activo(s) este mes. Retíralos primero.`)
+      setConfirmarBorrarTaller(false)
+      setTeGuardando(false)
+      return
+    }
     await supabase.from('talleres').delete().eq('id', tallerViendo.id)
     setModalVerTaller(false)
     await cargarTalleres()
@@ -783,11 +802,11 @@ export default function Horarios() {
                       style={{
                         padding: 0, height: '1px', verticalAlign: 'top',
                         borderLeft: '1px solid #f1f5f9',
-                        cursor: (mainClass || taller) ? 'default' : esCeldaPasada ? 'not-allowed' : 'pointer',
+                        cursor: (mainClass || taller) ? 'default' : 'pointer',
                         width: '160px', minWidth: '160px',
-                        background: esCeldaPasada && !mainClass && !taller ? '#fafafa' : undefined
+                        background: esCeldaPasada && !mainClass && !taller ? '#f9fafb' : undefined
                       }}
-                      onMouseEnter={e => { if (!mainClass && !taller && !esCeldaPasada) e.currentTarget.style.background = TEAL_LIGHT }}
+                      onMouseEnter={e => { if (!mainClass && !taller) e.currentTarget.style.background = TEAL_LIGHT }}
                       onMouseLeave={e => { if (!mainClass && !taller) e.currentTarget.style.background = esCeldaPasada ? '#fafafa' : '' }}
                     >
                       {/* Taller */}
@@ -1240,7 +1259,7 @@ export default function Horarios() {
             <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>
-                  {esPasado(claseEditando.fecha) ? 'Ver clase (solo lectura)' : 'Editar clase'}
+                  {esBloqueada(claseEditando) ? 'Ver clase (solo lectura)' : 'Editar clase'}
                 </h3>
                 <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>{claseEditando.contratos?.clientes?.nombre}</p>
                 <p style={{ margin: '4px 0 0', color: 'white', fontSize: '18px', fontWeight: '700' }}>
@@ -1255,10 +1274,10 @@ export default function Horarios() {
                 <div><strong>Instrumento:</strong> {claseEditando.contratos?.instrumentos?.nombre}</div>
                 <div><strong>Plan:</strong> {claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases</div>
                 {claseEditando.recurrente && <div style={{ marginTop: '6px', color: TEAL, fontWeight: '600', fontSize: '12px' }}>🔁 Clase recurrente</div>}
-                {esPasado(claseEditando.fecha) && <div style={{ marginTop: '6px', color: '#999', fontWeight: '600', fontSize: '12px' }}>🔒 Clase pasada — solo lectura</div>}
+                {esBloqueada(claseEditando) && <div style={{ marginTop: '6px', color: '#854d0e', fontWeight: '600', fontSize: '12px' }}>🔒 Clase dada — no se puede modificar</div>}
               </div>
 
-              {!esPasado(claseEditando.fecha) && (
+              {!esBloqueada(claseEditando) && (
                 <>
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Estado</label>
@@ -1266,7 +1285,14 @@ export default function Horarios() {
                       {['programada', 'confirmada', 'dada', 'cancelada'].map(est => {
                         const col2 = getColorEstado(est)
                         return (
-                          <button key={est} onClick={() => setEditEstado(est)} style={{
+                          <button key={est} onClick={() => {
+                            if (est === 'dada' && editEstado !== 'dada') {
+                              setConfirmarDada(true)
+                            } else {
+                              setEditEstado(est)
+                              setConfirmarDada(false)
+                            }
+                          }} style={{
                             padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500',
                             border: `1px solid ${editEstado === est ? col2.color : '#e2e8f0'}`,
                             background: editEstado === est ? col2.bg : 'white',
@@ -1275,6 +1301,23 @@ export default function Horarios() {
                         )
                       })}
                     </div>
+                    {confirmarDada && (
+                      <div style={{ marginTop: '10px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px 14px' }}>
+                        <p style={{ margin: '0 0 8px', fontSize: '13px', color: '#854d0e', fontWeight: '600' }}>
+                          ⚠️ Una vez marcada como "Dada" no se podrá deshacer ni borrar.
+                        </p>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button onClick={() => { setEditEstado('dada'); setConfirmarDada(false) }} style={{
+                            flex: 1, padding: '7px', background: '#854d0e', color: 'white',
+                            border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
+                          }}>Sí, marcar como dada</button>
+                          <button onClick={() => setConfirmarDada(false)} style={{
+                            padding: '7px 14px', background: 'white', color: '#333',
+                            border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px'
+                          }}>Cancelar</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ marginBottom: '14px' }}>
@@ -1372,7 +1415,7 @@ export default function Horarios() {
                 </>
               )}
 
-              {esPasado(claseEditando.fecha) && (
+              {esBloqueada(claseEditando) && (
                 <button onClick={() => setModalEditar(false)} style={{
                   width: '100%', padding: '11px', background: '#f1f5f9', color: '#334155',
                   border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px'
