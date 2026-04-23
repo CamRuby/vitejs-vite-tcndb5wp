@@ -200,7 +200,7 @@ export default function Horarios() {
 
   useEffect(() => { cargarSedes(); cargarProfesores() }, [])
   useEffect(() => { if (sedeSeleccionada) { cargarSalones(); cargarClases() } }, [sedeSeleccionada, fechaBase, diaSeleccionado, vista])
-  useEffect(() => { if (salones.length > 0 && sedeSeleccionada) cargarTalleres() }, [salones])
+  useEffect(() => { if (salones.length > 0 && sedeSeleccionada) cargarTalleres() }, [salones, sedeSeleccionada])
 
   async function cargarSedes() {
     const { data } = await supabase.from('sedes').select('id, nombre').order('nombre')
