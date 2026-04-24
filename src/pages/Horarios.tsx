@@ -81,7 +81,8 @@ const labelStyle: React.CSSProperties = {
   display: 'block', fontWeight: '500', fontSize: '13px', marginBottom: '5px', color: '#555'
 }
 
-function getColorEstado(estado: string) {
+function getColorEstado(estado: string, revision?: boolean) {
+  if (estado === 'cancelada' && revision) return { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' }
   switch (estado) {
     case 'programada': return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' }
     case 'confirmada': return { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
@@ -164,6 +165,7 @@ export default function Horarios() {
   const [editGuardando, setEditGuardando] = useState(false)
   const [confirmarBorrar, setConfirmarBorrar] = useState(false)
   const [confirmarDada, setConfirmarDada] = useState(false)
+  const [procesandoRevision, setProcesandoRevision] = useState(false)
 
   const fechasSemana = getFechasSemana(fechaBase)
 
@@ -249,7 +251,7 @@ export default function Horarios() {
     const { data } = await supabase
       .from('clases')
       .select(`
-        id, fecha, hora, duracion_min, estado, patron_id, recurrente,
+        id, fecha, hora, duracion_min, estado, patron_id, recurrente, revision_pendiente,
         contratos (id, clases_tomadas, total_clases, clientes (id, nombre), instrumentos (nombre)),
         profesores (id, nombre),
         salones (id, nombre, sede_id)
@@ -450,6 +452,7 @@ export default function Horarios() {
     setEditError('')
     setConfirmarBorrar(false)
     setConfirmarDada(false)
+    setProcesandoRevision(false)
     setModalEditar(true)
   }
 
@@ -675,6 +678,12 @@ export default function Horarios() {
       return
     }
 
+    // Si se marca como dada, sumar 1 a clases_tomadas
+    if (editEstado === 'dada' && claseEditando.estado !== 'dada' && claseEditando.contratos?.id) {
+      const clasesTomadas = (claseEditando.contratos?.clases_tomadas || 0) + 1
+      await supabase.from('contratos').update({ clases_tomadas: clasesTomadas }).eq('id', claseEditando.contratos.id)
+    }
+
     if (alcance === 'futuras' && claseEditando.patron_id) {
       const { data: clasesFuturas, error: errorBuscar } = await supabase
         .from('clases')
@@ -709,8 +718,28 @@ export default function Horarios() {
     setEditGuardando(false)
   }
 
+  async function resolverRevision(cobrar: boolean) {
+    setProcesandoRevision(true)
+    if (cobrar) {
+      // Sumar 1 a clases_tomadas del contrato
+      const clasesTomadas = (claseEditando.contratos?.clases_tomadas || 0) + 1
+      await supabase.from('contratos').update({ clases_tomadas: clasesTomadas }).eq('id', claseEditando.contratos?.id)
+    }
+    // Quitar flag revision_pendiente
+    await supabase.from('clases').update({ revision_pendiente: false }).eq('id', claseEditando.id)
+    setModalEditar(false)
+    cargarClases()
+    setProcesandoRevision(false)
+  }
+
   async function borrarClase(alcance: 'esta' | 'futuras') {
     setEditGuardando(true)
+    // Si se marca como dada, sumar 1 a clases_tomadas
+    if (editEstado === 'dada' && claseEditando.estado !== 'dada' && claseEditando.contratos?.id) {
+      const clasesTomadas = (claseEditando.contratos?.clases_tomadas || 0) + 1
+      await supabase.from('contratos').update({ clases_tomadas: clasesTomadas }).eq('id', claseEditando.contratos.id)
+    }
+
     if (alcance === 'futuras' && claseEditando.patron_id) {
       await supabase.from('clases').delete().eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
     } else {
@@ -811,6 +840,10 @@ export default function Horarios() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: TALLER_BG, border: `1px solid ${TALLER_BORDER}` }} />
             <span style={{ fontSize: '12px', color: '#666' }}>Taller</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: '#fff7ed', border: '1px solid #fed7aa' }} />
+            <span style={{ fontSize: '12px', color: '#666' }}>Revisión pendiente</span>
           </div>
         </div>
       </div>
@@ -934,7 +967,7 @@ export default function Horarios() {
 
                       {/* Clase regular */}
                       {mainClass && !taller && (() => {
-                        const col2 = getColorEstado(mainClass.estado)
+                        const col2 = getColorEstado(mainClass.estado, mainClass.revision_pendiente)
                         const numPlan = mainClass.contratos?.total_clases
                           ? `${mainClass.contratos.clases_tomadas ?? '?'}/${mainClass.contratos.total_clases}`
                           : ''
@@ -960,6 +993,7 @@ export default function Horarios() {
                                   </span>
                                 )}
                                 {mainClass.recurrente && <span style={{ fontSize: '9px' }}>🔁</span>}
+                                {mainClass.revision_pendiente && <span style={{ fontSize: '9px' }}>⚠️</span>}
                               </div>
                             </div>
                             {vista === 'dia' && mainClass.profesores?.nombre && (
@@ -1498,6 +1532,26 @@ export default function Horarios() {
                       {salones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                     </select>
                   </div>
+
+                  {/* Panel revisión de inasistencia */}
+                  {claseEditando.revision_pendiente && (
+                    <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
+                      <p style={{ margin: '0 0 6px', fontSize: '14px', color: '#c2410c', fontWeight: '700' }}>⚠️ Inasistencia pendiente de revisión</p>
+                      <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#78350f' }}>
+                        El estudiante no asistió. Revisa el WhatsApp y decide:
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => resolverRevision(false)} disabled={procesandoRevision} style={{
+                          flex: 1, padding: '8px', background: '#dcfce7', color: '#166534',
+                          border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600'
+                        }}>✓ No cobrar (avisó a tiempo)</button>
+                        <button onClick={() => resolverRevision(true)} disabled={procesandoRevision} style={{
+                          flex: 1, padding: '8px', background: '#fee2e2', color: '#991b1b',
+                          border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600'
+                        }}>✗ Cobrar inasistencia</button>
+                      </div>
+                    </div>
+                  )}
 
                   {editError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{editError}</p>}
 
