@@ -16,6 +16,7 @@ const labelStyle = { fontWeight: '500' as const, fontSize: '13px', color: '#555'
 const CLASES_PRESET = [4, 8, 16, 20, 40, 80]
 
 const VISTAS = [
+  { value: 'todos',        label: '👥 Todos los clientes (A–Z)' },
   { value: 'clientes',     label: '👤 Últimos 30 clientes registrados' },
   { value: 'planes',       label: '📋 Últimos 30 planes creados' },
   { value: 'completados',  label: '📁 Últimos 30 planes archivados' },
@@ -78,7 +79,15 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
 
           {/* Fila 2: Fecha · Ocupación · Dirección · Ciudad */}
           <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '140px 1fr 2fr 140px', gap: '12px' }}>
-            {inp('Fecha de nacimiento', 'fecha_nacimiento', 'date')}
+            {(() => {
+            const key = 'fecha_nacimiento'
+            return (
+              <div key={key}>
+                <label style={labelStyle}>Fecha de nacimiento</label>
+                <input type="date" value={form[key] || ''} onChange={e => setForm({ ...form, [key]: e.target.value || '' })} style={estiloInput} />
+              </div>
+            )
+          })()}
             {inp('Ocupación', 'ocupacion')}
             {inp('Dirección', 'direccion')}
             {inp('Ciudad', 'ciudad')}
@@ -360,7 +369,7 @@ function TablaPlanesVista({ planes, onVerCliente }) {
 export default function Clientes() {
   const [busqueda, setBusqueda] = useState('')
   const [clientes, setClientes] = useState<any[]>([])
-  const [vistaActual, setVistaActual] = useState('reactivacion')
+  const [vistaActual, setVistaActual] = useState('todos')
   const [datosVista, setDatosVista] = useState<any[]>([])
   const [cargandoVista, setCargandoVista] = useState(false)
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null)
@@ -423,7 +432,24 @@ export default function Clientes() {
     setCargandoVista(true)
     const planSelect = 'id, cliente_id, total_clases, clases_tomadas, duracion_min, valor_plan, fecha_inicio, estado, instrumento_id, profesor_id, sede_id, clientes(id, nombre), instrumentos(nombre), sedes(nombre)'
 
-    if (vista === 'clientes') {
+    if (vista === 'todos') {
+      const { data } = await supabase
+        .from('clientes')
+        .select('id, nombre, nombres, apellidos, grupo_whatsapp, estado')
+        .order('nombre', { ascending: true })
+      // Enriquecer con plan activo
+      const clienteIds = (data || []).map((c: any) => c.id)
+      let planesActivos: Record<string, boolean> = {}
+      if (clienteIds.length > 0) {
+        const { data: contratos } = await supabase
+          .from('contratos')
+          .select('cliente_id')
+          .in('cliente_id', clienteIds)
+          .eq('estado', 'activo')
+        ;(contratos || []).forEach((ct: any) => { planesActivos[ct.cliente_id] = true })
+      }
+      setDatosVista((data || []).map((c: any) => ({ ...c, tiene_plan_activo: !!planesActivos[c.id] })))
+    } else if (vista === 'clientes') {
       const { data } = await supabase
         .from('clientes')
         .select('id, nombre, telefono, email, grupo_whatsapp, estado, created_at')
@@ -866,6 +892,40 @@ export default function Clientes() {
           {busqueda.length < 2 && (
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {cargandoVista && <div style={{ textAlign: 'center', padding: '32px', color: '#666' }}>Cargando...</div>}
+
+              {!cargandoVista && vistaActual === 'todos' && (
+                <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
+                      <tr>{['Nombre', 'Apellido', 'Grupo WhatsApp', 'Plan activo', 'Estado'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {datosVista.length === 0 && <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin clientes</td></tr>}
+                      {datosVista.map((c: any, i) => (
+                        <tr key={c.id} onClick={() => seleccionarCliente(c)}
+                          style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc', cursor: 'pointer' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)}
+                          onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafbfc')}
+                        >
+                          <td style={{ ...tdStyle, fontWeight: '600', color: TEAL }}>{c.nombres || c.nombre}</td>
+                          <td style={tdStyle}>{c.apellidos || '—'}</td>
+                          <td style={tdStyle}>{c.grupo_whatsapp || '—'}</td>
+                          <td style={{ ...tdStyle, textAlign: 'center' }}>
+                            {c.tiene_plan_activo
+                              ? <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>✓ Sí</span>
+                              : <span style={{ background: '#f1f5f9', color: '#94a3b8', padding: '2px 10px', borderRadius: '20px', fontSize: '12px' }}>No</span>}
+                          </td>
+                          <td style={tdStyle}>
+                            <span style={{ background: c.estado === 'activo' ? '#dcfce7' : '#fee2e2', color: c.estado === 'activo' ? '#166534' : '#991b1b', padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>
+                              {c.estado === 'activo' ? 'Activo' : 'Inactivo'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               {!cargandoVista && vistaActual === 'clientes' && (
                 <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
