@@ -26,11 +26,15 @@ export default function Dashboard({ usuario }: { usuario: any }) {
         padding: '24px 0'
       }}>
         <div style={{ padding: '0 24px 24px', borderBottom: '1px solid #334155' }}>
-          <p style={{ margin: 0, fontWeight: '600', fontSize: '16px' }}>Academia de Música</p>
-          <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#94a3b8' }}>
-            {usuario.email}
-          </p>
-        </div>
+  <img
+    src="/Logo_RubySalamanca.png"
+    alt="Ruby Salamanca"
+    style={{ width: '100%', maxWidth: '172px', display: 'block', marginBottom: '8px' }}
+  />
+  <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>
+    {usuario.email}
+  </p>
+</div>
         <nav style={{ flex: 1, padding: '16px 0' }}>
           {MENU.map(item => (
             <button
