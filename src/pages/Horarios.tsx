@@ -823,7 +823,14 @@ export default function Horarios() {
             <tr style={{ background: TEAL }}>
               <th style={{ padding: '10px 12px', color: 'white', fontSize: '12px', width: '64px', position: 'sticky', left: 0, background: TEAL, zIndex: 4 }}>Hora</th>
               {columns.map(col => (
-                <th key={`${col.salon.id}-${col.fecha}`} style={{ padding: '8px 10px', color: 'white', textAlign: 'center', borderLeft: '1px solid rgba(255,255,255,0.2)', width: '160px', minWidth: '160px' }}>
+                <th key={`${col.salon.id}-${col.fecha}`} style={{
+                  padding: '8px 6px', color: 'white', textAlign: 'center',
+                  borderLeft: vista === 'semana' && col.subheader === salones[0]?.nombre
+                    ? '3px solid rgba(255,255,255,0.6)'
+                    : '1px solid rgba(255,255,255,0.2)',
+                  width: vista === 'semana' ? '80px' : '160px',
+                  minWidth: vista === 'semana' ? '80px' : '160px'
+                }}>
                   <div style={{ fontWeight: '600', fontSize: vista === 'dia' ? '13px' : '11px' }}>{col.header}</div>
                   {col.subheader && <div style={{ opacity: 0.8, fontSize: '11px' }}>{col.subheader}</div>}
                 </th>
@@ -861,11 +868,16 @@ export default function Horarios() {
                         padding: 0, height: '1px', verticalAlign: 'top',
                         borderLeft: '1px solid #f1f5f9',
                         cursor: (mainClass || taller) ? 'default' : 'pointer',
-                        width: '160px', minWidth: '160px',
+                        width: vista === 'semana' ? '80px' : '160px', minWidth: vista === 'semana' ? '80px' : '160px',
                         background: esCeldaPasada && !mainClass && !taller ? '#f9fafb' : undefined
                       }}
                       onMouseEnter={e => { if (!mainClass && !taller) e.currentTarget.style.background = TEAL_LIGHT }}
                       onMouseLeave={e => { if (!mainClass && !taller) e.currentTarget.style.background = esCeldaPasada ? '#fafafa' : '' }}
+                      ref={el => {
+                        if (el && vista === 'semana' && col.subheader === salones[0]?.nombre) {
+                          el.style.borderLeft = '3px solid #cbd5e1'
+                        }
+                      }}
                     >
                       {/* Taller */}
                       {taller && (
@@ -909,7 +921,9 @@ export default function Horarios() {
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2px' }}>
                               <strong style={{ lineHeight: '1.3', fontSize: vista === 'dia' ? '13px' : '11px' }}>
-                                {mainClass.contratos?.clientes?.nombre}
+                                {vista === 'semana'
+                                  ? (mainClass.contratos?.clientes?.nombre || '').split(' ')[0]
+                                  : mainClass.contratos?.clientes?.nombre}
                               </strong>
                               <div style={{ display: 'flex', gap: '3px', flexShrink: 0, alignItems: 'center' }}>
                                 {numPlan && (
