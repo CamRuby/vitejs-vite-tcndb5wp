@@ -32,25 +32,34 @@ function colorEstadoPlan(e: string) {
 
 // ── Formulario cliente ──
 function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
+  const inp = (label: string, key: string, type = 'text', span = false) => (
+    <div key={key} style={span ? { gridColumn: '1 / -1' } : {}}>
+      <label style={labelStyle}>{label}</label>
+      <input type={type} value={form[key] || ''} onChange={e => setForm({ ...form, [key]: e.target.value })} style={estiloInput} />
+    </div>
+  )
+  const sec = (title: string) => (
+    <div style={{ gridColumn: '1 / -1', borderTop: `2px solid ${TEAL_MID}`, paddingTop: '14px', marginTop: '4px' }}>
+      <p style={{ margin: 0, fontWeight: '700', fontSize: '12px', color: TEAL, textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>{title}</p>
+    </div>
+  )
   return (
     <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.08)' }}>
       <div style={{ background: TEAL, padding: '20px 28px' }}>
         <button onClick={onVolver} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', fontSize: '14px', padding: 0, marginBottom: '8px' }}>← Volver</button>
         <h3 style={{ margin: 0, color: 'white', fontSize: '20px' }}>{modo === 'nuevo' ? 'Nuevo cliente' : 'Editar cliente'}</h3>
       </div>
-      <div style={{ padding: '28px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-          {[
-            { label: 'Nombre completo *', key: 'nombre', type: 'text' },
-            { label: 'Teléfono', key: 'telefono', type: 'text' },
-            { label: 'Correo electrónico', key: 'email', type: 'email' },
-            { label: 'Grupo WhatsApp', key: 'grupo_whatsapp', type: 'text' },
-          ].map(f => (
-            <div key={f.key}>
-              <label style={labelStyle}>{f.label}</label>
-              <input type={f.type} value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })} style={estiloInput} />
-            </div>
-          ))}
+      <div style={{ padding: '28px', maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+
+          {sec('Datos personales')}
+          {inp('Nombres *', 'nombres')}
+          {inp('Apellidos *', 'apellidos')}
+          {inp('Fecha de nacimiento', 'fecha_nacimiento', 'date')}
+          {inp('Número de identificación', 'numero_identificacion')}
+          {inp('Ocupación', 'ocupacion')}
+          {inp('Dirección', 'direccion', 'text', true)}
+          {inp('Ciudad', 'ciudad')}
           <div>
             <label style={labelStyle}>Estado</label>
             <select value={form.estado} onChange={e => setForm({ ...form, estado: e.target.value })} style={estiloInput}>
@@ -58,6 +67,41 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
               <option value="inactivo">Inactivo</option>
             </select>
           </div>
+
+          {sec('Contacto')}
+          {inp('Teléfono celular', 'telefono')}
+          {inp('Correo electrónico', 'email', 'email')}
+          {inp('Grupo WhatsApp', 'grupo_whatsapp')}
+
+          {sec('Contacto de emergencia')}
+          {inp('Nombre del contacto', 'contacto_emergencia_nombre')}
+          {inp('Teléfono del contacto', 'contacto_emergencia_telefono')}
+
+          {sec('Condiciones')}
+          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+              <input type="checkbox" checked={!!form.menor_de_edad} onChange={e => setForm({ ...form, menor_de_edad: e.target.checked })} />
+              ¿El estudiante es menor de edad?
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+              <input type="checkbox" checked={!!form.discapacidad_fisica} onChange={e => setForm({ ...form, discapacidad_fisica: e.target.checked })} />
+              ¿Presenta discapacidad física?
+            </label>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>Condición especial de aprendizaje</label>
+            <input value={form.condicion_aprendizaje || ''} onChange={e => setForm({ ...form, condicion_aprendizaje: e.target.value })}
+              placeholder="Describir si aplica" style={estiloInput} />
+          </div>
+
+          {form.menor_de_edad && (<>
+            {sec('Datos del acudiente')}
+            {inp('Nombres del acudiente', 'acudiente_nombres')}
+            {inp('Apellidos del acudiente', 'acudiente_apellidos')}
+            {inp('Teléfono del acudiente', 'acudiente_telefono')}
+            {inp('Documento del acudiente', 'acudiente_documento')}
+          </>)}
+
         </div>
         <div style={{ marginTop: '28px', display: 'flex', gap: '12px' }}>
           <button onClick={onGuardar} disabled={cargando} style={{ padding: '11px 28px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
