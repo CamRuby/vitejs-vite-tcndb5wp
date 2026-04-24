@@ -820,22 +820,52 @@ export default function Horarios() {
         {cargando && <p style={{ textAlign: 'center', color: '#666', padding: '20px' }}>Cargando...</p>}
         <table style={{ borderCollapse: 'collapse', minWidth: '100%', width: 'max-content' }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 3 }}>
-            <tr style={{ background: TEAL }}>
-              <th style={{ padding: '10px 12px', color: 'white', fontSize: '12px', width: '64px', position: 'sticky', left: 0, background: TEAL, zIndex: 4 }}>Hora</th>
-              {columns.map(col => (
-                <th key={`${col.salon.id}-${col.fecha}`} style={{
-                  padding: '8px 6px', color: 'white', textAlign: 'center',
-                  borderLeft: vista === 'semana' && col.subheader === salones[0]?.nombre
-                    ? '3px solid rgba(255,255,255,0.6)'
-                    : '1px solid rgba(255,255,255,0.2)',
-                  width: vista === 'semana' ? '80px' : '160px',
-                  minWidth: vista === 'semana' ? '80px' : '160px'
-                }}>
-                  <div style={{ fontWeight: '600', fontSize: vista === 'dia' ? '13px' : '11px' }}>{col.header}</div>
-                  {col.subheader && <div style={{ opacity: 0.8, fontSize: '11px' }}>{col.subheader}</div>}
-                </th>
-              ))}
-            </tr>
+            {vista === 'semana' ? (
+              <>
+                {/* Fila 1: días agrupados */}
+                <tr style={{ background: TEAL }}>
+                  <th rowSpan={2} style={{ padding: '10px 12px', color: 'white', fontSize: '12px', width: '64px', position: 'sticky', left: 0, background: TEAL, zIndex: 4, verticalAlign: 'middle' }}>Hora</th>
+                  {fechasSemana.map((fecha, i) => (
+                    <th key={`dia-${i}`} colSpan={salones.length} style={{
+                      padding: '6px 4px', color: 'white', textAlign: 'center', fontWeight: '700', fontSize: '12px',
+                      borderLeft: '3px solid rgba(255,255,255,0.6)',
+                      borderBottom: `2px solid ${TEAL_MID}`
+                    }}>
+                      {DIAS[i]} {formatFechaMostrar(fecha)}
+                    </th>
+                  ))}
+                </tr>
+                {/* Fila 2: salones */}
+                <tr style={{ background: TEAL }}>
+                  {fechasSemana.flatMap((_, i) =>
+                    salones.map((salon: any, j) => (
+                      <th key={`salon-${i}-${salon.id}`} style={{
+                        padding: '4px 4px', color: 'rgba(255,255,255,0.85)', textAlign: 'center',
+                        fontSize: '10px', fontWeight: '400',
+                        borderLeft: j === 0 ? '3px solid rgba(255,255,255,0.6)' : '1px solid rgba(255,255,255,0.15)',
+                        width: '80px', minWidth: '80px',
+                        background: TEAL
+                      }}>
+                        {salon.nombre}
+                      </th>
+                    ))
+                  )}
+                </tr>
+              </>
+            ) : (
+              <tr style={{ background: TEAL }}>
+                <th style={{ padding: '10px 12px', color: 'white', fontSize: '12px', width: '64px', position: 'sticky', left: 0, background: TEAL, zIndex: 4 }}>Hora</th>
+                {columns.map(col => (
+                  <th key={`${col.salon.id}-${col.fecha}`} style={{
+                    padding: '8px 10px', color: 'white', textAlign: 'center',
+                    borderLeft: '1px solid rgba(255,255,255,0.2)',
+                    width: '160px', minWidth: '160px'
+                  }}>
+                    <div style={{ fontWeight: '600', fontSize: '13px' }}>{col.header}</div>
+                  </th>
+                ))}
+              </tr>
+            )}
           </thead>
           <tbody>
             {HORAS.map((hora) => (
@@ -920,22 +950,20 @@ export default function Horarios() {
                             }}
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2px' }}>
-                              <strong style={{ lineHeight: '1.3', fontSize: vista === 'dia' ? '13px' : '11px' }}>
-                                {vista === 'semana'
-                                  ? (mainClass.contratos?.clientes?.nombre || '').split(' ')[0]
-                                  : mainClass.contratos?.clientes?.nombre}
+                              <strong style={{ lineHeight: '1.3', fontSize: vista === 'dia' ? '13px' : '10px', wordBreak: 'break-word' }}>
+                                {mainClass.contratos?.clientes?.nombre}
                               </strong>
-                              <div style={{ display: 'flex', gap: '3px', flexShrink: 0, alignItems: 'center' }}>
-                                {numPlan && (
-                                  <span style={{ fontSize: vista === 'dia' ? '12px' : '11px', fontWeight: '700', opacity: 0.9, whiteSpace: 'nowrap' }}>
+                              <div style={{ display: 'flex', gap: '2px', flexShrink: 0, alignItems: 'center' }}>
+                                {numPlan && vista === 'dia' && (
+                                  <span style={{ fontSize: '12px', fontWeight: '700', opacity: 0.9, whiteSpace: 'nowrap' }}>
                                     {numPlan}
                                   </span>
                                 )}
                                 {mainClass.recurrente && <span style={{ fontSize: '9px' }}>🔁</span>}
                               </div>
                             </div>
-                            {(vista === 'dia' || rowSpan >= 3) && mainClass.profesores?.nombre && (
-                              <div style={{ fontSize: vista === 'dia' ? '12px' : '10px', opacity: 0.85, marginTop: '1px' }}>
+                            {vista === 'dia' && mainClass.profesores?.nombre && (
+                              <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '1px' }}>
                                 {mainClass.profesores.nombre}
                               </div>
                             )}
