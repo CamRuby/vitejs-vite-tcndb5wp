@@ -22,6 +22,7 @@ const VISTAS = [
   { value: 'completados',  label: '📁 Últimos 30 planes archivados' },
   { value: 'aplazados',    label: '⏸ Planes aplazados' },
   { value: 'reactivacion', label: '🔄 Planes completados (por renovar)' },
+  { value: 'activos',       label: '✅ Todos los planes activos' },
 ]
 
 function colorEstadoPlan(e: string) {
@@ -408,8 +409,16 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [errorBorrar, setErrorBorrar] = useState('')
   const [borrando, setBorrando] = useState(false)
   const [expandirFicha, setExpandirFicha] = useState(false)
+  const [filtroSede, setFiltroSede] = useState('')
+  const [filtroProfesor, setFiltroProfesor] = useState('')
+  const [sedes, setSedes] = useState<any[]>([])
+  const [profesoresFiltro, setProfesoresFiltro] = useState<any[]>([])
 
-  useEffect(() => { cargarBase() }, [])
+  useEffect(() => {
+    cargarBase()
+    supabase.from('sedes').select('id, nombre').order('nombre').then(({ data }) => setSedes(data || []))
+    supabase.from('profesores').select('id, nombre').order('nombre').then(({ data }) => setProfesoresFiltro(data || []))
+  }, [])
   useEffect(() => { if (modo === 'lista' && instrumentos.length > 0) cargarVista(vistaActual) }, [vistaActual, instrumentos])
   useEffect(() => {
     if (busqueda.length >= 2) buscarClientes()
@@ -465,6 +474,10 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       setDatosVista(data || [])
     } else if (vista === 'aplazados') {
       const { data } = await supabase.from('contratos').select(planSelect).eq('estado', 'aplazado').order('fecha_inicio', { ascending: false })
+      setDatosVista(data || [])
+    } else if (vista === 'activos') {
+      const planSelect2 = 'id, cliente_id, total_clases, clases_tomadas, duracion_min, valor_plan, fecha_inicio, estado, clientes(id, nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre), sedes(id, nombre)'
+      const { data } = await supabase.from('contratos').select(planSelect2).eq('estado', 'activo').order('clases_tomadas', { ascending: false })
       setDatosVista(data || [])
     } else if (vista === 'reactivacion') {
       // Planes completados (no archivados) cuyo cliente NO tiene plan activo actualmente
@@ -955,7 +968,79 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                 </div>
               )}
 
-              {!cargandoVista && vistaActual !== 'clientes' && (
+              {!cargandoVista && vistaActual === 'activos' && (() => {
+                let datos = [...datosVista]
+                if (filtroSede) datos = datos.filter((p: any) => p.sedes?.id === filtroSede)
+                if (filtroProfesor) datos = datos.filter((p: any) => p.profesores?.id === filtroProfesor)
+                datos.sort((a: any, b: any) => {
+                  const restA = (a.total_clases || 0) - (a.clases_tomadas || 0)
+                  const restB = (b.total_clases || 0) - (b.clases_tomadas || 0)
+                  return restA - restB
+                })
+                return (
+                  <div>
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)}
+                        style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px', background: 'white' }}>
+                        <option value="">Todas las sedes</option>
+                        {sedes.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                      </select>
+                      <select value={filtroProfesor} onChange={e => setFiltroProfesor(e.target.value)}
+                        style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px', background: 'white' }}>
+                        <option value="">Todos los profesores</option>
+                        {profesoresFiltro.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                      </select>
+                      <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#666' }}>{datos.length} planes</span>
+                    </div>
+                    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
+                          <tr>
+                            {['#', 'Cliente', 'Instrumento', 'Profesor', 'Sede', 'Min', 'Total', 'Tomadas', 'Restantes'].map(h => (
+                              <th key={h} style={{ ...thStyle, textAlign: ['#','Min','Total','Tomadas','Restantes'].includes(h) ? 'center' : 'left' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {datos.length === 0 && <tr><td colSpan={9} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin planes activos</td></tr>}
+                          {datos.map((p: any, i) => {
+                            const tomadas = p.clases_tomadas || 0
+                            const total = p.total_clases || 0
+                            const restantes = total - tomadas
+                            const nombreCliente = p.clientes?.nombres
+                              ? `${p.clientes.nombres} ${p.clientes.apellidos || ''}`.trim()
+                              : p.clientes?.nombre || '—'
+                            const colorFila = restantes === 0 ? '#fefce8' : restantes <= 2 ? '#fff7ed' : i % 2 === 0 ? 'white' : '#fafbfc'
+                            return (
+                              <tr key={p.id} onClick={() => seleccionarClientePorId(p.cliente_id)}
+                                style={{ borderTop: '1px solid #f8fafc', background: colorFila, cursor: 'pointer' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)}
+                                onMouseLeave={e => (e.currentTarget.style.background = colorFila)}
+                              >
+                                <td style={{ ...tdStyle, textAlign: 'center', color: '#aaa' }}>{i + 1}</td>
+                                <td style={{ ...tdStyle, fontWeight: '600', color: TEAL }}>{nombreCliente}</td>
+                                <td style={tdStyle}>{p.instrumentos?.nombre || '—'}</td>
+                                <td style={tdStyle}>{p.profesores?.nombre || '—'}</td>
+                                <td style={tdStyle}>{p.sedes?.nombre || '—'}</td>
+                                <td style={{ ...tdStyle, textAlign: 'center' }}>{p.duracion_min || '—'}</td>
+                                <td style={{ ...tdStyle, textAlign: 'center' }}>{total}</td>
+                                <td style={{ ...tdStyle, textAlign: 'center' }}>{tomadas}</td>
+                                <td style={{ ...tdStyle, textAlign: 'center' }}>
+                                  <span style={{ fontWeight: '700', color: restantes === 0 ? '#854d0e' : restantes <= 2 ? '#c2410c' : '#166534' }}>
+                                    {restantes === 0 ? '✓ Completo' : restantes}
+                                  </span>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {!cargandoVista && vistaActual !== 'clientes' && vistaActual !== 'todos' && vistaActual !== 'activos' && (
                 <TablaPlanesVista planes={datosVista} onVerCliente={seleccionarClientePorId} />
               )}
             </div>
