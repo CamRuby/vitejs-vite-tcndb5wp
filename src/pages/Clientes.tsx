@@ -366,7 +366,7 @@ function TablaPlanesVista({ planes, onVerCliente }) {
 }
 
 // ── Componente principal ──
-export default function Clientes() {
+export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [busqueda, setBusqueda] = useState('')
   const [clientes, setClientes] = useState<any[]>([])
   const [vistaActual, setVistaActual] = useState('todos')
@@ -577,7 +577,8 @@ export default function Clientes() {
     setCargando(true)
     const payload = {
       ...form,
-      nombre: `${form.nombres.trim()} ${form.apellidos.trim()}`.trim()
+      nombre: `${form.nombres.trim()} ${form.apellidos.trim()}`.trim(),
+      fecha_nacimiento: form.fecha_nacimiento && form.fecha_nacimiento.trim() !== '' ? form.fecha_nacimiento : null
     }
     if (modo === 'nuevo') {
       const { data, error } = await supabase.from('clientes').insert(payload).select().single()
@@ -897,7 +898,7 @@ export default function Clientes() {
                 <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
-                      <tr>{['Nombre', 'Apellido', 'Grupo WhatsApp', 'Plan activo', 'Estado'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
+                      <tr><th style={{...thStyle, width: '40px'}}>#</th>{['Nombre', 'Apellido', 'Grupo WhatsApp', 'Plan activo', 'Estado'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
                       {datosVista.length === 0 && <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin clientes</td></tr>}
@@ -907,10 +908,11 @@ export default function Clientes() {
                           onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)}
                           onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafbfc')}
                         >
-                          <td style={{ ...tdStyle, fontWeight: '600', color: TEAL }}>{c.nombres || c.nombre}</td>
-                          <td style={tdStyle}>{c.apellidos || '—'}</td>
-                          <td style={tdStyle}>{c.grupo_whatsapp || '—'}</td>
-                          <td style={{ ...tdStyle, textAlign: 'center' }}>
+                          <td style={{ ...tdStyle, color: '#aaa', textAlign: 'left' }}>{i + 1}</td>
+                          <td style={{ ...tdStyle, fontWeight: '600', color: TEAL, textAlign: 'left' }}>{c.nombres || c.nombre}</td>
+                          <td style={{ ...tdStyle, textAlign: 'left' }}>{c.apellidos || '—'}</td>
+                          <td style={{ ...tdStyle, textAlign: 'left' }}>{c.grupo_whatsapp || '—'}</td>
+                          <td style={{ ...tdStyle, textAlign: 'left' }}>
                             {c.tiene_plan_activo
                               ? <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>✓ Sí</span>
                               : <span style={{ background: '#f1f5f9', color: '#94a3b8', padding: '2px 10px', borderRadius: '20px', fontSize: '12px' }}>No</span>}
