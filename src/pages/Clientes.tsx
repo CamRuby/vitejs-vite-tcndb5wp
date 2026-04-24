@@ -260,10 +260,10 @@ function TablaPlanesVista({ planes, onVerCliente }) {
           </tr>
         </thead>
         <tbody>
-          {planes.length === 0 && (
+          {planes.filter((p: any) => p.clientes?.nombre).length === 0 && (
             <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin registros</td></tr>
           )}
-          {planes.map((p: any, i) => {
+          {planes.filter((p: any) => p.clientes?.nombre).map((p: any, i) => {
             const est = colorEstadoPlan(p.estado || 'activo')
             return (
               <tr key={p.id} onClick={() => onVerCliente(p.cliente_id)}
@@ -326,7 +326,7 @@ export default function Clientes() {
   const [borrando, setBorrando] = useState(false)
 
   useEffect(() => { cargarBase() }, [])
-  useEffect(() => { if (modo === 'lista') cargarVista(vistaActual) }, [vistaActual])
+  useEffect(() => { if (modo === 'lista' && instrumentos.length > 0) cargarVista(vistaActual) }, [vistaActual, instrumentos])
   useEffect(() => {
     if (busqueda.length >= 2) buscarClientes()
     else setClientes([])
@@ -668,7 +668,7 @@ export default function Clientes() {
 
       {/* ENCABEZADO */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
-        <div>
+        <div style={{ textAlign: 'left' }}>
           <h2 style={{ margin: 0, fontSize: '26px', color: '#1a1a1a' }}>Clientes</h2>
           <p style={{ margin: '4px 0 0', color: '#666', fontSize: '14px' }}>Busca, crea y gestiona clientes</p>
         </div>
@@ -680,8 +680,8 @@ export default function Clientes() {
       {/* LISTA */}
       {modo === 'lista' && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', gap: '16px' }}>
-          <div style={{ display: 'flex', gap: '12px', flexShrink: 0 }}>
-            <div style={{ position: 'relative', flex: '0 0 40%' }}>
+          <div style={{ display: 'flex', gap: '12px', flexShrink: 0, alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
               <input placeholder="Buscar cliente por nombre..." value={busqueda} onChange={e => setBusqueda(e.target.value)} autoFocus
                 style={{ ...estiloInput, marginTop: 0, paddingLeft: '44px', fontSize: '15px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }} />
               <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontSize: '18px' }}>🔍</span>
