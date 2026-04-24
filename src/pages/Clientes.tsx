@@ -50,28 +50,46 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
         <h3 style={{ margin: 0, color: 'white', fontSize: '20px' }}>{modo === 'nuevo' ? 'Nuevo cliente' : 'Editar cliente'}</h3>
       </div>
       <div style={{ padding: '28px', maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
 
-          {sec('Datos personales')}
-          {inp('Nombres *', 'nombres')}
-          {inp('Apellidos *', 'apellidos')}
-          {inp('Fecha de nacimiento', 'fecha_nacimiento', 'date')}
-          {inp('Número de identificación', 'numero_identificacion')}
-          {inp('Ocupación', 'ocupacion')}
-          {inp('Dirección', 'direccion', 'text', true)}
-          {inp('Ciudad', 'ciudad')}
-          <div>
-            <label style={labelStyle}>Estado</label>
-            <select value={form.estado} onChange={e => setForm({ ...form, estado: e.target.value })} style={estiloInput}>
+        {/* Estado fuera del encabezado de datos personales */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label style={{ ...labelStyle, margin: 0 }}>Estado</label>
+            <select value={form.estado} onChange={e => setForm({ ...form, estado: e.target.value })}
+              style={{ padding: '8px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '14px' }}>
               <option value="activo">Activo</option>
               <option value="inactivo">Inactivo</option>
             </select>
           </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+
+          {sec('Datos personales')}
+
+          {/* Fila 1: Nombres · Apellidos · Identificación */}
+          <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '2fr 2fr 1.5fr', gap: '12px' }}>
+            {inp('Nombres *', 'nombres')}
+            {inp('Apellidos *', 'apellidos')}
+            {inp('N° Identificación', 'numero_identificacion')}
+          </div>
+
+          {/* Fila 2: Fecha · Ocupación · Dirección · Ciudad */}
+          <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '140px 1fr 2fr 140px', gap: '12px' }}>
+            {inp('Fecha de nacimiento', 'fecha_nacimiento', 'date')}
+            {inp('Ocupación', 'ocupacion')}
+            {inp('Dirección', 'direccion')}
+            {inp('Ciudad', 'ciudad')}
+          </div>
 
           {sec('Contacto')}
-          {inp('Teléfono celular', 'telefono')}
-          {inp('Correo electrónico', 'email', 'email')}
-          {inp('Grupo WhatsApp', 'grupo_whatsapp')}
+
+          {/* Fila 3: Teléfono · Correo · WhatsApp */}
+          <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '140px 2fr 1fr', gap: '12px' }}>
+            {inp('Teléfono', 'telefono')}
+            {inp('Correo electrónico', 'email', 'email')}
+            {inp('Grupo WhatsApp', 'grupo_whatsapp')}
+          </div>
 
           {sec('Contacto de emergencia')}
           {inp('Nombre del contacto', 'contacto_emergencia_nombre')}
