@@ -56,7 +56,9 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <label style={{ ...labelStyle, margin: 0 }}>Estado</label>
             <select value={form.estado} onChange={e => setForm({ ...form, estado: e.target.value })}
-              style={{ padding: '8px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '14px' }}>
+              style={{ padding: '8px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '14px',
+                background: form.estado === 'activo' ? '#dcfce7' : '#fee2e2',
+                color: form.estado === 'activo' ? '#166534' : '#991b1b', fontWeight: '600' }}>
               <option value="activo">Activo</option>
               <option value="inactivo">Inactivo</option>
             </select>
@@ -85,7 +87,7 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
           {sec('Contacto')}
 
           {/* Fila 3: Teléfono · Correo · WhatsApp */}
-          <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '140px 2fr 1fr', gap: '12px' }}>
+          <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
             {inp('Teléfono', 'telefono')}
             {inp('Correo electrónico', 'email', 'email')}
             {inp('Grupo WhatsApp', 'grupo_whatsapp')}
@@ -396,6 +398,7 @@ export default function Clientes() {
   const [confirmarBorrar, setConfirmarBorrar] = useState(false)
   const [errorBorrar, setErrorBorrar] = useState('')
   const [borrando, setBorrando] = useState(false)
+  const [expandirFicha, setExpandirFicha] = useState(false)
 
   useEffect(() => { cargarBase() }, [])
   useEffect(() => { if (modo === 'lista' && instrumentos.length > 0) cargarVista(vistaActual) }, [vistaActual, instrumentos])
@@ -451,7 +454,7 @@ export default function Clientes() {
 
   async function buscarClientes() {
     setCargando(true)
-    const { data } = await supabase.from('clientes').select('id, nombre, telefono, email, grupo_whatsapp, estado').ilike('nombre', `%${busqueda}%`).order('nombre').limit(20)
+    const { data } = await supabase.from('clientes').select('id, nombre, nombres, apellidos, telefono, email, grupo_whatsapp, estado, created_at, fecha_nacimiento, numero_identificacion, ocupacion, direccion, ciudad, contacto_emergencia_nombre, contacto_emergencia_telefono, menor_de_edad, acudiente_nombres, acudiente_apellidos, acudiente_telefono, acudiente_documento, discapacidad_fisica, condicion_aprendizaje').ilike('nombre', `%${busqueda}%`).order('nombre').limit(20)
     setClientes(data || [])
     setCargando(false)
   }
@@ -518,6 +521,7 @@ export default function Clientes() {
     await cargarDatosCliente(c)
     setConfirmarBorrar(false)
     setErrorBorrar('')
+    setExpandirFicha(false)
     setModo('ver')
   }
 
