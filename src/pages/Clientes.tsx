@@ -20,7 +20,7 @@ const VISTAS = [
   { value: 'planes',       label: '📋 Últimos 30 planes creados' },
   { value: 'completados',  label: '📁 Últimos 30 planes archivados' },
   { value: 'aplazados',    label: '⏸ Planes aplazados' },
-  { value: 'reactivacion', label: '🔄 Planes pendientes de reactivación' },
+  { value: 'reactivacion', label: '🔄 Planes completados (por renovar)' },
 ]
 
 function colorEstadoPlan(e: string) {
@@ -296,7 +296,7 @@ function TablaPlanesVista({ planes, onVerCliente }) {
 export default function Clientes() {
   const [busqueda, setBusqueda] = useState('')
   const [clientes, setClientes] = useState<any[]>([])
-  const [vistaActual, setVistaActual] = useState('clientes')
+  const [vistaActual, setVistaActual] = useState('reactivacion')
   const [datosVista, setDatosVista] = useState<any[]>([])
   const [cargandoVista, setCargandoVista] = useState(false)
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null)
@@ -681,7 +681,7 @@ export default function Clientes() {
       {modo === 'lista' && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', gap: '16px' }}>
           <div style={{ display: 'flex', gap: '12px', flexShrink: 0 }}>
-            <div style={{ position: 'relative', flex: 1 }}>
+            <div style={{ position: 'relative', flex: '0 0 40%' }}>
               <input placeholder="Buscar cliente por nombre..." value={busqueda} onChange={e => setBusqueda(e.target.value)} autoFocus
                 style={{ ...estiloInput, marginTop: 0, paddingLeft: '44px', fontSize: '15px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }} />
               <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontSize: '18px' }}>🔍</span>
