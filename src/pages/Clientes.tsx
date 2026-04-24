@@ -904,14 +904,55 @@ export default function Clientes() {
                 <button onClick={() => { setConfirmarBorrar(true); setErrorBorrar('') }} style={{ padding: '8px 18px', background: 'rgba(220,38,38,0.3)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>Borrar</button>
               </div>
             </div>
-            <div style={{ padding: '20px 28px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+            {/* Datos básicos */}
+            <div style={{ padding: '14px 28px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
               {[{ icon: '📱', label: 'Teléfono', valor: form.telefono }, { icon: '✉️', label: 'Correo', valor: form.email }, { icon: '💬', label: 'Grupo WhatsApp', valor: form.grupo_whatsapp }].map(d => (
                 <div key={d.label}>
-                  <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#999', fontWeight: '600' }}>{d.icon} {d.label}</p>
-                  <p style={{ margin: 0, fontSize: '15px', color: '#333' }}>{d.valor || '—'}</p>
+                  <p style={{ margin: '0 0 3px', fontSize: '12px', color: '#999', fontWeight: '600' }}>{d.icon} {d.label}</p>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{d.valor || '—'}</p>
                 </div>
               ))}
             </div>
+            {/* Botón expandir */}
+            <div style={{ borderTop: '1px solid #eef2f7' }}>
+              <button onClick={() => setExpandirFicha(prev => !prev)}
+                style={{ width: '100%', padding: '7px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: TEAL, fontWeight: '500' }}>
+                {expandirFicha ? '▲ Ocultar datos completos' : '▼ Ver datos completos'}
+              </button>
+            </div>
+            {/* Datos expandibles */}
+            {expandirFicha && (
+              <div style={{ padding: '14px 28px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', background: '#fafbfc', borderTop: '1px solid #eef2f7' }}>
+                {[
+                  { icon: '🎂', label: 'Fecha de nacimiento', valor: form.fecha_nacimiento },
+                  { icon: '🪪', label: 'Identificación', valor: form.numero_identificacion },
+                  { icon: '💼', label: 'Ocupación', valor: form.ocupacion },
+                  { icon: '📍', label: 'Dirección', valor: form.direccion },
+                  { icon: '🏙️', label: 'Ciudad', valor: form.ciudad },
+                  { icon: '🚨', label: 'Contacto emergencia', valor: form.contacto_emergencia_nombre ? `${form.contacto_emergencia_nombre} · ${form.contacto_emergencia_telefono}` : null },
+                ].map(d => (
+                  <div key={d.label}>
+                    <p style={{ margin: '0 0 3px', fontSize: '12px', color: '#999', fontWeight: '600' }}>{d.icon} {d.label}</p>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{d.valor || '—'}</p>
+                  </div>
+                ))}
+                {form.menor_de_edad && (
+                  <div style={{ gridColumn: '1 / -1', background: TEAL_LIGHT, borderRadius: '8px', padding: '10px 14px' }}>
+                    <p style={{ margin: '0 0 3px', fontSize: '12px', color: TEAL, fontWeight: '600' }}>👨‍👩‍👦 Acudiente</p>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#333' }}>
+                      {form.acudiente_nombres} {form.acudiente_apellidos} · {form.acudiente_telefono}
+                      {form.acudiente_documento ? ` · Doc: ${form.acudiente_documento}` : ''}
+                    </p>
+                  </div>
+                )}
+                {(form.discapacidad_fisica || form.condicion_aprendizaje) && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    {form.discapacidad_fisica && <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#dc2626' }}>⚠️ Presenta discapacidad física</p>}
+                    {form.condicion_aprendizaje && <p style={{ margin: 0, fontSize: '13px', color: '#555' }}>📚 {form.condicion_aprendizaje}</p>}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Confirmar borrar */}
