@@ -12,6 +12,7 @@ const MENU = [
 ]
 export default function Dashboard({ usuario }: { usuario: any }) {
   const [seccion, setSeccion] = useState('clientes')
+  const [clientesKey, setClientesKey] = useState(0)
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'sans-serif', overflow: 'hidden' }}>
       
@@ -26,20 +27,16 @@ export default function Dashboard({ usuario }: { usuario: any }) {
         padding: '24px 0'
       }}>
         <div style={{ padding: '0 24px 24px', borderBottom: '1px solid #334155' }}>
-  <img
-    src="/Logo_RubySalamanca.png"
-    alt="Ruby Salamanca"
-    style={{ width: '100%', maxWidth: '172px', display: 'block', marginBottom: '8px' }}
-  />
-  <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>
-    {usuario.email}
-  </p>
-</div>
+          <p style={{ margin: 0, fontWeight: '600', fontSize: '16px' }}>Academia de Música</p>
+          <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#94a3b8' }}>
+            {usuario.email}
+          </p>
+        </div>
         <nav style={{ flex: 1, padding: '16px 0' }}>
           {MENU.map(item => (
             <button
               key={item.id}
-              onClick={() => setSeccion(item.id)}
+              onClick={() => { setSeccion(item.id); if (item.id === 'clientes') setClientesKey(k => k + 1) }}
               style={{
                 display: 'block',
                 width: '100%',
@@ -78,7 +75,7 @@ export default function Dashboard({ usuario }: { usuario: any }) {
 
       {/* Contenido principal */}
       <div style={{ flex: 1, minWidth: 0, background: '#f8fafc', overflow: 'auto' }}>
-        {seccion === 'clientes' && <Clientes />}
+        {seccion === 'clientes' && <Clientes key={clientesKey} />}
         {seccion === 'profesores' && <Profesores />}
         {seccion === 'horarios' && <Horarios />}
         {seccion === 'reportes' && <Reportes />}
