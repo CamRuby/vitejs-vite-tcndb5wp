@@ -308,7 +308,17 @@ export default function Clientes() {
   const [modalHistorialTalleres, setModalHistorialTalleres] = useState(false)
   const [modo, setModo] = useState('lista')
   const [cargando, setCargando] = useState(false)
-  const [form, setForm] = useState({ nombre: '', telefono: '', email: '', grupo_whatsapp: '', estado: 'activo' })
+  const [form, setForm] = useState({
+    nombre: '', telefono: '', email: '', grupo_whatsapp: '', estado: 'activo',
+    nombres: '', apellidos: '',
+    fecha_nacimiento: '', numero_identificacion: '', ocupacion: '',
+    direccion: '', ciudad: '',
+    contacto_emergencia_nombre: '', contacto_emergencia_telefono: '',
+    menor_de_edad: false,
+    acudiente_nombres: '', acudiente_apellidos: '',
+    acudiente_telefono: '', acudiente_documento: '',
+    discapacidad_fisica: false, condicion_aprendizaje: ''
+  })
   const [profesores, setProfesores] = useState<any[]>([])
   const [instrumentos, setInstrumentos] = useState<any[]>([])
   const [sedes, setSedes] = useState<any[]>([])
@@ -420,7 +430,29 @@ export default function Clientes() {
 
   async function seleccionarCliente(c: any) {
     setClienteSeleccionado(c)
-    setForm({ nombre: c.nombre || '', telefono: c.telefono || '', email: c.email || '', grupo_whatsapp: c.grupo_whatsapp || '', estado: c.estado || 'activo' })
+    setForm({
+      nombre: c.nombre || '',
+      telefono: c.telefono || '',
+      email: c.email || '',
+      grupo_whatsapp: c.grupo_whatsapp || '',
+      estado: c.estado || 'activo',
+      nombres: c.nombres || '',
+      apellidos: c.apellidos || '',
+      fecha_nacimiento: c.fecha_nacimiento || '',
+      numero_identificacion: c.numero_identificacion || '',
+      ocupacion: c.ocupacion || '',
+      direccion: c.direccion || '',
+      ciudad: c.ciudad || '',
+      contacto_emergencia_nombre: c.contacto_emergencia_nombre || '',
+      contacto_emergencia_telefono: c.contacto_emergencia_telefono || '',
+      menor_de_edad: c.menor_de_edad || false,
+      acudiente_nombres: c.acudiente_nombres || '',
+      acudiente_apellidos: c.acudiente_apellidos || '',
+      acudiente_telefono: c.acudiente_telefono || '',
+      acudiente_documento: c.acudiente_documento || '',
+      discapacidad_fisica: c.discapacidad_fisica || false,
+      condicion_aprendizaje: c.condicion_aprendizaje || ''
+    })
     await cargarDatosCliente(c)
     setConfirmarBorrar(false)
     setErrorBorrar('')
@@ -429,17 +461,31 @@ export default function Clientes() {
 
   function nuevoCliente() {
     setClienteSeleccionado(null)
-    setForm({ nombre: '', telefono: '', email: '', grupo_whatsapp: '', estado: 'activo' })
+    setForm({
+      nombre: '', telefono: '', email: '', grupo_whatsapp: '', estado: 'activo',
+      nombres: '', apellidos: '',
+      fecha_nacimiento: '', numero_identificacion: '', ocupacion: '',
+      direccion: '', ciudad: '',
+      contacto_emergencia_nombre: '', contacto_emergencia_telefono: '',
+      menor_de_edad: false,
+      acudiente_nombres: '', acudiente_apellidos: '',
+      acudiente_telefono: '', acudiente_documento: '',
+      discapacidad_fisica: false, condicion_aprendizaje: ''
+    })
     setConfirmarBorrar(false)
     setErrorBorrar('')
     setModo('nuevo')
   }
 
   async function guardar() {
-    if (!form.nombre) return alert('El nombre es obligatorio')
+    if (!form.nombres.trim()) return alert('El nombre es obligatorio')
     setCargando(true)
+    const payload = {
+      ...form,
+      nombre: `${form.nombres.trim()} ${form.apellidos.trim()}`.trim()
+    }
     if (modo === 'nuevo') {
-      const { data, error } = await supabase.from('clientes').insert(form).select().single()
+      const { data, error } = await supabase.from('clientes').insert(payload).select().single()
       if (!error && data) {
         setClienteSeleccionado(data)
         await cargarDatosCliente(data)
@@ -447,7 +493,7 @@ export default function Clientes() {
         cargarVista(vistaActual)
       } else if (error) alert('Error al crear cliente: ' + error.message)
     } else {
-      const { error } = await supabase.from('clientes').update(form).eq('id', clienteSeleccionado.id)
+      const { error } = await supabase.from('clientes').update(payload).eq('id', clienteSeleccionado.id)
       if (!error) { setClienteSeleccionado({ ...clienteSeleccionado, ...form }); setModo('ver') }
       else alert('Error al actualizar: ' + error.message)
     }
