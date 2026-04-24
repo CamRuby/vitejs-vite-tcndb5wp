@@ -583,7 +583,30 @@ export default function Clientes() {
         return
       }
     }
-    await supabase.from('clientes').delete().eq('id', clienteSeleccionado.id)
+    // Borrar en cascada: inscripciones taller → clases → contratos → cliente
+    const clienteId = clienteSeleccionado.id
+
+    // 1. Borrar asistencias de talleres
+    if (ids.length > 0) {
+      const { data: inscrip } = await supabase.from('taller_inscripciones').select('id').eq('cliente_id', clienteId)
+      const inscripIds = (inscrip || []).map((i: any) => i.id)
+      if (inscripIds.length > 0) {
+        await supabase.from('taller_asistencias').delete().in('inscripcion_id', inscripIds)
+      }
+      await supabase.from('taller_inscripciones').delete().eq('cliente_id', clienteId)
+      // 2. Borrar clases
+      await supabase.from('clases').delete().in('contrato_id', ids)
+      // 3. Borrar contratos
+      await supabase.from('contratos').delete().eq('cliente_id', clienteId)
+    }
+
+    // 4. Borrar cliente
+    const { error } = await supabase.from('clientes').delete().eq('id', clienteId)
+    if (error) {
+      setErrorBorrar('Error al borrar: ' + error.message)
+      setBorrando(false)
+      return
+    }
     cargarVista(vistaActual)
     setModo('lista')
     setBusqueda('')
