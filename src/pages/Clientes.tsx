@@ -411,7 +411,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [expandirFicha, setExpandirFicha] = useState(false)
   const [filtroSede, setFiltroSede] = useState('')
   const [filtroProfesor, setFiltroProfesor] = useState('')
-  const [sedes, setSedes] = useState<any[]>([])
   const [profesoresFiltro, setProfesoresFiltro] = useState<any[]>([])
 
   useEffect(() => {
