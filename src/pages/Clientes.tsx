@@ -494,31 +494,34 @@ export default function Clientes() {
   }
 
   async function seleccionarCliente(c: any) {
-    setClienteSeleccionado(c)
+    // Siempre traer datos completos por ID para garantizar que todos los campos estén
+    const { data: completo } = await supabase.from('clientes').select('*').eq('id', c.id).single()
+    const cliente = completo || c
+    setClienteSeleccionado(cliente)
     setForm({
-      nombre: c.nombre || '',
-      telefono: c.telefono || '',
-      email: c.email || '',
-      grupo_whatsapp: c.grupo_whatsapp || '',
-      estado: c.estado || 'activo',
-      nombres: c.nombres || '',
-      apellidos: c.apellidos || '',
-      fecha_nacimiento: c.fecha_nacimiento || '',
-      numero_identificacion: c.numero_identificacion || '',
-      ocupacion: c.ocupacion || '',
-      direccion: c.direccion || '',
-      ciudad: c.ciudad || '',
-      contacto_emergencia_nombre: c.contacto_emergencia_nombre || '',
-      contacto_emergencia_telefono: c.contacto_emergencia_telefono || '',
-      menor_de_edad: c.menor_de_edad || false,
-      acudiente_nombres: c.acudiente_nombres || '',
-      acudiente_apellidos: c.acudiente_apellidos || '',
-      acudiente_telefono: c.acudiente_telefono || '',
-      acudiente_documento: c.acudiente_documento || '',
-      discapacidad_fisica: c.discapacidad_fisica || false,
-      condicion_aprendizaje: c.condicion_aprendizaje || ''
+      nombre: cliente.nombre || '',
+      telefono: cliente.telefono || '',
+      email: cliente.email || '',
+      grupo_whatsapp: cliente.grupo_whatsapp || '',
+      estado: cliente.estado || 'activo',
+      nombres: cliente.nombres || '',
+      apellidos: cliente.apellidos || '',
+      fecha_nacimiento: cliente.fecha_nacimiento || '',
+      numero_identificacion: cliente.numero_identificacion || '',
+      ocupacion: cliente.ocupacion || '',
+      direccion: cliente.direccion || '',
+      ciudad: cliente.ciudad || '',
+      contacto_emergencia_nombre: cliente.contacto_emergencia_nombre || '',
+      contacto_emergencia_telefono: cliente.contacto_emergencia_telefono || '',
+      menor_de_edad: cliente.menor_de_edad || false,
+      acudiente_nombres: cliente.acudiente_nombres || '',
+      acudiente_apellidos: cliente.acudiente_apellidos || '',
+      acudiente_telefono: cliente.acudiente_telefono || '',
+      acudiente_documento: cliente.acudiente_documento || '',
+      discapacidad_fisica: cliente.discapacidad_fisica || false,
+      condicion_aprendizaje: cliente.condicion_aprendizaje || ''
     })
-    await cargarDatosCliente(c)
+    await cargarDatosCliente(cliente)
     setConfirmarBorrar(false)
     setErrorBorrar('')
     setExpandirFicha(false)
