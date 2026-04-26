@@ -421,7 +421,7 @@ export default function Profesores() {
                 </div>
               </div>
             </div>
-          </div>
+          </div>}
 
           {/* Vista solo lectura de disponibilidad y tarifas */}
           {modo === 'ver' && (
