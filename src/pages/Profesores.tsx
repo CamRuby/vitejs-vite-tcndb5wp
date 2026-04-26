@@ -112,8 +112,11 @@ export default function Profesores() {
       setEditando(false); setModo('ver')
     } else {
       const { error } = await supabase.from('profesores').update(payload).eq('id', prof.id)
-      if (error) { setErrForm('Error: ' + error.message); setGuardando(false); return }
-      setProf({ ...prof, ...payload }); setEditando(false)
+      if (error) { setErrForm('Error al guardar: ' + error.message); setGuardando(false); return }
+      // Recargar datos frescos desde Supabase
+      const { data: fresco } = await supabase.from('profesores').select('*').eq('id', prof.id).single()
+      if (fresco) setProf(fresco)
+      setEditando(false)
     }
     await cargarProfesores()
     setGuardando(false)
@@ -208,11 +211,11 @@ export default function Profesores() {
                     style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc', cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)}
                     onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafbfc')}>
-                    <td style={{ ...tdS, color: '#aaa' }}>{i + 1}</td>
-                    <td style={{ ...tdS, fontWeight: '600', color: TEAL }}>{p.nombre}</td>
-                    <td style={tdS}>{p.ciudad || '—'}</td>
-                    <td style={tdS}>{p.telefono || '—'}</td>
-                    <td style={tdS}>{p.email || '—'}</td>
+                    <td style={{ ...tdS, color: '#aaa', textAlign: 'left' }}>{i + 1}</td>
+                    <td style={{ ...tdS, fontWeight: '600', color: TEAL, textAlign: 'left' }}>{p.nombre}</td>
+                    <td style={{ ...tdS, textAlign: 'left' }}>{p.ciudad || '—'}</td>
+                    <td style={{ ...tdS, textAlign: 'left' }}>{p.telefono || '—'}</td>
+                    <td style={{ ...tdS, textAlign: 'left' }}>{p.email || '—'}</td>
                     <td style={tdS}>
                       <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', background: p.activo !== false ? '#dcfce7' : '#fee2e2', color: p.activo !== false ? '#166534' : '#991b1b' }}>
                         {p.activo !== false ? 'Activo' : 'Inactivo'}
@@ -424,7 +427,7 @@ export default function Profesores() {
           </div>}
 
           {/* Clases del mes - solo en vista */}
-          {!editando && <>
+          {!editando && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <h3 style={{ margin: 0, fontSize: '17px', color: '#1a1a1a' }}>Clases del mes</h3>
             <input type="month" value={mes} onChange={e => setMes(e.target.value)}
@@ -454,7 +457,7 @@ export default function Profesores() {
           <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead style={{ background: TEAL_LIGHT }}>
-                <tr>{['Fecha', 'Hora', 'Cliente', 'Duración', 'Sede', 'Estado', 'Honorario', ''].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
+                <tr>{['Fecha', 'Hora', 'Cliente', 'Duración', 'Sede', 'Estado', 'Honorarios', ''].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
               </thead>
               <tbody>
                 {clases.length === 0 && <tr><td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#aaa' }}>Sin clases este mes</td></tr>}
@@ -548,8 +551,7 @@ export default function Profesores() {
               )}
             </div>
           </div>
-          </>
-          }
+          )}
         </div>
       )}
     </div>
