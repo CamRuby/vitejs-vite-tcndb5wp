@@ -13,6 +13,7 @@ const MENU = [
 export default function Dashboard({ usuario }: { usuario: any }) {
   const [seccion, setSeccion] = useState('clientes')
   const [clientesKey, setClientesKey] = useState(0)
+  const [profesoresKey, setProfesoresKey] = useState(0)
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'sans-serif', overflow: 'hidden' }}>
       
@@ -36,7 +37,7 @@ export default function Dashboard({ usuario }: { usuario: any }) {
           {MENU.map(item => (
             <button
               key={item.id}
-              onClick={() => { setSeccion(item.id); if (item.id === 'clientes') setClientesKey(k => k + 1) }}
+              onClick={() => { setSeccion(item.id); if (item.id === 'clientes') setClientesKey(k => k + 1); if (item.id === 'profesores') setProfesoresKey(k => k + 1) }}
               style={{
                 display: 'block',
                 width: '100%',
@@ -76,7 +77,7 @@ export default function Dashboard({ usuario }: { usuario: any }) {
       {/* Contenido principal */}
       <div style={{ flex: 1, minWidth: 0, background: '#f8fafc', overflow: 'auto' }}>
         {seccion === 'clientes' && <Clientes key={clientesKey} />}
-        {seccion === 'profesores' && <Profesores />}
+        {seccion === 'profesores' && <Profesores key={profesoresKey} />}
         {seccion === 'horarios' && <Horarios />}
         {seccion === 'reportes' && <Reportes />}
       </div>
