@@ -120,11 +120,12 @@ export default function Profesores() {
   }
 
   async function agregarDisp() {
-    if (!prof) return
+    if (!prof?.id) { alert('Error: no hay profesor seleccionado'); return }
     const { data, error } = await supabase.from('profesor_disponibilidad').insert({
       profesor_id: prof.id, dia_semana: nuevoDia, hora_inicio: nuevaHI + ':00', hora_fin: nuevaHF + ':00'
     }).select().single()
-    if (!error && data) setDisponibilidad(prev => [...prev, data])
+    if (error) { alert('Error al agregar: ' + error.message); return }
+    if (data) setDisponibilidad(prev => [...prev, data])
   }
 
   async function borrarDisp(id: string) {
@@ -133,13 +134,15 @@ export default function Profesores() {
   }
 
   async function agregarTarifa() {
-    if (!prof || !ntValor) return
+    if (!prof?.id) { alert('Error: no hay profesor seleccionado'); return }
+    if (!ntValor) { alert('Ingresa un valor'); return }
     const { data, error } = await supabase.from('profesor_tarifas').insert({
       profesor_id: prof.id, ciudad: ntCiudad,
       duracion_min: ntTaller ? null : ntDuracion,
       taller_grupal: ntTaller, valor: Number(ntValor)
     }).select().single()
-    if (!error && data) { setTarifas(prev => [...prev, data]); setNtValor('') }
+    if (error) { alert('Error al agregar: ' + error.message); return }
+    if (data) { setTarifas(prev => [...prev, data]); setNtValor('') }
   }
 
   async function borrarTarifa(id: string) {
@@ -329,8 +332,8 @@ export default function Profesores() {
             )}
           </div>
 
-          {/* Disponibilidad y tarifas */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+          {/* Disponibilidad y tarifas - solo en edicion */}
+          {editando && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
             {/* Disponibilidad */}
             <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
               <div style={{ background: TEAL_LIGHT, padding: '12px 18px', borderBottom: '1px solid #eef2f7' }}>
@@ -420,6 +423,8 @@ export default function Profesores() {
             </div>
           </div>
 
+          }
+
           {/* Encabezado clases del mes */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <h3 style={{ margin: 0, fontSize: '17px', color: '#1a1a1a' }}>Clases del mes</h3>
@@ -450,7 +455,7 @@ export default function Profesores() {
           <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead style={{ background: TEAL_LIGHT }}>
-                <tr>{['Fecha', 'Hora', 'Cliente', 'Duracion', 'Sede', 'Estado', 'Honorario', ''].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
+                <tr>{['Fecha', 'Hora', 'Cliente', 'Duración', 'Sede', 'Estado', 'Honorario', ''].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
               </thead>
               <tbody>
                 {clases.length === 0 && <tr><td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#aaa' }}>Sin clases este mes</td></tr>}
