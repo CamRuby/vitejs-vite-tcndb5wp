@@ -340,7 +340,7 @@ export default function Profesores() {
                 {disponibilidad.map(d => (
                   <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', background: TEAL_LIGHT, borderRadius: '8px', marginBottom: '6px' }}>
                     <span style={{ fontSize: '13px', color: '#333', fontWeight: '500' }}>
-                      {d.dia_semana.charAt(0).toUpperCase() + d.dia_semana.slice(1)} · {d.hora_inicio?.substring(0,5)} – {d.hora_fin?.substring(0,5)}
+                      {d.dia_semana.charAt(0).toUpperCase() + d.dia_semana.slice(1)} · {d.hora_inicio?.substring(0,5)} - {d.hora_fin?.substring(0,5)}
                     </span>
                     <button onClick={() => borrarDisponibilidad(d.id)}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: '16px', padding: '0 4px' }}>×</button>
@@ -423,8 +423,6 @@ export default function Profesores() {
             </div>
           </div>
 
-          </div>}
-
           {/* Vista solo lectura de disponibilidad y tarifas */}
           {modo === 'ver' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
@@ -437,7 +435,7 @@ export default function Profesores() {
                     ? <p style={{ color: '#aaa', fontSize: '13px', margin: 0 }}>Sin franjas registradas</p>
                     : disponibilidad.map(d => (
                         <div key={d.id} style={{ padding: '7px 10px', background: TEAL_LIGHT, borderRadius: '8px', marginBottom: '6px', fontSize: '13px', color: '#333', fontWeight: '500' }}>
-                          {d.dia_semana.charAt(0).toUpperCase() + d.dia_semana.slice(1)} · {d.hora_inicio?.substring(0,5)} – {d.hora_fin?.substring(0,5)}
+                          {d.dia_semana.charAt(0).toUpperCase() + d.dia_semana.slice(1)} · {d.hora_inicio?.substring(0,5)} - {d.hora_fin?.substring(0,5)}
                         </div>
                       ))
                   }
