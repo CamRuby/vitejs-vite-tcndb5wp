@@ -61,7 +61,7 @@ export default function Profesores() {
   const [verDesglose, setVerDesglose] = useState(false)
 
   useEffect(() => { cargarProfesores() }, [])
-  useEffect(() => { if (profesorSel && modo === 'ver') cargarClases(profesorSel) }, [mesSeleccionado])
+  useEffect(() => { if (profesorSel) cargarClases(profesorSel) }, [mesSeleccionado])
 
   async function cargarProfesores() {
     setCargando(true)
@@ -84,7 +84,7 @@ export default function Profesores() {
 
     await cargarClases(completo || p)
     setCargando(false)
-    setModo('ver')
+    setModo(modo === 'nuevo' ? 'ver' : 'ver')
   }
 
   async function cargarClases(p: any) {
@@ -114,12 +114,12 @@ export default function Profesores() {
       setDisponibilidad([])
       setTarifas([])
       setClases([])
-      setModo('ver')
+      setModo(modo === 'nuevo' ? 'ver' : 'ver')
     } else {
       const { error } = await supabase.from('profesores').update(payload).eq('id', profesorSel.id)
       if (error) { setErrorForm('Error: ' + error.message); setGuardando(false); return }
       setProfesorSel({ ...profesorSel, ...payload })
-      setModo('ver')
+      setModo(modo === 'nuevo' ? 'ver' : 'ver')
     }
     await cargarProfesores()
     setGuardando(false)
@@ -244,8 +244,8 @@ export default function Profesores() {
         </div>
       )}
 
-      {/* ── FORMULARIO NUEVO / EDITAR ── */}
-      {(modo === 'nuevo' || modo === 'editar') && (
+      {/* ── FORMULARIO NUEVO ── */}
+      {modo === 'nuevo' && (
         <div style={{ flex: 1, overflow: 'auto' }}>
           <button onClick={() => setModo(modo === 'nuevo' ? 'lista' : 'ver')}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: TEAL, fontSize: '14px', marginBottom: '16px', padding: 0, fontWeight: '500' }}>
@@ -288,7 +288,7 @@ export default function Profesores() {
                   style={{ padding: '11px 28px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
                   {guardando ? 'Guardando...' : 'Guardar'}
                 </button>
-                <button onClick={() => setModo(modo === 'nuevo' ? 'lista' : 'ver')}
+                <button onClick={() => setModo('lista')}
                   style={{ padding: '11px 28px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px' }}>
                   Cancelar
                 </button>
@@ -298,8 +298,8 @@ export default function Profesores() {
         </div>
       )}
 
-      {/* ── VER PROFESOR ── */}
-      {modo === 'ver' && profesorSel && (
+      {/* ── VER / EDITAR PROFESOR ── */}
+      {(modo === 'ver' || modo === 'editar') && profesorSel && (
         <div style={{ flex: 1, overflow: 'auto' }}>
           <button onClick={() => { setProfesorSel(null); setModo('lista') }}
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: TEAL, fontSize: '14px', marginBottom: '16px', padding: 0, fontWeight: '500' }}>
@@ -327,7 +327,8 @@ export default function Profesores() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+          {/* Disponibilidad y Tarifas solo en modo editar */}
+          {modo === 'editar' && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
 
             {/* Disponibilidad */}
             <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
@@ -421,6 +422,45 @@ export default function Profesores() {
               </div>
             </div>
           </div>
+
+          </div>}
+
+          {/* Vista solo lectura de disponibilidad y tarifas */}
+          {modo === 'ver' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+              <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
+                <div style={{ background: TEAL_LIGHT, padding: '14px 20px', borderBottom: '1px solid #eef2f7' }}>
+                  <p style={{ margin: 0, fontWeight: '700', fontSize: '14px', color: TEAL }}>📅 Disponibilidad semanal</p>
+                </div>
+                <div style={{ padding: '16px 20px' }}>
+                  {disponibilidad.length === 0
+                    ? <p style={{ color: '#aaa', fontSize: '13px', margin: 0 }}>Sin franjas registradas</p>
+                    : disponibilidad.map(d => (
+                        <div key={d.id} style={{ padding: '7px 10px', background: TEAL_LIGHT, borderRadius: '8px', marginBottom: '6px', fontSize: '13px', color: '#333', fontWeight: '500' }}>
+                          {d.dia_semana.charAt(0).toUpperCase() + d.dia_semana.slice(1)} · {d.hora_inicio?.substring(0,5)} – {d.hora_fin?.substring(0,5)}
+                        </div>
+                      ))
+                  }
+                </div>
+              </div>
+              <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
+                <div style={{ background: TEAL_LIGHT, padding: '14px 20px', borderBottom: '1px solid #eef2f7' }}>
+                  <p style={{ margin: 0, fontWeight: '700', fontSize: '14px', color: TEAL }}>💰 Tarifas de honorarios</p>
+                </div>
+                <div style={{ padding: '16px 20px' }}>
+                  {tarifas.length === 0
+                    ? <p style={{ color: '#aaa', fontSize: '13px', margin: 0 }}>Sin tarifas registradas</p>
+                    : tarifas.map(t => (
+                        <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 10px', background: '#fafbfc', borderRadius: '8px', marginBottom: '6px', border: '1px solid #f1f5f9' }}>
+                          <span style={{ fontSize: '13px', color: '#333' }}>{t.ciudad} · {t.taller_grupal ? 'Taller grupal' : `${t.duracion_min} min`}</span>
+                          <span style={{ fontSize: '14px', fontWeight: '700', color: TEAL }}>${Number(t.valor).toLocaleString()}</span>
+                        </div>
+                      ))
+                  }
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Honorarios del mes */}
           <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden', marginBottom: '24px' }}>
