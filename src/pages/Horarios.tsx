@@ -1468,16 +1468,19 @@ export default function Horarios() {
                         const col2 = getColorEstado(est)
                         return (
                           <button key={est} onClick={() => {
-                            if (est === 'dada' && editEstado !== 'dada') {
+                            if (est === 'confirmada' && editEstado !== 'confirmada') {
                               const tomadas = claseEditando.contratos?.clases_tomadas ?? 0
                               const total = claseEditando.contratos?.total_clases ?? 0
                               if (total > 0 && tomadas >= total) {
                                 setPlanCompleto(true)
                                 setConfirmarDada(false)
                               } else {
-                                setConfirmarDada(true)
+                                setEditEstado('confirmada')
                                 setPlanCompleto(false)
                               }
+                            } else if (est === 'dada' && editEstado !== 'dada') {
+                              setConfirmarDada(true)
+                              setPlanCompleto(false)
                             } else {
                               setEditEstado(est)
                               setConfirmarDada(false)
@@ -1493,14 +1496,14 @@ export default function Horarios() {
                       })}
                     </div>
 
-                    {/* Plan completo — bloqueo */}
+                    {/* Plan completo — bloqueo al confirmar */}
                     {planCompleto && (
                       <div style={{ marginTop: '10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px' }}>
                         <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#991b1b', fontWeight: '700' }}>
                           🚫 El plan está completo ({claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases)
                         </p>
                         <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#666' }}>
-                          No es posible marcar esta clase como dada. Renueva el plan del cliente para continuar.
+                          No es posible confirmar esta clase. Renueva el plan del cliente para continuar.
                         </p>
                         <button onClick={() => setPlanCompleto(false)} style={{
                           padding: '6px 14px', background: 'white', color: '#333',
