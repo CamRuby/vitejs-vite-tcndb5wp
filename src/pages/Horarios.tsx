@@ -252,8 +252,8 @@ export default function Horarios() {
     const { data } = await supabase
       .from('clases')
       .select(`
-        id, fecha, hora, duracion_min, estado, patron_id, recurrente, revision_pendiente,
-        contratos (id, clases_tomadas, total_clases, clientes (id, nombre), instrumentos (nombre)),
+        id, fecha, hora, duracion_min, estado, patron_id, recurrente, revision_pendiente, numero_en_plan,
+        contratos (id, clases_tomadas, total_clases, sede_id, clientes (id, nombre), instrumentos (nombre)),
         profesores (id, nombre),
         salones (id, nombre, sede_id)
       `)
@@ -684,10 +684,17 @@ export default function Horarios() {
       return
     }
 
-    // Si se marca como dada, sumar 1 a clases_tomadas
+    // Si se marca como dada, sumar 1 a clases_tomadas y auto-completar el plan si llegó al límite
+    let numeroPlan: number | undefined = undefined
     if (editEstado === 'dada' && claseEditando.estado !== 'dada' && claseEditando.contratos?.id) {
       const clasesTomadas = (claseEditando.contratos?.clases_tomadas || 0) + 1
-      await supabase.from('contratos').update({ clases_tomadas: clasesTomadas }).eq('id', claseEditando.contratos.id)
+      numeroPlan = clasesTomadas
+      const totalClases = claseEditando.contratos?.total_clases || 0
+      const updateData: any = { clases_tomadas: clasesTomadas }
+      if (totalClases > 0 && clasesTomadas >= totalClases) {
+        updateData.estado = 'completado'
+      }
+      await supabase.from('contratos').update(updateData).eq('id', claseEditando.contratos.id)
     }
 
     if (alcance === 'futuras' && claseEditando.patron_id) {
@@ -713,7 +720,7 @@ export default function Horarios() {
     } else {
       const { error } = await supabase
         .from('clases')
-        .update({ hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha })
+        .update({ hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha, ...(numeroPlan !== undefined ? { numero_en_plan: numeroPlan } : {}) })
         .eq('id', claseEditando.id)
 
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
@@ -978,7 +985,9 @@ export default function Horarios() {
                       {mainClass && !taller && (() => {
                         const col2 = getColorEstado(mainClass.estado, mainClass.revision_pendiente)
                         const numPlan = mainClass.contratos?.total_clases
-                          ? `${mainClass.contratos.clases_tomadas ?? '?'}/${mainClass.contratos.total_clases}`
+                          ? mainClass.estado === 'dada' && mainClass.numero_en_plan
+                            ? `${mainClass.numero_en_plan}/${mainClass.contratos.total_clases}`
+                            : `${mainClass.contratos.clases_tomadas ?? '?'}/${mainClass.contratos.total_clases}`
                           : ''
                         return (
                           <div onClick={(e) => abrirClaseExistente(e, mainClass)} title="Clic para editar"
@@ -1454,6 +1463,12 @@ export default function Horarios() {
                 <div><strong>Cliente:</strong> {claseEditando.contratos?.clientes?.nombre}</div>
                 <div><strong>Instrumento:</strong> {claseEditando.contratos?.instrumentos?.nombre}</div>
                 <div><strong>Plan:</strong> {claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases</div>
+                <div><strong>Sede del plan:</strong> {sedes.find(s => s.id === claseEditando.contratos?.sede_id)?.nombre || '—'}</div>
+                {claseEditando.contratos?.sede_id && claseEditando.salones?.sede_id && claseEditando.contratos.sede_id !== claseEditando.salones.sede_id && (
+                  <div style={{ marginTop: '8px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '8px 10px', color: '#c2410c', fontWeight: '600', fontSize: '12px' }}>
+                    ⚠️ El salón pertenece a <strong>{sedes.find(s => s.id === claseEditando.salones?.sede_id)?.nombre || 'otra sede'}</strong>, pero el plan es de <strong>{sedes.find(s => s.id === claseEditando.contratos?.sede_id)?.nombre || 'otra sede'}</strong>
+                  </div>
+                )}
                 {claseEditando.recurrente && <div style={{ marginTop: '6px', color: TEAL, fontWeight: '600', fontSize: '12px' }}>🔁 Clase recurrente</div>}
                 {esBloqueada(claseEditando) && <div style={{ marginTop: '6px', color: '#854d0e', fontWeight: '600', fontSize: '12px' }}>🔒 No se puede editar — solo borrar si es necesario</div>}
               </div>
@@ -1479,6 +1494,10 @@ export default function Horarios() {
                                 setPlanCompleto(false)
                               }
                             } else if (est === 'dada' && editEstado !== 'dada') {
+                              if (editEstado !== 'confirmada') {
+                                setEditError('La clase debe estar Confirmada antes de marcarla como Dada')
+                                return
+                              }
                               setConfirmarDada(true)
                               setPlanCompleto(false)
                             } else {
