@@ -123,6 +123,7 @@ export default function Horarios() {
   const [recurrente, setRecurrente] = useState(false)
   const [fechaFinRecurrencia, setFechaFinRecurrencia] = useState(`${new Date().getFullYear()}-12-31`)
   const [avisoCrear, setAvisoCrear] = useState<string[]>([])
+  const [confirmarSedeDiferente, setConfirmarSedeDiferente] = useState(false)
 
   // Taller nuevo
   const [tallerNombre, setTallerNombre] = useState('')
@@ -434,6 +435,7 @@ export default function Horarios() {
     setFechaFinRecurrencia(`${new Date().getFullYear()}-12-31`)
     setError('')
     setAvisoCrear([])
+    setConfirmarSedeDiferente(false)
     setTallerNombre('')
     setTallerProfesorId('')
     setTallerDuracion('60')
@@ -607,6 +609,15 @@ export default function Horarios() {
     if (!clienteSeleccionado) { setError('Selecciona un cliente'); return }
     if (!contratoSeleccionado) { setError('Selecciona un plan'); return }
     if (!profesorId) { setError('Selecciona un profesor'); return }
+
+    // Si sede del plan ≠ sede del salón y el usuario aún no confirmó → mostrar aviso
+    const sedePlan = (contratoSeleccionado as any)?.sede_id
+    const sedeSalon = slotSeleccionado?.salon?.sede_id
+    if (sedePlan && sedeSalon && sedePlan !== sedeSalon && !confirmarSedeDiferente) {
+      setConfirmarSedeDiferente(true)
+      return
+    }
+
     setGuardando(true)
     setError('')
 
@@ -1101,7 +1112,7 @@ export default function Horarios() {
                   {contratos.length > 0 && (
                     <div style={{ marginBottom: '14px' }}>
                       <label style={labelStyle}>Plan</label>
-                      <select value={(contratoSeleccionado as any)?.id || ''} onChange={e => seleccionarContrato(e.target.value)} style={fieldStyle}>
+                      <select value={(contratoSeleccionado as any)?.id || ''} onChange={e => { seleccionarContrato(e.target.value); setConfirmarSedeDiferente(false) }} style={fieldStyle}>
                         {contratos.map((ct: any) => {
                           const sedePlan = sedes.find(s => s.id === ct.sede_id)?.nombre || '?'
                           return (
@@ -1111,18 +1122,6 @@ export default function Horarios() {
                           )
                         })}
                       </select>
-                      {/* Advertencia sede diferente */}
-                      {contratoSeleccionado?.sede_id && slotSeleccionado?.salon?.sede_id &&
-                       contratoSeleccionado.sede_id !== slotSeleccionado.salon.sede_id && (
-                        <div style={{ marginTop: '8px', background: '#fff7ed', border: '1px solid #f97316', borderRadius: '8px', padding: '10px 12px' }}>
-                          <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#c2410c' }}>
-                            ⚠️ Sede diferente
-                          </p>
-                          <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#9a3412' }}>
-                            El plan pertenece a <strong>{sedes.find(s => s.id === contratoSeleccionado.sede_id)?.nombre}</strong>, pero estás creando la clase en <strong>{slotSeleccionado.salon.nombre}</strong> ({sedes.find(s => s.id === slotSeleccionado.salon.sede_id)?.nombre || 'otra sede'}).
-                          </p>
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -1196,6 +1195,29 @@ export default function Horarios() {
                   </div>
 
                   {error && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{error}</p>}
+
+                  {/* Panel confirmación sede diferente */}
+                  {confirmarSedeDiferente && (
+                    <div style={{ background: '#fff7ed', border: '2px solid #f97316', borderRadius: '10px', padding: '14px', marginBottom: '14px' }}>
+                      <p style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: '700', color: '#c2410c' }}>
+                        ⚠️ Sede diferente
+                      </p>
+                      <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#9a3412' }}>
+                        El plan es de <strong>{sedes.find(s => s.id === (contratoSeleccionado as any)?.sede_id)?.nombre}</strong>, pero el salón está en <strong>{sedes.find(s => s.id === slotSeleccionado?.salon?.sede_id)?.nombre || 'otra sede'}</strong>.
+                        ¿Deseas crear la clase de todas formas?
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={guardarClase} disabled={guardando} style={{
+                          flex: 1, padding: '9px', background: '#c2410c', color: 'white',
+                          border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600'
+                        }}>Crear de todas formas</button>
+                        <button onClick={() => setConfirmarSedeDiferente(false)} style={{
+                          padding: '9px 16px', background: 'white', color: '#333',
+                          border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px'
+                        }}>Cancelar</button>
+                      </div>
+                    </div>
+                  )}
 
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button onClick={guardarClase} disabled={guardando} style={{
