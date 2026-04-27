@@ -4,7 +4,6 @@ import { supabase } from '../supabase'
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
-
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
 const DURACIONES = [30, 45, 60, 90]
 const CIUDADES = ['Bogotá', 'Tunja']
@@ -17,9 +16,9 @@ const HORAS = Array.from({ length: 29 }, (_, i) => {
 const fS: React.CSSProperties = { width: '100%', padding: '9px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }
 const lS: React.CSSProperties = { display: 'block', fontWeight: '500', fontSize: '13px', marginBottom: '5px', color: '#555' }
 const thS: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }
-const tdS: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#333' }
+const tdS: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#333', textAlign: 'left' }
 
-function colorEstado(e: string) {
+function colEstado(e: string) {
   if (e === 'dada') return { bg: '#fefce8', color: '#854d0e' }
   if (e === 'cancelada') return { bg: '#fee2e2', color: '#991b1b' }
   if (e === 'confirmada') return { bg: '#dcfce7', color: '#166534' }
@@ -39,24 +38,23 @@ export default function Profesores() {
   const [errForm, setErrForm] = useState('')
 
   const [disponibilidad, setDisponibilidad] = useState<any[]>([])
-  const [nuevoDia, setNuevoDia] = useState('lunes')
-  const [nuevaHI, setNuevaHI] = useState('08:00')
-  const [nuevaHF, setNuevaHF] = useState('12:00')
+  const [nDia, setNDia] = useState('lunes')
+  const [nHI, setNHI] = useState('08:00')
+  const [nHF, setNHF] = useState('12:00')
 
   const [tarifas, setTarifas] = useState<any[]>([])
-  const [ntCiudad, setNtCiudad] = useState('Bogotá')
-  const [ntDuracion, setNtDuracion] = useState(60)
-  const [ntTaller, setNtTaller] = useState(false)
-  const [ntValor, setNtValor] = useState('')
+  const [tCiudad, setTCiudad] = useState('Bogotá')
+  const [tDur, setTDur] = useState(60)
+  const [tTaller, setTTaller] = useState(false)
+  const [tValor, setTValor] = useState('')
 
   const [clases, setClases] = useState<any[]>([])
   const [mes, setMes] = useState(() => {
     const h = new Date()
     return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`
   })
-
   const [claseModal, setClaseModal] = useState<any>(null)
-  const [editHonorario, setEditHonorario] = useState('')
+  const [editHon, setEditHon] = useState('')
   const [guardandoH, setGuardandoH] = useState(false)
 
   useEffect(() => { cargarProfesores() }, [])
@@ -71,15 +69,15 @@ export default function Profesores() {
 
   async function seleccionar(p: any) {
     setCargando(true)
-    const { data: completo } = await supabase.from('profesores').select('*').eq('id', p.id).single()
-    const profesor = completo || p
-    setProf(profesor)
-    setForm({ nombre: profesor.nombre || '', telefono: profesor.telefono || '', email: profesor.email || '', ciudad: profesor.ciudad || 'Bogotá', activo: profesor.activo !== false })
-    const { data: disp } = await supabase.from('profesor_disponibilidad').select('*').eq('profesor_id', p.id).order('dia_semana')
-    setDisponibilidad(disp || [])
-    const { data: tar } = await supabase.from('profesor_tarifas').select('*').eq('profesor_id', p.id).order('ciudad').order('duracion_min')
-    setTarifas(tar || [])
-    await cargarClases(profesor)
+    const { data: c } = await supabase.from('profesores').select('*').eq('id', p.id).single()
+    const pr = c || p
+    setProf(pr)
+    setForm({ nombre: pr.nombre || '', telefono: pr.telefono || '', email: pr.email || '', ciudad: pr.ciudad || 'Bogotá', activo: pr.activo !== false })
+    const { data: d } = await supabase.from('profesor_disponibilidad').select('*').eq('profesor_id', p.id).order('dia_semana')
+    setDisponibilidad(d || [])
+    const { data: t } = await supabase.from('profesor_tarifas').select('*').eq('profesor_id', p.id).order('ciudad').order('duracion_min')
+    setTarifas(t || [])
+    await cargarClases(pr)
     setEditando(false)
     setErrForm('')
     setCargando(false)
@@ -87,16 +85,16 @@ export default function Profesores() {
   }
 
   async function cargarClases(p: any) {
-    const fechaInicio = `${mes}-01`
+    const fi = `${mes}-01`
     const [a, m] = mes.split('-')
-    const ultimo = new Date(parseInt(a), parseInt(m), 0).getDate()
-    const fechaFin = `${mes}-${ultimo}`
+    const ul = new Date(parseInt(a), parseInt(m), 0).getDate()
+    const ff = `${mes}-${ul}`
     const { data } = await supabase
       .from('clases')
       .select('id, fecha, hora, duracion_min, estado, revision_pendiente, observaciones, honorario_valor, contratos(clientes(nombre), instrumentos(nombre)), salones(nombre, sedes(nombre))')
       .eq('profesor_id', p.id)
-      .gte('fecha', fechaInicio)
-      .lte('fecha', fechaFin)
+      .gte('fecha', fi)
+      .lte('fecha', ff)
       .order('fecha', { ascending: false })
     setClases(data || [])
   }
@@ -112,8 +110,7 @@ export default function Profesores() {
       setEditando(false); setModo('ver')
     } else {
       const { error } = await supabase.from('profesores').update(payload).eq('id', prof.id)
-      if (error) { setErrForm('Error al guardar: ' + error.message); setGuardando(false); return }
-      // Recargar datos frescos desde Supabase
+      if (error) { setErrForm('Error: ' + error.message); setGuardando(false); return }
       const { data: fresco } = await supabase.from('profesores').select('*').eq('id', prof.id).single()
       if (fresco) setProf(fresco)
       setEditando(false)
@@ -123,11 +120,11 @@ export default function Profesores() {
   }
 
   async function agregarDisp() {
-    if (!prof?.id) { alert('Error: no hay profesor seleccionado'); return }
-    const { data, error } = await supabase.from('profesor_disponibilidad').insert({
-      profesor_id: prof.id, dia_semana: nuevoDia, hora_inicio: nuevaHI + ':00', hora_fin: nuevaHF + ':00'
-    }).select().single()
-    if (error) { alert('Error al agregar: ' + error.message); return }
+    if (!prof?.id) { alert('Sin profesor seleccionado'); return }
+    const { data, error } = await supabase.from('profesor_disponibilidad')
+      .insert({ profesor_id: prof.id, dia_semana: nDia, hora_inicio: nHI + ':00', hora_fin: nHF + ':00' })
+      .select().single()
+    if (error) { alert('Error: ' + error.message); return }
     if (data) setDisponibilidad(prev => [...prev, data])
   }
 
@@ -137,15 +134,13 @@ export default function Profesores() {
   }
 
   async function agregarTarifa() {
-    if (!prof?.id) { alert('Error: no hay profesor seleccionado'); return }
-    if (!ntValor) { alert('Ingresa un valor'); return }
-    const { data, error } = await supabase.from('profesor_tarifas').insert({
-      profesor_id: prof.id, ciudad: ntCiudad,
-      duracion_min: ntTaller ? null : ntDuracion,
-      taller_grupal: ntTaller, valor: Number(ntValor)
-    }).select().single()
-    if (error) { alert('Error al agregar: ' + error.message); return }
-    if (data) { setTarifas(prev => [...prev, data]); setNtValor('') }
+    if (!prof?.id) { alert('Sin profesor seleccionado'); return }
+    if (!tValor) { alert('Ingresa un valor'); return }
+    const { data, error } = await supabase.from('profesor_tarifas')
+      .insert({ profesor_id: prof.id, ciudad: tCiudad, duracion_min: tTaller ? null : tDur, taller_grupal: tTaller, valor: Number(tValor) })
+      .select().single()
+    if (error) { alert('Error: ' + error.message); return }
+    if (data) { setTarifas(prev => [...prev, data]); setTValor('') }
   }
 
   async function borrarTarifa(id: string) {
@@ -156,32 +151,34 @@ export default function Profesores() {
   async function guardarHonorario() {
     if (!claseModal) return
     setGuardandoH(true)
-    await supabase.from('clases').update({ honorario_valor: Number(editHonorario) }).eq('id', claseModal.id)
-    setClases(prev => prev.map(c => c.id === claseModal.id ? { ...c, honorario_valor: Number(editHonorario) } : c))
+    await supabase.from('clases').update({ honorario_valor: Number(editHon) }).eq('id', claseModal.id)
+    setClases(prev => prev.map(c => c.id === claseModal.id ? { ...c, honorario_valor: Number(editHon) } : c))
     setClaseModal(null)
     setGuardandoH(false)
   }
 
-  function getHonorario(c: any) {
+  function getHon(c: any) {
     if (c.honorario_valor !== null && c.honorario_valor !== undefined) return Number(c.honorario_valor)
     const sede = c.salones?.sedes?.nombre || ''
     const ciudad = sede.toLowerCase().includes('tunja') ? 'Tunja' : 'Bogotá'
-    const t = tarifas.find(t => t.ciudad === ciudad && t.duracion_min === c.duracion_min && !t.taller_grupal)
+    const t = tarifas.find(x => x.ciudad === ciudad && x.duracion_min === c.duracion_min && !x.taller_grupal)
     return t?.valor || 0
   }
 
-  const clasesDadas = clases.filter(c => c.estado === 'dada')
-  const totalHonorarios = clasesDadas.reduce((sum, c) => sum + getHonorario(c), 0)
-  const contadores = {
+  const dadas = clases.filter(c => c.estado === 'dada')
+  const totalHon = dadas.reduce((s, c) => s + getHon(c), 0)
+  const cnt = {
     programada: clases.filter(c => c.estado === 'programada').length,
     confirmada: clases.filter(c => c.estado === 'confirmada').length,
     dada: clases.filter(c => c.estado === 'dada').length,
     cancelada: clases.filter(c => c.estado === 'cancelada').length,
   }
 
+  // ─────────────────────────────────────────
   return (
     <div style={{ padding: '24px 32px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
 
+      {/* Encabezado */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: '26px', color: '#1a1a1a' }}>Profesores</h2>
@@ -195,14 +192,14 @@ export default function Profesores() {
         )}
       </div>
 
-      {/* LISTA */}
+      {/* ── LISTA ── */}
       {modo === 'lista' && (
         <div style={{ flex: 1, overflow: 'auto' }}>
           {cargando && <p style={{ textAlign: 'center', color: '#666' }}>Cargando...</p>}
           <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead style={{ background: TEAL_LIGHT }}>
-                <tr>{['#', 'Nombre', 'Ciudad', 'Telefono', 'Correo', 'Estado'].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
+                <tr>{['#', 'Nombre', 'Ciudad', 'Teléfono', 'Correo', 'Estado'].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
               </thead>
               <tbody>
                 {profesores.length === 0 && <tr><td colSpan={6} style={{ padding: '32px', textAlign: 'center', color: '#aaa' }}>Sin profesores</td></tr>}
@@ -211,11 +208,11 @@ export default function Profesores() {
                     style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc', cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)}
                     onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafbfc')}>
-                    <td style={{ ...tdS, color: '#aaa', textAlign: 'left' }}>{i + 1}</td>
-                    <td style={{ ...tdS, fontWeight: '600', color: TEAL, textAlign: 'left' }}>{p.nombre}</td>
-                    <td style={{ ...tdS, textAlign: 'left' }}>{p.ciudad || '—'}</td>
-                    <td style={{ ...tdS, textAlign: 'left' }}>{p.telefono || '—'}</td>
-                    <td style={{ ...tdS, textAlign: 'left' }}>{p.email || '—'}</td>
+                    <td style={{ ...tdS, color: '#aaa' }}>{i + 1}</td>
+                    <td style={{ ...tdS, fontWeight: '600', color: TEAL }}>{p.nombre}</td>
+                    <td style={tdS}>{p.ciudad || '—'}</td>
+                    <td style={tdS}>{p.telefono || '—'}</td>
+                    <td style={tdS}>{p.email || '—'}</td>
                     <td style={tdS}>
                       <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', background: p.activo !== false ? '#dcfce7' : '#fee2e2', color: p.activo !== false ? '#166534' : '#991b1b' }}>
                         {p.activo !== false ? 'Activo' : 'Inactivo'}
@@ -229,12 +226,10 @@ export default function Profesores() {
         </div>
       )}
 
-      {/* NUEVO */}
+      {/* ── NUEVO ── */}
       {modo === 'nuevo' && (
         <div style={{ flex: 1, overflow: 'auto' }}>
-          <button onClick={() => setModo('lista')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: TEAL, fontSize: '14px', marginBottom: '16px', padding: 0, fontWeight: '500' }}>
-            ← Volver
-          </button>
+          <button onClick={() => setModo('lista')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: TEAL, fontSize: '14px', marginBottom: '16px', padding: 0, fontWeight: '500' }}>← Volver</button>
           <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.08)', maxWidth: '700px' }}>
             <div style={{ background: TEAL, padding: '20px 28px' }}>
               <h3 style={{ margin: 0, color: 'white', fontSize: '20px' }}>Nuevo profesor</h3>
@@ -244,7 +239,7 @@ export default function Profesores() {
                 <label style={lS}>Nombre completo *</label>
                 <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} style={fS} />
               </div>
-              <div><label style={lS}>Telefono</label><input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={fS} /></div>
+              <div><label style={lS}>Teléfono</label><input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={fS} /></div>
               <div><label style={lS}>Correo</label><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={fS} /></div>
               <div>
                 <label style={lS}>Ciudad</label>
@@ -265,16 +260,14 @@ export default function Profesores() {
                 <button onClick={guardar} disabled={guardando} style={{ padding: '11px 28px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
                   {guardando ? 'Guardando...' : 'Guardar'}
                 </button>
-                <button onClick={() => setModo('lista')} style={{ padding: '11px 28px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px' }}>
-                  Cancelar
-                </button>
+                <button onClick={() => setModo('lista')} style={{ padding: '11px 28px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px' }}>Cancelar</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* VER PROFESOR */}
+      {/* ── VER PROFESOR ── */}
       {modo === 'ver' && prof && (
         <div style={{ flex: 1, overflow: 'auto' }}>
           <button onClick={() => { setProf(null); setModo('lista') }}
@@ -290,16 +283,14 @@ export default function Profesores() {
                   {prof.nombre?.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, color: 'white', fontSize: '19px' }}>{editando ? form.nombre || prof.nombre : prof.nombre}</h3>
+                  <h3 style={{ margin: 0, color: 'white', fontSize: '19px' }}>{prof.nombre}</h3>
                   <p style={{ margin: '3px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
                     {prof.ciudad || '—'} · {prof.telefono || '—'} · {prof.email || '—'}
                   </p>
                 </div>
               </div>
               {!editando
-                ? <button onClick={() => setEditando(true)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px' }}>
-                    ✏️ Editar
-                  </button>
+                ? <button onClick={() => setEditando(true)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px' }}>✏️ Editar</button>
                 : <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={guardar} disabled={guardando} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', color: TEAL, borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
                       {guardando ? '...' : '✓ Guardar'}
@@ -311,10 +302,12 @@ export default function Profesores() {
                   </div>
               }
             </div>
+
+            {/* Datos editables */}
             {editando && (
               <div style={{ padding: '18px 24px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '14px' }}>
                 <div><label style={lS}>Nombre *</label><input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} style={fS} /></div>
-                <div><label style={lS}>Telefono</label><input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={fS} /></div>
+                <div><label style={lS}>Teléfono</label><input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={fS} /></div>
                 <div><label style={lS}>Correo</label><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={fS} /></div>
                 <div>
                   <label style={lS}>Ciudad</label>
@@ -335,40 +328,41 @@ export default function Profesores() {
             )}
           </div>
 
-          {/* Disponibilidad y tarifas - solo en edicion */}
-          {editando && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
-            {/* Disponibilidad */}
-            <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
-              <div style={{ background: TEAL_LIGHT, padding: '12px 18px', borderBottom: '1px solid #eef2f7' }}>
-                <p style={{ margin: 0, fontWeight: '700', fontSize: '13px', color: TEAL }}>Disponibilidad semanal</p>
-              </div>
-              <div style={{ padding: '14px 18px' }}>
-                {disponibilidad.length === 0 && <p style={{ color: '#aaa', fontSize: '13px', margin: '0 0 10px' }}>Sin franjas registradas</p>}
-                {disponibilidad.map(d => (
-                  <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: TEAL_LIGHT, borderRadius: '8px', marginBottom: '5px' }}>
-                    <span style={{ fontSize: '13px', color: '#333', fontWeight: '500' }}>
-                      {d.dia_semana.charAt(0).toUpperCase() + d.dia_semana.slice(1)} {d.hora_inicio?.substring(0, 5)} - {d.hora_fin?.substring(0, 5)}
-                    </span>
-                    {editando && <button onClick={() => borrarDisp(d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: '16px' }}>x</button>}
-                  </div>
-                ))}
-                {editando && (
+          {/* Disponibilidad y Tarifas — solo en edición */}
+          {editando && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+
+              {/* Disponibilidad */}
+              <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
+                <div style={{ background: TEAL_LIGHT, padding: '12px 18px', borderBottom: '1px solid #eef2f7' }}>
+                  <p style={{ margin: 0, fontWeight: '700', fontSize: '13px', color: TEAL }}>Disponibilidad semanal</p>
+                </div>
+                <div style={{ padding: '14px 18px' }}>
+                  {disponibilidad.length === 0 && <p style={{ color: '#aaa', fontSize: '13px', margin: '0 0 10px' }}>Sin franjas registradas</p>}
+                  {disponibilidad.map(d => (
+                    <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: TEAL_LIGHT, borderRadius: '8px', marginBottom: '5px' }}>
+                      <span style={{ fontSize: '13px', color: '#333', fontWeight: '500' }}>
+                        {d.dia_semana.charAt(0).toUpperCase() + d.dia_semana.slice(1)} {d.hora_inicio?.substring(0, 5)} - {d.hora_fin?.substring(0, 5)}
+                      </span>
+                      <button onClick={() => borrarDisp(d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: '16px' }}>x</button>
+                    </div>
+                  ))}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '6px', marginTop: '10px', alignItems: 'end' }}>
                     <div>
-                      <label style={{ ...lS, fontSize: '11px' }}>Dia</label>
-                      <select value={nuevoDia} onChange={e => setNuevoDia(e.target.value)} style={{ ...fS, fontSize: '12px', padding: '6px 8px' }}>
+                      <label style={{ ...lS, fontSize: '11px' }}>Día</label>
+                      <select value={nDia} onChange={e => setNDia(e.target.value)} style={{ ...fS, fontSize: '12px', padding: '6px 8px' }}>
                         {DIAS.map(d => <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
                       </select>
                     </div>
                     <div>
                       <label style={{ ...lS, fontSize: '11px' }}>Desde</label>
-                      <select value={nuevaHI} onChange={e => setNuevaHI(e.target.value)} style={{ ...fS, fontSize: '12px', padding: '6px 8px' }}>
+                      <select value={nHI} onChange={e => setNHI(e.target.value)} style={{ ...fS, fontSize: '12px', padding: '6px 8px' }}>
                         {HORAS.map(h => <option key={h} value={h}>{h}</option>)}
                       </select>
                     </div>
                     <div>
                       <label style={{ ...lS, fontSize: '11px' }}>Hasta</label>
-                      <select value={nuevaHF} onChange={e => setNuevaHF(e.target.value)} style={{ ...fS, fontSize: '12px', padding: '6px 8px' }}>
+                      <select value={nHF} onChange={e => setNHF(e.target.value)} style={{ ...fS, fontSize: '12px', padding: '6px 8px' }}>
                         {HORAS.map(h => <option key={h} value={h}>{h}</option>)}
                       </select>
                     </div>
@@ -376,38 +370,36 @@ export default function Profesores() {
                       + Agregar
                     </button>
                   </div>
-                )}
+                </div>
               </div>
-            </div>
 
-            {/* Tarifas */}
-            <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
-              <div style={{ background: TEAL_LIGHT, padding: '12px 18px', borderBottom: '1px solid #eef2f7' }}>
-                <p style={{ margin: 0, fontWeight: '700', fontSize: '13px', color: TEAL }}>Tarifas de honorarios</p>
-              </div>
-              <div style={{ padding: '14px 18px' }}>
-                {tarifas.length === 0 && <p style={{ color: '#aaa', fontSize: '13px', margin: '0 0 10px' }}>Sin tarifas registradas</p>}
-                {tarifas.map(t => (
-                  <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: '#fafbfc', borderRadius: '8px', marginBottom: '5px', border: '1px solid #f1f5f9' }}>
-                    <span style={{ fontSize: '13px', color: '#333' }}>{t.ciudad} {t.taller_grupal ? 'Taller grupal' : `${t.duracion_min} min`}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontSize: '14px', fontWeight: '700', color: TEAL }}>${Number(t.valor).toLocaleString()}</span>
-                      {editando && <button onClick={() => borrarTarifa(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: '16px' }}>x</button>}
+              {/* Tarifas */}
+              <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
+                <div style={{ background: TEAL_LIGHT, padding: '12px 18px', borderBottom: '1px solid #eef2f7' }}>
+                  <p style={{ margin: 0, fontWeight: '700', fontSize: '13px', color: TEAL }}>Tarifas de honorarios</p>
+                </div>
+                <div style={{ padding: '14px 18px' }}>
+                  {tarifas.length === 0 && <p style={{ color: '#aaa', fontSize: '13px', margin: '0 0 10px' }}>Sin tarifas registradas</p>}
+                  {tarifas.map(t => (
+                    <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: '#fafbfc', borderRadius: '8px', marginBottom: '5px', border: '1px solid #f1f5f9' }}>
+                      <span style={{ fontSize: '13px', color: '#333' }}>{t.ciudad} · {t.taller_grupal ? 'Taller grupal' : `${t.duracion_min} min`}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '14px', fontWeight: '700', color: TEAL }}>${Number(t.valor).toLocaleString()}</span>
+                        <button onClick={() => borrarTarifa(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: '16px' }}>x</button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {editando && (
+                  ))}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '6px', marginTop: '10px', alignItems: 'end' }}>
                     <div>
                       <label style={{ ...lS, fontSize: '11px' }}>Ciudad</label>
-                      <select value={ntCiudad} onChange={e => setNtCiudad(e.target.value)} style={{ ...fS, fontSize: '12px', padding: '6px 8px' }}>
+                      <select value={tCiudad} onChange={e => setTCiudad(e.target.value)} style={{ ...fS, fontSize: '12px', padding: '6px 8px' }}>
                         {CIUDADES.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                     <div>
                       <label style={{ ...lS, fontSize: '11px' }}>Tipo</label>
-                      <select value={ntTaller ? 'taller' : String(ntDuracion)}
-                        onChange={e => { const v = e.target.value; setNtTaller(v === 'taller'); setNtDuracion(v === 'taller' ? 60 : Number(v)) }}
+                      <select value={tTaller ? 'taller' : String(tDur)}
+                        onChange={e => { const v = e.target.value; setTTaller(v === 'taller'); setTDur(v === 'taller' ? 60 : Number(v)) }}
                         style={{ ...fS, fontSize: '12px', padding: '6px 8px' }}>
                         {DURACIONES.map(d => <option key={d} value={d}>{d} min</option>)}
                         <option value="taller">Taller grupal</option>
@@ -415,82 +407,86 @@ export default function Profesores() {
                     </div>
                     <div>
                       <label style={{ ...lS, fontSize: '11px' }}>Valor ($)</label>
-                      <input type="number" value={ntValor} onChange={e => setNtValor(e.target.value)} style={{ ...fS, fontSize: '12px', padding: '6px 8px' }} placeholder="0" />
+                      <input type="number" value={tValor} onChange={e => setTValor(e.target.value)} placeholder="0" style={{ ...fS, fontSize: '12px', padding: '6px 8px' }} />
                     </div>
                     <button onClick={agregarTarifa} style={{ padding: '6px 10px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>
                       + Agregar
                     </button>
                   </div>
-                )}
+                </div>
               </div>
             </div>
-          </div>}
+          )}
 
-          {/* Clases del mes - solo en vista */}
-          {!editando && (<>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 style={{ margin: 0, fontSize: '17px', color: '#1a1a1a' }}>Clases del mes</h3>
-            <input type="month" value={mes} onChange={e => setMes(e.target.value)}
-              style={{ padding: '6px 10px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px' }} />
-          </div>
-
-          {/* Contadores */}
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
-            {[
-              { label: 'Programadas', count: contadores.programada, bg: '#eff6ff', color: '#1d4ed8' },
-              { label: 'Confirmadas', count: contadores.confirmada, bg: '#dcfce7', color: '#166534' },
-              { label: 'Dadas', count: contadores.dada, bg: '#fefce8', color: '#854d0e' },
-              { label: 'Canceladas', count: contadores.cancelada, bg: '#fee2e2', color: '#991b1b' },
-            ].map(c => (
-              <div key={c.label} style={{ background: c.bg, border: `1px solid ${c.color}33`, borderRadius: '10px', padding: '10px 18px', textAlign: 'center', minWidth: '100px' }}>
-                <p style={{ margin: 0, fontSize: '22px', fontWeight: '700', color: c.color }}>{c.count}</p>
-                <p style={{ margin: '2px 0 0', fontSize: '12px', color: c.color }}>{c.label}</p>
+          {/* Clases del mes — solo en vista (no edición) */}
+          {!editando && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ margin: 0, fontSize: '17px', color: '#1a1a1a' }}>Clases del mes</h3>
+                <input type="month" value={mes} onChange={e => setMes(e.target.value)}
+                  style={{ padding: '6px 10px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px' }} />
               </div>
-            ))}
-            <div style={{ marginLeft: 'auto', background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '10px', padding: '10px 18px', textAlign: 'center', minWidth: '140px' }}>
-              <p style={{ margin: 0, fontSize: '22px', fontWeight: '700', color: TEAL }}>${totalHonorarios.toLocaleString()}</p>
-              <p style={{ margin: '2px 0 0', fontSize: '12px', color: TEAL }}>Honorarios ({clasesDadas.length} dadas)</p>
-            </div>
-          </div>
 
-          {/* Tabla clases */}
-          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead style={{ background: TEAL_LIGHT }}>
-                <tr>{['Fecha', 'Hora', 'Cliente', 'Duración', 'Sede', 'Estado', 'Honorarios', ''].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {clases.length === 0 && <tr><td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#aaa' }}>Sin clases este mes</td></tr>}
-                {clases.map((c, i) => {
-                  const col = colorEstado(c.estado)
-                  const honorario = getHonorario(c)
-                  return (
-                    <tr key={c.id} style={{ borderTop: '1px solid #f8fafc', background: c.revision_pendiente ? '#fff7ed' : i % 2 === 0 ? 'white' : '#fafbfc' }}>
-                      <td style={tdS}>{c.fecha}</td>
-                      <td style={tdS}>{c.hora?.substring(0, 5) || '—'}</td>
-                      <td style={{ ...tdS, fontWeight: '500' }}>
-                        {c.contratos?.clientes?.nombre || '—'}
-                        {c.revision_pendiente && <span style={{ marginLeft: '6px', fontSize: '11px', background: '#fff7ed', color: '#c2410c', padding: '1px 6px', borderRadius: '10px' }}>revision pendiente</span>}
-                      </td>
-                      <td style={{ ...tdS, textAlign: 'center' }}>{c.duracion_min} min</td>
-                      <td style={tdS}>{c.salones?.sedes?.nombre || '—'}</td>
-                      <td style={tdS}><span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', background: col.bg, color: col.color }}>{c.estado}</span></td>
-                      <td style={{ ...tdS, fontWeight: '600', color: c.estado === 'dada' ? TEAL : '#aaa' }}>
-                        {c.estado === 'dada' ? `$${honorario.toLocaleString()}` : '—'}
-                        {c.honorario_valor !== null && c.honorario_valor !== undefined && <span style={{ fontSize: '10px', color: '#f59e0b', marginLeft: '4px' }}>editado</span>}
-                      </td>
-                      <td style={{ ...tdS, textAlign: 'center' }}>
-                        <button onClick={() => { setClaseModal(c); setEditHonorario(String(getHonorario(c))) }}
-                          style={{ background: 'none', border: `1px solid ${TEAL_MID}`, borderRadius: '6px', padding: '3px 10px', cursor: 'pointer', fontSize: '11px', color: TEAL }}>
-                          Ver
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+              {/* Contadores */}
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                {[
+                  { label: 'Programadas', count: cnt.programada, bg: '#eff6ff', color: '#1d4ed8' },
+                  { label: 'Confirmadas', count: cnt.confirmada, bg: '#dcfce7', color: '#166534' },
+                  { label: 'Dadas', count: cnt.dada, bg: '#fefce8', color: '#854d0e' },
+                  { label: 'Canceladas', count: cnt.cancelada, bg: '#fee2e2', color: '#991b1b' },
+                ].map(c => (
+                  <div key={c.label} style={{ background: c.bg, border: `1px solid ${c.color}33`, borderRadius: '10px', padding: '10px 18px', textAlign: 'center', minWidth: '100px' }}>
+                    <p style={{ margin: 0, fontSize: '22px', fontWeight: '700', color: c.color }}>{c.count}</p>
+                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: c.color }}>{c.label}</p>
+                  </div>
+                ))}
+                <div style={{ marginLeft: 'auto', background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '10px', padding: '10px 18px', textAlign: 'center', minWidth: '140px' }}>
+                  <p style={{ margin: 0, fontSize: '22px', fontWeight: '700', color: TEAL }}>${totalHon.toLocaleString()}</p>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: TEAL }}>Honorarios ({dadas.length} dadas)</p>
+                </div>
+              </div>
+
+              {/* Tabla */}
+              <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead style={{ background: TEAL_LIGHT }}>
+                    <tr>{['Fecha', 'Hora', 'Cliente', 'Duración', 'Sede', 'Estado', 'Honorarios', ''].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {clases.length === 0 && <tr><td colSpan={8} style={{ padding: '24px', textAlign: 'center', color: '#aaa' }}>Sin clases este mes</td></tr>}
+                    {clases.map((c, i) => {
+                      const col = colEstado(c.estado)
+                      const hon = getHon(c)
+                      return (
+                        <tr key={c.id} style={{ borderTop: '1px solid #f8fafc', background: c.revision_pendiente ? '#fff7ed' : i % 2 === 0 ? 'white' : '#fafbfc' }}>
+                          <td style={tdS}>{c.fecha}</td>
+                          <td style={tdS}>{c.hora?.substring(0, 5) || '—'}</td>
+                          <td style={{ ...tdS, fontWeight: '500' }}>
+                            {c.contratos?.clientes?.nombre || '—'}
+                            {c.revision_pendiente && <span style={{ marginLeft: '6px', fontSize: '11px', background: '#fff7ed', color: '#c2410c', padding: '1px 6px', borderRadius: '10px' }}>revisión</span>}
+                          </td>
+                          <td style={{ ...tdS, textAlign: 'center' }}>{c.duracion_min} min</td>
+                          <td style={tdS}>{c.salones?.sedes?.nombre || '—'}</td>
+                          <td style={tdS}><span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', background: col.bg, color: col.color }}>{c.estado}</span></td>
+                          <td style={{ ...tdS, fontWeight: '600', color: c.estado === 'dada' ? TEAL : '#aaa' }}>
+                            {c.estado === 'dada' ? `$${hon.toLocaleString()}` : '—'}
+                            {c.honorario_valor !== null && c.honorario_valor !== undefined && <span style={{ fontSize: '10px', color: '#f59e0b', marginLeft: '4px' }}>editado</span>}
+                          </td>
+                          <td style={{ ...tdS, textAlign: 'center' }}>
+                            <button onClick={() => { setClaseModal(c); setEditHon(String(getHon(c))) }}
+                              style={{ background: 'none', border: `1px solid ${TEAL_MID}`, borderRadius: '6px', padding: '3px 10px', cursor: 'pointer', fontSize: '11px', color: TEAL }}>
+                              Ver
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
 
@@ -502,7 +498,7 @@ export default function Profesores() {
               <div>
                 <h3 style={{ margin: 0, color: 'white', fontSize: '16px' }}>Detalle de clase</h3>
                 <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
-                  {claseModal.contratos?.clientes?.nombre} {claseModal.fecha} {claseModal.hora?.substring(0, 5)}
+                  {claseModal.contratos?.clientes?.nombre} · {claseModal.fecha} {claseModal.hora?.substring(0, 5)}
                 </p>
               </div>
               <button onClick={() => setClaseModal(null)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '5px 11px', cursor: 'pointer' }}>X</button>
@@ -510,37 +506,32 @@ export default function Profesores() {
             <div style={{ padding: '20px 22px' }}>
               <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px', marginBottom: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
                 <div><span style={{ color: '#999' }}>Instrumento: </span><strong>{claseModal.contratos?.instrumentos?.nombre || '—'}</strong></div>
-                <div><span style={{ color: '#999' }}>Duracion: </span><strong>{claseModal.duracion_min} min</strong></div>
+                <div><span style={{ color: '#999' }}>Duración: </span><strong>{claseModal.duracion_min} min</strong></div>
                 <div><span style={{ color: '#999' }}>Sede: </span><strong>{claseModal.salones?.sedes?.nombre || '—'}</strong></div>
                 <div>
                   <span style={{ color: '#999' }}>Estado: </span>
-                  <span style={{ padding: '1px 8px', borderRadius: '10px', fontWeight: '600', fontSize: '12px', background: colorEstado(claseModal.estado).bg, color: colorEstado(claseModal.estado).color }}>
+                  <span style={{ padding: '1px 8px', borderRadius: '10px', fontWeight: '600', fontSize: '12px', background: colEstado(claseModal.estado).bg, color: colEstado(claseModal.estado).color }}>
                     {claseModal.estado}
                   </span>
                 </div>
               </div>
-
               {claseModal.revision_pendiente && (
                 <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '10px 12px', marginBottom: '14px', fontSize: '13px', color: '#c2410c' }}>
-                  El estudiante no asistio - pendiente de revision
+                  El estudiante no asistió — pendiente de revisión
                 </div>
               )}
-
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ ...lS, marginBottom: '6px' }}>Observaciones del profesor</label>
                 {claseModal.observaciones
-                  ? <div style={{ background: '#fafbfc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#333', lineHeight: '1.5' }}>
-                      {claseModal.observaciones}
-                    </div>
+                  ? <div style={{ background: '#fafbfc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#333', lineHeight: '1.5' }}>{claseModal.observaciones}</div>
                   : <p style={{ color: '#aaa', fontSize: '13px', margin: 0, fontStyle: 'italic' }}>Sin observaciones</p>
                 }
               </div>
-
               {claseModal.estado === 'dada' && (
                 <div>
-                  <label style={lS}>Honorario ($)</label>
+                  <label style={lS}>Honorarios ($)</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <input type="number" value={editHonorario} onChange={e => setEditHonorario(e.target.value)} style={{ ...fS, flex: 1 }} />
+                    <input type="number" value={editHon} onChange={e => setEditHon(e.target.value)} style={{ ...fS, flex: 1 }} />
                     <button onClick={guardarHonorario} disabled={guardandoH}
                       style={{ padding: '9px 18px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
                       {guardandoH ? '...' : 'Guardar'}
@@ -551,9 +542,9 @@ export default function Profesores() {
               )}
             </div>
           </div>
-          </>)}
         </div>
       )}
+
     </div>
   )
 }
