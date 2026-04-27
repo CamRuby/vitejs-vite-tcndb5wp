@@ -732,11 +732,14 @@ export default function Horarios() {
     setProcesandoRevision(false)
   }
 
+  // ── CAMBIO 1: borrarClase ahora resta 1 al contador si la clase era "dada"
+  //             y ya NO suma incorrectamente como antes
   async function borrarClase(alcance: 'esta' | 'futuras') {
     setEditGuardando(true)
-    // Si se marca como dada, sumar 1 a clases_tomadas
-    if (editEstado === 'dada' && claseEditando.estado !== 'dada' && claseEditando.contratos?.id) {
-      const clasesTomadas = (claseEditando.contratos?.clases_tomadas || 0) + 1
+
+    // Si la clase ya estaba marcada como "dada", restar 1 al contador del plan
+    if (claseEditando.estado === 'dada' && claseEditando.contratos?.id) {
+      const clasesTomadas = Math.max(0, (claseEditando.contratos?.clases_tomadas || 0) - 1)
       await supabase.from('contratos').update({ clases_tomadas: clasesTomadas }).eq('id', claseEditando.contratos.id)
     }
 
@@ -1430,8 +1433,9 @@ export default function Horarios() {
           <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
             <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
+                {/* ── CAMBIO 2: título actualizado para clases dadas */}
                 <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>
-                  {esBloqueada(claseEditando) ? 'Ver clase (solo lectura)' : 'Editar clase'}
+                  {esBloqueada(claseEditando) ? '🔒 Clase dada' : 'Editar clase'}
                 </h3>
                 <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>{claseEditando.contratos?.clientes?.nombre}</p>
                 <p style={{ margin: '4px 0 0', color: 'white', fontSize: '18px', fontWeight: '700' }}>
@@ -1446,9 +1450,10 @@ export default function Horarios() {
                 <div><strong>Instrumento:</strong> {claseEditando.contratos?.instrumentos?.nombre}</div>
                 <div><strong>Plan:</strong> {claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases</div>
                 {claseEditando.recurrente && <div style={{ marginTop: '6px', color: TEAL, fontWeight: '600', fontSize: '12px' }}>🔁 Clase recurrente</div>}
-                {esBloqueada(claseEditando) && <div style={{ marginTop: '6px', color: '#854d0e', fontWeight: '600', fontSize: '12px' }}>🔒 Clase dada — no se puede modificar</div>}
+                {esBloqueada(claseEditando) && <div style={{ marginTop: '6px', color: '#854d0e', fontWeight: '600', fontSize: '12px' }}>🔒 No se puede editar — solo borrar si es necesario</div>}
               </div>
 
+              {/* Campos de edición — solo para clases NO dadas */}
               {!esBloqueada(claseEditando) && (
                 <>
                   <div style={{ marginBottom: '14px' }}>
@@ -1476,7 +1481,7 @@ export default function Horarios() {
                     {confirmarDada && (
                       <div style={{ marginTop: '10px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px 14px' }}>
                         <p style={{ margin: '0 0 8px', fontSize: '13px', color: '#854d0e', fontWeight: '600' }}>
-                          ⚠️ Una vez marcada como "Dada" no se podrá deshacer ni borrar.
+                          ⚠️ Una vez marcada como "Dada" no se podrá editar.
                         </p>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button onClick={() => { setEditEstado('dada'); setConfirmarDada(false) }} style={{
@@ -1577,40 +1582,47 @@ export default function Horarios() {
                       border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500', marginBottom: '10px'
                     }}>{editGuardando ? 'Guardando...' : 'Guardar cambios'}</button>
                   )}
-
-                  {!confirmarBorrar ? (
-                    <button onClick={() => setConfirmarBorrar(true)} style={{
-                      width: '100%', padding: '10px', background: 'white', color: '#dc2626',
-                      border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px'
-                    }}>Borrar clase</button>
-                  ) : (
-                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '14px' }}>
-                      <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#991b1b', fontWeight: '700' }}>¿Confirmar eliminación?</p>
-                      <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#666' }}>
-                        {claseEditando.recurrente && claseEditando.patron_id
-                          ? 'Esta clase es parte de una serie recurrente.'
-                          : `${claseEditando.contratos?.clientes?.nombre} · ${claseEditando.fecha} · ${claseEditando.hora?.substring(0, 5)}`}
-                      </p>
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        {claseEditando.recurrente && claseEditando.patron_id ? (
-                          <>
-                            <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Borrar solo esta</button>
-                            <button onClick={() => borrarClase('futuras')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#991b1b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Borrar esta y siguientes</button>
-                          </>
-                        ) : (
-                          <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>Sí, borrar clase</button>
-                        )}
-                        <button onClick={() => setConfirmarBorrar(false)} style={{ padding: '8px 14px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Cancelar</button>
-                      </div>
-                    </div>
-                  )}
                 </>
               )}
 
-              {esBloqueada(claseEditando) && (
+              {/* ── CAMBIO 3: botón Borrar siempre visible, incluso para clases dadas ── */}
+              {!confirmarBorrar ? (
+                <button onClick={() => setConfirmarBorrar(true)} style={{
+                  width: '100%', padding: '10px', background: 'white', color: '#dc2626',
+                  border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+                  marginTop: esBloqueada(claseEditando) ? '0' : '0'
+                }}>Borrar clase</button>
+              ) : (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '14px', marginTop: esBloqueada(claseEditando) ? '0' : '0' }}>
+                  <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#991b1b', fontWeight: '700' }}>¿Confirmar eliminación?</p>
+                  <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#666' }}>
+                    {claseEditando.estado === 'dada'
+                      ? `⚠️ Esta clase ya fue dada. Al borrarla, el contador del plan se ajustará de ${claseEditando.contratos?.clases_tomadas} a ${Math.max(0, (claseEditando.contratos?.clases_tomadas || 0) - 1)}.`
+                      : claseEditando.recurrente && claseEditando.patron_id
+                        ? 'Esta clase es parte de una serie recurrente.'
+                        : `${claseEditando.contratos?.clientes?.nombre} · ${claseEditando.fecha} · ${claseEditando.hora?.substring(0, 5)}`}
+                  </p>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {!esBloqueada(claseEditando) && claseEditando.recurrente && claseEditando.patron_id ? (
+                      <>
+                        <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Borrar solo esta</button>
+                        <button onClick={() => borrarClase('futuras')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#991b1b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Borrar esta y siguientes</button>
+                      </>
+                    ) : (
+                      <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+                        {editGuardando ? 'Borrando...' : 'Sí, borrar clase'}
+                      </button>
+                    )}
+                    <button onClick={() => setConfirmarBorrar(false)} style={{ padding: '8px 14px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Cancelar</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Botón cerrar — solo para clases dadas cuando NO está en confirmación */}
+              {esBloqueada(claseEditando) && !confirmarBorrar && (
                 <button onClick={() => setModalEditar(false)} style={{
                   width: '100%', padding: '11px', background: '#f1f5f9', color: '#334155',
-                  border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px'
+                  border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', marginTop: '10px'
                 }}>Cerrar</button>
               )}
             </div>
