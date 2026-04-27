@@ -109,7 +109,9 @@ export default function Profesores() {
       setProf(data); setDisponibilidad([]); setTarifas([]); setClases([])
       setEditando(false); setModo('ver')
     } else {
+     console.log('Guardando:', prof.id, payload)
       const { data: updated, error } = await supabase.from('profesores').update(payload).eq('id', prof.id).select().single()
+      console.log('Resultado:', updated, error)
       if (error) { setErrForm('Error al guardar: ' + error.message); alert('Error al guardar: ' + error.message); setGuardando(false); return }
       setProf(updated || { ...prof, ...payload })
       setEditando(false)
