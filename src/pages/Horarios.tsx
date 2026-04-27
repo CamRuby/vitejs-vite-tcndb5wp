@@ -242,7 +242,7 @@ export default function Horarios() {
   }
 
   async function cargarSalones() {
-    const { data } = await supabase.from('salones').select('id, nombre').eq('sede_id', sedeSeleccionada).order('nombre')
+    const { data } = await supabase.from('salones').select('id, nombre, sede_id').eq('sede_id', sedeSeleccionada).order('nombre')
     setSalones(data || [])
   }
 
