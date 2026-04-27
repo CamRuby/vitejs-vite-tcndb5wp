@@ -236,7 +236,7 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar,
             <div>
               <label style={labelStyle}>Duración por clase</label>
               <select value={fp.duracion_min} onChange={e => setFp({ ...fp, duracion_min: e.target.value })} style={estiloInput}>
-                {[30, 45, 60, 90].map(d => <option key={d} value={d}>{d} min</option>)}
+                {[30, 45, 60, 90, 120].map(d => <option key={d} value={d}>{d} min</option>)}
               </select>
             </div>
             <div>
