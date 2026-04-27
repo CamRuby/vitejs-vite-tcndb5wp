@@ -121,7 +121,7 @@ export default function Horarios() {
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [recurrente, setRecurrente] = useState(false)
-  const [semanasRecurrencia, setSemanasRecurrencia] = useState(4)
+  const [fechaFinRecurrencia, setFechaFinRecurrencia] = useState(`${new Date().getFullYear()}-12-31`)
   const [avisoCrear, setAvisoCrear] = useState<string[]>([])
 
   // Taller nuevo
@@ -430,7 +430,7 @@ export default function Horarios() {
     setDuracion('60')
     setProfesorId('')
     setRecurrente(false)
-    setSemanasRecurrencia(4)
+    setFechaFinRecurrencia(`${new Date().getFullYear()}-12-31`)
     setError('')
     setAvisoCrear([])
     setTallerNombre('')
@@ -608,12 +608,15 @@ export default function Horarios() {
     setGuardando(true)
     setError('')
 
-    if (recurrente && semanasRecurrencia > 1) {
+    if (recurrente) {
       const patronId = crypto.randomUUID()
       const batch: any[] = []
-      for (let i = 0; i < semanasRecurrencia; i++) {
+      const fechaFin = parseFechaLocal(fechaFinRecurrencia)
+      let i = 0
+      while (true) {
         const d = parseFechaLocal(slotSeleccionado.fecha)
         d.setDate(d.getDate() + i * 7)
+        if (d > fechaFin) break
         const fechaStr = formatFecha(d)
         const conflicto = await verificarTodos(slotSeleccionado.salon.id, profesorId, (contratoSeleccionado as any).id, fechaStr, slotSeleccionado.hora, parseInt(duracion))
         if (conflicto) {
@@ -640,6 +643,7 @@ export default function Horarios() {
           patron_id: patronId,
           recurrente: true
         })
+        i++
       }
       const { error: err } = await supabase.from('clases').insert(batch)
       if (err) setError('Error: ' + err.message)
@@ -1145,23 +1149,22 @@ export default function Horarios() {
                     </label>
                     {recurrente && (
                       <div style={{ marginTop: '10px' }}>
-                        <label style={{ ...labelStyle, marginBottom: '6px' }}>¿Cuántas semanas?</label>
-                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                          {[4, 8, 12, 16].map(n => (
-                            <button key={n} onClick={() => setSemanasRecurrencia(n)} style={{
-                              padding: '6px 12px', border: `1px solid ${semanasRecurrencia === n ? TEAL : TEAL_MID}`,
-                              borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
-                              background: semanasRecurrencia === n ? TEAL : 'white',
-                              color: semanasRecurrencia === n ? 'white' : '#333'
-                            }}>{n} sem</button>
-                          ))}
-                          <input type="number" min={2} max={52} value={semanasRecurrencia}
-                            onChange={e => setSemanasRecurrencia(parseInt(e.target.value) || 4)}
-                            style={{ width: '60px', padding: '6px 8px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px' }} />
-                        </div>
-                        <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#666' }}>
-                          Se crearán {semanasRecurrencia} clases · mismo día y hora
-                        </p>
+                        <label style={{ ...labelStyle, marginBottom: '6px' }}>Repetir hasta:</label>
+                        <input
+                          type="date"
+                          value={fechaFinRecurrencia}
+                          min={slotSeleccionado?.fecha || formatFecha(new Date())}
+                          onChange={e => setFechaFinRecurrencia(e.target.value)}
+                          style={{ ...fieldStyle }}
+                        />
+                        {fechaFinRecurrencia && slotSeleccionado?.fecha && (() => {
+                          const semanas = Math.floor((parseFechaLocal(fechaFinRecurrencia).getTime() - parseFechaLocal(slotSeleccionado.fecha).getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+                          return semanas > 0 ? (
+                            <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#666' }}>
+                              Se crearán aprox. <strong>{semanas}</strong> clases · mismo día y hora
+                            </p>
+                          ) : null
+                        })()}
                       </div>
                     )}
                   </div>
@@ -1173,7 +1176,7 @@ export default function Horarios() {
                       flex: 1, padding: '11px', background: TEAL, color: 'white',
                       border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500'
                     }}>
-                      {guardando ? 'Verificando...' : recurrente ? `Crear ${semanasRecurrencia} clases` : 'Asignar clase'}
+                      {guardando ? 'Verificando...' : recurrente ? `Crear clases hasta ${fechaFinRecurrencia}` : 'Asignar clase'}
                     </button>
                     <button onClick={() => setModalAbierto(false)} style={{
                       padding: '11px 18px', background: '#f1f5f9', color: '#334155',
