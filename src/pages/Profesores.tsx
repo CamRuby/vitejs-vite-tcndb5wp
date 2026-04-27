@@ -5,7 +5,7 @@ const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
-const DURACIONES = [30, 45, 60, 90]
+const DURACIONES = [30, 45, 60, 90, 120]
 const CIUDADES = ['Bogotá', 'Tunja']
 const HORAS = Array.from({ length: 29 }, (_, i) => {
   const h = Math.floor(i / 2) + 7
