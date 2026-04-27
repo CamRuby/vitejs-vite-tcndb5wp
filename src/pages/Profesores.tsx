@@ -427,7 +427,7 @@ export default function Profesores() {
           </div>}
 
           {/* Clases del mes - solo en vista */}
-          {!editando && (
+          {!editando && (<>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <h3 style={{ margin: 0, fontSize: '17px', color: '#1a1a1a' }}>Clases del mes</h3>
             <input type="month" value={mes} onChange={e => setMes(e.target.value)}
@@ -551,7 +551,7 @@ export default function Profesores() {
               )}
             </div>
           </div>
-          )}
+          </>)}
         </div>
       )}
     </div>
