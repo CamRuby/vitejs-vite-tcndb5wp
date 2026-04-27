@@ -109,10 +109,9 @@ export default function Profesores() {
       setProf(data); setDisponibilidad([]); setTarifas([]); setClases([])
       setEditando(false); setModo('ver')
     } else {
-      const { error } = await supabase.from('profesores').update(payload).eq('id', prof.id)
-      if (error) { setErrForm('Error: ' + error.message); setGuardando(false); return }
-      const { data: fresco } = await supabase.from('profesores').select('*').eq('id', prof.id).single()
-      if (fresco) setProf(fresco)
+      const { data: updated, error } = await supabase.from('profesores').update(payload).eq('id', prof.id).select().single()
+      if (error) { setErrForm('Error al guardar: ' + error.message); alert('Error al guardar: ' + error.message); setGuardando(false); return }
+      setProf(updated || { ...prof, ...payload })
       setEditando(false)
     }
     await cargarProfesores()
@@ -136,6 +135,13 @@ export default function Profesores() {
   async function agregarTarifa() {
     if (!prof?.id) { alert('Sin profesor seleccionado'); return }
     if (!tValor) { alert('Ingresa un valor'); return }
+    // Verificar duplicado
+    const existe = tarifas.some(t =>
+      t.ciudad === tCiudad &&
+      t.taller_grupal === tTaller &&
+      (tTaller ? true : t.duracion_min === tDur)
+    )
+    if (existe) { alert(`Ya existe una tarifa para ${tCiudad} · ${tTaller ? 'Taller grupal' : tDur + ' min'}`); return }
     const { data, error } = await supabase.from('profesor_tarifas')
       .insert({ profesor_id: prof.id, ciudad: tCiudad, duracion_min: tTaller ? null : tDur, taller_grupal: tTaller, valor: Number(tValor) })
       .select().single()
@@ -159,9 +165,9 @@ export default function Profesores() {
 
   function getHon(c: any) {
     if (c.honorario_valor !== null && c.honorario_valor !== undefined) return Number(c.honorario_valor)
-    const sede = c.salones?.sedes?.nombre || ''
-    const ciudad = sede.toLowerCase().includes('tunja') ? 'Tunja' : 'Bogotá'
-    const t = tarifas.find(x => x.ciudad === ciudad && x.duracion_min === c.duracion_min && !x.taller_grupal)
+    // La tarifa se basa en la ciudad del profesor, no en la sede del estudiante
+    const ciudadProfesor = prof?.ciudad || 'Bogotá'
+    const t = tarifas.find(x => x.ciudad === ciudadProfesor && x.duracion_min === c.duracion_min && !x.taller_grupal)
     return t?.valor || 0
   }
 
