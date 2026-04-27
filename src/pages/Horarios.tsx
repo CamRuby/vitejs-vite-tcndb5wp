@@ -1102,12 +1102,27 @@ export default function Horarios() {
                     <div style={{ marginBottom: '14px' }}>
                       <label style={labelStyle}>Plan</label>
                       <select value={(contratoSeleccionado as any)?.id || ''} onChange={e => seleccionarContrato(e.target.value)} style={fieldStyle}>
-                        {contratos.map((ct: any) => (
-                          <option key={ct.id} value={ct.id}>
-                            {ct.instrumentos?.nombre || '—'} · {ct.profesores?.nombre || '—'} · {ct.clases_tomadas}/{ct.total_clases} · {ct.duracion_min}min
-                          </option>
-                        ))}
+                        {contratos.map((ct: any) => {
+                          const sedePlan = sedes.find(s => s.id === ct.sede_id)?.nombre || '?'
+                          return (
+                            <option key={ct.id} value={ct.id}>
+                              {ct.instrumentos?.nombre || '—'} · {sedePlan} · {ct.profesores?.nombre || '—'} · {ct.clases_tomadas}/{ct.total_clases} · {ct.duracion_min}min
+                            </option>
+                          )
+                        })}
                       </select>
+                      {/* Advertencia sede diferente */}
+                      {contratoSeleccionado?.sede_id && slotSeleccionado?.salon?.sede_id &&
+                       contratoSeleccionado.sede_id !== slotSeleccionado.salon.sede_id && (
+                        <div style={{ marginTop: '8px', background: '#fff7ed', border: '1px solid #f97316', borderRadius: '8px', padding: '10px 12px' }}>
+                          <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#c2410c' }}>
+                            ⚠️ Sede diferente
+                          </p>
+                          <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#9a3412' }}>
+                            El plan pertenece a <strong>{sedes.find(s => s.id === contratoSeleccionado.sede_id)?.nombre}</strong>, pero estás creando la clase en <strong>{slotSeleccionado.salon.nombre}</strong> ({sedes.find(s => s.id === slotSeleccionado.salon.sede_id)?.nombre || 'otra sede'}).
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
 
