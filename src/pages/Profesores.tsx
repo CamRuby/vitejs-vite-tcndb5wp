@@ -109,10 +109,10 @@ export default function Profesores() {
       setProf(data); setDisponibilidad([]); setTarifas([]); setClases([])
       setEditando(false); setModo('ver')
     } else {
-     console.log('Guardando:', prof.id, payload)
-      const { data: updated, error } = await supabase.from('profesores').update(payload).eq('id', prof.id).select().single()
-      console.log('Resultado:', updated, error)
-      if (error) { setErrForm('Error al guardar: ' + error.message); alert('Error al guardar: ' + error.message); setGuardando(false); return }
+      const profId = prof?.id
+      if (!profId) { setErrForm('Error: ID del profesor no encontrado'); setGuardando(false); return }
+      const { data: updated, error } = await supabase.from('profesores').update(payload).eq('id', profId).select().single()
+      if (error) { setErrForm('Error al guardar: ' + error.message); alert('Error: ' + error.message); setGuardando(false); return }
       setProf(updated || { ...prof, ...payload })
       setEditando(false)
     }
@@ -265,7 +265,7 @@ export default function Profesores() {
               </div>
               {errForm && <p style={{ gridColumn: '1 / -1', color: '#ef4444', fontSize: '13px', margin: 0 }}>{errForm}</p>}
               <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '12px' }}>
-                <button onClick={guardar} disabled={guardando} style={{ padding: '11px 28px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
+                <button type="button" onClick={guardar} disabled={guardando} style={{ padding: '11px 28px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
                   {guardando ? 'Guardando...' : 'Guardar'}
                 </button>
                 <button onClick={() => setModo('lista')} style={{ padding: '11px 28px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px' }}>Cancelar</button>
@@ -300,7 +300,7 @@ export default function Profesores() {
               {!editando
                 ? <button onClick={() => setEditando(true)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px' }}>✏️ Editar</button>
                 : <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={guardar} disabled={guardando} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', color: TEAL, borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                    <button type="button" onClick={guardar} disabled={guardando} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', color: TEAL, borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
                       {guardando ? '...' : '✓ Guardar'}
                     </button>
                     <button onClick={() => { setForm({ nombre: prof.nombre, telefono: prof.telefono || '', email: prof.email || '', ciudad: prof.ciudad || 'Bogotá', activo: prof.activo !== false }); setEditando(false) }}
@@ -374,7 +374,7 @@ export default function Profesores() {
                         {HORAS.map(h => <option key={h} value={h}>{h}</option>)}
                       </select>
                     </div>
-                    <button onClick={agregarDisp} style={{ padding: '6px 10px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                    <button type="button" onClick={agregarDisp} style={{ padding: '6px 10px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>
                       + Agregar
                     </button>
                   </div>
@@ -417,7 +417,7 @@ export default function Profesores() {
                       <label style={{ ...lS, fontSize: '11px' }}>Valor ($)</label>
                       <input type="number" value={tValor} onChange={e => setTValor(e.target.value)} placeholder="0" style={{ ...fS, fontSize: '12px', padding: '6px 8px' }} />
                     </div>
-                    <button onClick={agregarTarifa} style={{ padding: '6px 10px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                    <button type="button" onClick={agregarTarifa} style={{ padding: '6px 10px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>
                       + Agregar
                     </button>
                   </div>
