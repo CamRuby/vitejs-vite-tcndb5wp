@@ -373,11 +373,6 @@ export default function Horarios() {
     if (contrato.duracion_min && durActual && String(contrato.duracion_min) !== durActual) {
       avisos.push(`la duración (plan: ${contrato.duracion_min} min → esta clase: ${durActual} min)`)
     }
-    if (contrato.sede_id && salonSede && contrato.sede_id !== salonSede) {
-      const nombreSedePlan = sedes.find(s => s.id === contrato.sede_id)?.nombre || 'del plan'
-      const nombreSedeActual = sedes.find(s => s.id === salonSede)?.nombre || 'del salón'
-      avisos.push(`la sede (plan: ${nombreSedePlan} → esta clase: ${nombreSedeActual})`)
-    }
     setAvisoCrear(avisos)
   }
 
