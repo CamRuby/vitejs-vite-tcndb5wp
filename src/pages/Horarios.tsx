@@ -20,7 +20,7 @@ const HORAS = Array.from({ length: 57 }, (_, i) => {
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const DIAS_LARGO = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
-const DURACIONES = ['30', '45', '60', '90']
+const DURACIONES = ['30', '45', '60', '90', '120']
 
 // Mapeo nombre día → número getDay()
 const DIA_NUM: Record<string, number> = {
