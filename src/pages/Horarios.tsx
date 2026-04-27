@@ -165,6 +165,7 @@ export default function Horarios() {
   const [editGuardando, setEditGuardando] = useState(false)
   const [confirmarBorrar, setConfirmarBorrar] = useState(false)
   const [confirmarDada, setConfirmarDada] = useState(false)
+  const [planCompleto, setPlanCompleto] = useState(false)
   const [procesandoRevision, setProcesandoRevision] = useState(false)
 
   const fechasSemana = getFechasSemana(fechaBase)
@@ -452,6 +453,7 @@ export default function Horarios() {
     setEditError('')
     setConfirmarBorrar(false)
     setConfirmarDada(false)
+    setPlanCompleto(false)
     setProcesandoRevision(false)
     setModalEditar(true)
   }
@@ -1467,10 +1469,19 @@ export default function Horarios() {
                         return (
                           <button key={est} onClick={() => {
                             if (est === 'dada' && editEstado !== 'dada') {
-                              setConfirmarDada(true)
+                              const tomadas = claseEditando.contratos?.clases_tomadas ?? 0
+                              const total = claseEditando.contratos?.total_clases ?? 0
+                              if (total > 0 && tomadas >= total) {
+                                setPlanCompleto(true)
+                                setConfirmarDada(false)
+                              } else {
+                                setConfirmarDada(true)
+                                setPlanCompleto(false)
+                              }
                             } else {
                               setEditEstado(est)
                               setConfirmarDada(false)
+                              setPlanCompleto(false)
                             }
                           }} style={{
                             padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500',
@@ -1481,6 +1492,23 @@ export default function Horarios() {
                         )
                       })}
                     </div>
+
+                    {/* Plan completo — bloqueo */}
+                    {planCompleto && (
+                      <div style={{ marginTop: '10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px' }}>
+                        <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#991b1b', fontWeight: '700' }}>
+                          🚫 El plan está completo ({claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases)
+                        </p>
+                        <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#666' }}>
+                          No es posible marcar esta clase como dada. Renueva el plan del cliente para continuar.
+                        </p>
+                        <button onClick={() => setPlanCompleto(false)} style={{
+                          padding: '6px 14px', background: 'white', color: '#333',
+                          border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px'
+                        }}>Entendido</button>
+                      </div>
+                    )}
+
                     {confirmarDada && (
                       <div style={{ marginTop: '10px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px 14px' }}>
                         <p style={{ margin: '0 0 8px', fontSize: '13px', color: '#854d0e', fontWeight: '600' }}>
