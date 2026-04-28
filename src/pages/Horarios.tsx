@@ -393,8 +393,8 @@ export default function Horarios() {
     setBusquedaCliente(c.nombre)
     setClientesBuscados([])
     const { data } = await supabase.from('contratos')
-      .select('id, total_clases, clases_tomadas, duracion_min, sede_id, instrumentos(nombre), profesores(id, nombre)')
-      .eq('cliente_id', c.id).eq('estado', 'activo')
+      .select('id, total_clases, clases_tomadas, duracion_min, sede_id, estado, instrumentos(nombre), profesores(id, nombre)')
+      .eq('cliente_id', c.id).in('estado', ['activo', 'completado'])
     setContratos(data || [])
     if (data?.length) {
       const ct = data[0] as any
@@ -1112,7 +1112,7 @@ export default function Horarios() {
                           const sedePlan = sedes.find(s => s.id === ct.sede_id)?.nombre || '?'
                           return (
                             <option key={ct.id} value={ct.id}>
-                              {ct.instrumentos?.nombre || '—'} · {sedePlan} · {ct.profesores?.nombre || '—'} · {ct.clases_tomadas}/{ct.total_clases} · {ct.duracion_min}min
+                              {ct.instrumentos?.nombre || '—'} · {sedePlan} · {ct.profesores?.nombre || '—'} · {ct.clases_tomadas}/{ct.total_clases} · {ct.duracion_min}min{ct.estado === 'completado' ? ' · ⚠️ Completo' : ''}
                             </option>
                           )
                         })}
