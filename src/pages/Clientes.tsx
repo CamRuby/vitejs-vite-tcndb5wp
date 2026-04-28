@@ -357,6 +357,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [filtroSede, setFiltroSede] = useState('')
   const [filtroProfesor, setFiltroProfesor] = useState('')
   const [profesoresFiltro, setProfesoresFiltro] = useState<any[]>([])
+  const [filtroClases, setFiltroClases] = useState<'realizadas' | 'programadas'>('realizadas')
 
   useEffect(() => {
     cargarBase()
@@ -981,7 +982,32 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             )
           })}
 
-          <h3 style={{ margin: '32px 0 14px', fontSize: '18px', color: '#1a1a1a' }}>Histórico de clases <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({clases.length})</span></h3>
+          {/* Histórico de clases con filtro */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '32px 0 14px' }}>
+            <h3 style={{ margin: 0, fontSize: '18px', color: '#1a1a1a' }}>Clases</h3>
+            <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '3px' }}>
+              {([
+                { key: 'realizadas', label: '✅ Dadas / Confirmadas' },
+                { key: 'programadas', label: '📅 Programadas' },
+              ] as const).map(op => (
+                <button key={op.key} onClick={() => setFiltroClases(op.key)}
+                  style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: '500',
+                    background: filtroClases === op.key ? 'white' : 'transparent',
+                    color: filtroClases === op.key ? TEAL : '#666',
+                    boxShadow: filtroClases === op.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                  {op.label}
+                </button>
+              ))}
+            </div>
+            <span style={{ fontSize: '13px', color: '#aaa' }}>
+              {(() => {
+                const filtradas = filtroClases === 'realizadas'
+                  ? clases.filter(c => c.estado === 'dada' || c.estado === 'confirmada' || c.estado === 'cancelada')
+                  : clases.filter(c => c.estado === 'programada')
+                return `${filtradas.length} clase${filtradas.length !== 1 ? 's' : ''}`
+              })()}
+            </span>
+          </div>
           <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -990,19 +1016,32 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                 </tr>
               </thead>
               <tbody>
-                {clases.length === 0 && <tr><td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#888' }}>Sin clases registradas</td></tr>}
-                {clases.map((c: any, i) => (
-                  <tr key={c.id} style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc' }}>
-                    <td style={{ padding: '12px 16px', fontSize: '14px', color: TEAL, fontWeight: '600' }}>{c.numero_en_plan || '—'}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.fecha}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.profesores?.nombre || '—'}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.contratos?.instrumentos?.nombre || '—'}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.duracion_min} min</td>
-                    <td style={{ padding: '12px 16px', fontSize: '14px' }}>
-                      <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', background: c.estado === 'dada' ? '#fefce8' : c.estado === 'cancelada' ? '#fee2e2' : TEAL_LIGHT, color: c.estado === 'dada' ? '#854d0e' : c.estado === 'cancelada' ? '#991b1b' : TEAL }}>{c.estado}</span>
-                    </td>
-                  </tr>
-                ))}
+                {(() => {
+                  const filtradas = filtroClases === 'realizadas'
+                    ? clases.filter((c: any) => c.estado === 'dada' || c.estado === 'confirmada' || c.estado === 'cancelada')
+                    : clases.filter((c: any) => c.estado === 'programada')
+                  if (filtradas.length === 0) return (
+                    <tr><td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
+                      {filtroClases === 'realizadas' ? 'Sin clases dadas o confirmadas' : 'Sin clases programadas'}
+                    </td></tr>
+                  )
+                  return filtradas.map((c: any, i) => (
+                    <tr key={c.id} style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc' }}>
+                      <td style={{ padding: '12px 16px', fontSize: '14px', color: TEAL, fontWeight: '600' }}>{c.numero_en_plan || '—'}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.fecha}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.profesores?.nombre || '—'}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.contratos?.instrumentos?.nombre || '—'}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.duracion_min} min</td>
+                      <td style={{ padding: '12px 16px', fontSize: '14px' }}>
+                        <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px',
+                          background: c.estado === 'dada' ? '#fefce8' : c.estado === 'cancelada' ? '#fee2e2' : c.estado === 'confirmada' ? '#dcfce7' : TEAL_LIGHT,
+                          color: c.estado === 'dada' ? '#854d0e' : c.estado === 'cancelada' ? '#991b1b' : c.estado === 'confirmada' ? '#166534' : TEAL }}>
+                          {c.estado}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                })()}
               </tbody>
             </table>
           </div>
