@@ -430,7 +430,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     const { data: ctList } = await supabase.from('contratos').select('id').eq('cliente_id', c.id)
     const ids = (ctList || []).map((ct: any) => ct.id)
     if (ids.length > 0) {
-      const { data: clasesData } = await supabase.from('clases').select('id, fecha, duracion_min, numero_en_plan, estado, profesores(nombre), salones(nombre), contratos(instrumentos(nombre))').in('contrato_id', ids).order('fecha', { ascending: false }).limit(50)
+      const { data: clasesData } = await supabase.from('clases').select('id, fecha, hora, duracion_min, numero_en_plan, estado, profesores(nombre), salones(nombre), contratos(instrumentos(nombre))').in('contrato_id', ids).order('fecha', { ascending: false }).limit(50)
       setClases(clasesData || [])
     } else { setClases([]) }
   }
@@ -983,6 +983,18 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
           })}
 
           {/* Histórico de clases con filtro */}
+          {(() => {
+            const hoy = new Date().toISOString().split('T')[0]
+            const formatFecha = (fecha: string) => fecha === hoy ? 'Hoy' : fecha
+            const formatHora = (hora: string) => {
+              if (!hora) return '—'
+              const [h, m] = hora.substring(0, 5).split(':').map(Number)
+              const ampm = h >= 12 ? 'pm' : 'am'
+              const h12 = h % 12 || 12
+              return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
+            }
+            return (
+          <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '32px 0 14px' }}>
             <h3 style={{ margin: 0, fontSize: '18px', color: '#1a1a1a' }}>Clases</h3>
             <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '3px' }}>
@@ -1012,23 +1024,28 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: TEAL_LIGHT }}>
-                  {['#', 'Fecha', 'Profesor', 'Instrumento', 'Duración', 'Estado'].map(h => <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', color: TEAL, fontWeight: '600' }}>{h}</th>)}
+                  {['#', 'Fecha', 'Hora', 'Profesor', 'Instrumento', 'Duración', 'Estado'].map(h => <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', color: TEAL, fontWeight: '600' }}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {(() => {
                   const filtradas = filtroClases === 'realizadas'
                     ? clases.filter((c: any) => c.estado === 'dada' || c.estado === 'confirmada' || c.estado === 'cancelada')
-                    : clases.filter((c: any) => c.estado === 'programada').sort((a: any, b: any) => a.fecha.localeCompare(b.fecha))
+                    : clases.filter((c: any) => c.estado === 'programada').sort((a: any, b: any) => {
+                        const da = `${a.fecha}T${a.hora || '00:00'}`
+                        const db = `${b.fecha}T${b.hora || '00:00'}`
+                        return da.localeCompare(db)
+                      })
                   if (filtradas.length === 0) return (
-                    <tr><td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
+                    <tr><td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
                       {filtroClases === 'realizadas' ? 'Sin clases dadas o confirmadas' : 'Sin clases programadas'}
                     </td></tr>
                   )
                   return filtradas.map((c: any, i) => (
-                    <tr key={c.id} style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc' }}>
+                    <tr key={c.id} style={{ borderTop: '1px solid #f8fafc', background: c.fecha === hoy ? '#f0fdf4' : i % 2 === 0 ? 'white' : '#fafbfc' }}>
                       <td style={{ padding: '12px 16px', fontSize: '14px', color: TEAL, fontWeight: '600' }}>{c.numero_en_plan || '—'}</td>
-                      <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.fecha}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: c.fecha === hoy ? '700' : '400', color: c.fecha === hoy ? '#166534' : '#333' }}>{formatFecha(c.fecha)}</td>
+                      <td style={{ padding: '12px 16px', fontSize: '14px', color: '#555' }}>{formatHora(c.hora)}</td>
                       <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.profesores?.nombre || '—'}</td>
                       <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.contratos?.instrumentos?.nombre || '—'}</td>
                       <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.duracion_min} min</td>
@@ -1045,6 +1062,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
               </tbody>
             </table>
           </div>
+          </div>
+            )
+          })()}
         </div>
       )}
 
