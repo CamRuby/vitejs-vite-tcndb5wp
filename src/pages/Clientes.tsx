@@ -1019,7 +1019,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                 {(() => {
                   const filtradas = filtroClases === 'realizadas'
                     ? clases.filter((c: any) => c.estado === 'dada' || c.estado === 'confirmada' || c.estado === 'cancelada')
-                    : clases.filter((c: any) => c.estado === 'programada')
+                    : clases.filter((c: any) => c.estado === 'programada').sort((a: any, b: any) => a.fecha.localeCompare(b.fecha))
                   if (filtradas.length === 0) return (
                     <tr><td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
                       {filtroClases === 'realizadas' ? 'Sin clases dadas o confirmadas' : 'Sin clases programadas'}
