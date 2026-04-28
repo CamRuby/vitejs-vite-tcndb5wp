@@ -393,8 +393,8 @@ export default function Horarios() {
     setBusquedaCliente(c.nombre)
     setClientesBuscados([])
     const { data } = await supabase.from('contratos')
-      .select('id, total_clases, clases_tomadas, duracion_min, sede_id, estado, instrumentos(nombre), profesores(id, nombre)')
-      .eq('cliente_id', c.id).in('estado', ['activo', 'completado'])
+      .select('id, total_clases, clases_tomadas, duracion_min, sede_id, instrumentos(nombre), profesores(id, nombre)')
+      .eq('cliente_id', c.id).eq('estado', 'activo')
     setContratos(data || [])
     if (data?.length) {
       const ct = data[0] as any
@@ -1104,6 +1104,13 @@ export default function Horarios() {
                     )}
                   </div>
 
+                  {clienteSeleccionado && contratos.length === 0 && (
+                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px' }}>
+                      <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#991b1b' }}>🚫 Sin plan activo</p>
+                      <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#7f1d1d' }}>Este cliente no tiene un plan activo. Crea o renueva el plan desde la sección <strong>Clientes</strong> antes de asignar la clase.</p>
+                    </div>
+                  )}
+
                   {contratos.length > 0 && (
                     <div style={{ marginBottom: '14px' }}>
                       <label style={labelStyle}>Plan</label>
@@ -1112,7 +1119,7 @@ export default function Horarios() {
                           const sedePlan = sedes.find(s => s.id === ct.sede_id)?.nombre || '?'
                           return (
                             <option key={ct.id} value={ct.id}>
-                              {ct.instrumentos?.nombre || '—'} · {sedePlan} · {ct.profesores?.nombre || '—'} · {ct.clases_tomadas}/{ct.total_clases} · {ct.duracion_min}min{ct.estado === 'completado' ? ' · ⚠️ Completo' : ''}
+                              {ct.instrumentos?.nombre || '—'} · {sedePlan} · {ct.profesores?.nombre || '—'} · {ct.clases_tomadas}/{ct.total_clases} · {ct.duracion_min}min
                             </option>
                           )
                         })}
