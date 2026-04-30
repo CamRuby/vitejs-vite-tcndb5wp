@@ -22,7 +22,7 @@ const VISTAS = [
   { value: 'completados',  label: '📁 Últimos 30 planes archivados' },
   { value: 'aplazados',    label: '⏸ Planes aplazados' },
   { value: 'reactivacion', label: '🔄 Planes completados (por renovar)' },
-  { value: 'activos',       label: '✅ Todos los planes activos' },
+  { value: 'activos',      label: '✅ Todos los planes activos' },
 ]
 
 function colorEstadoPlan(e: string) {
@@ -30,6 +30,27 @@ function colorEstadoPlan(e: string) {
   if (e === 'aplazado')   return { bg: '#fef3c7', color: '#92400e', border: '#fde68a' }
   if (e === 'archivado')  return { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' }
   return { bg: TEAL_LIGHT, color: TEAL, border: TEAL_MID }
+}
+
+// ── NUEVO: detectar inscripción vencida ──
+function estaVencida(inscripcion: any): boolean {
+  if (!inscripcion?.mes || inscripcion.estado !== 'activo') return false
+  const hoy = new Date()
+  const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+  return inscripcion.mes < mesActual
+}
+
+// ── NUEVO: opciones de mes (actual + 5 futuros) ──
+function opcionesMesTaller(): { valor: string; etiqueta: string }[] {
+  const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const opciones = []
+  const hoy = new Date()
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() + i, 1)
+    const valor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+    opciones.push({ valor, etiqueta: `${MESES[d.getMonth()]} ${d.getFullYear()}` })
+  }
+  return opciones
 }
 
 function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
@@ -346,6 +367,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [talleres, setTalleres] = useState<any[]>([])
   const [tallerSeleccionado, setTallerSeleccionado] = useState('')
   const [tallerValorPagado, setTallerValorPagado] = useState('')
+  const [mesTaller, setMesTaller] = useState('')  // ── NUEVO
   const [tallerGuardando, setTallerGuardando] = useState(false)
   const [tallerError, setTallerError] = useState('')
   const [esRenovacion, setEsRenovacion] = useState(false)
@@ -506,15 +528,11 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     cargarVista(vistaActual); setModo('lista'); setBusqueda(''); setClientes([]); setBorrando(false)
   }
 
-  // ── CAMBIO 1: al archivar un plan, borrar sus clases futuras programadas ──
   async function cambiarEstadoPlan(planId: string, nuevoEstado: string) {
     setPlanes(prev => prev.map(p => p.id === planId ? { ...p, estado: nuevoEstado } : p))
     if (nuevoEstado === 'archivado') {
       const hoy = new Date().toISOString().split('T')[0]
-      await supabase.from('clases').delete()
-        .eq('contrato_id', planId)
-        .eq('estado', 'programada')
-        .gte('fecha', hoy)
+      await supabase.from('clases').delete().eq('contrato_id', planId).eq('estado', 'programada').gte('fecha', hoy)
     }
     const { error } = await supabase.from('contratos').update({ estado: nuevoEstado }).eq('id', planId)
     if (error) { alert('Error: ' + error.message); await cargarDatosCliente(clienteSeleccionado) }
@@ -547,32 +565,59 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
 
   async function renovarInscripcionTaller(inscripcion: any) {
     const hoy = new Date()
-    const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
-    const { error } = await supabase.from('taller_inscripciones').insert({ taller_id: inscripcion.taller_id, cliente_id: clienteSeleccionado.id, mes, valor_pagado: inscripcion.valor_pagado, estado: 'activo' })
+    const mesDefault = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+    const { error } = await supabase.from('taller_inscripciones').insert({
+      taller_id: inscripcion.taller_id, cliente_id: clienteSeleccionado.id,
+      mes: mesDefault, valor_pagado: inscripcion.valor_pagado, estado: 'activo'
+    })
     if (error) { alert('Error al renovar: ' + error.message); return }
     await supabase.from('taller_inscripciones').update({ estado: 'archivado' }).eq('id', inscripcion.id)
     await cargarDatosCliente(clienteSeleccionado)
   }
 
+  // ── NUEVO: abrir modal taller — solo talleres activos, con mes selector ──
   async function abrirModalTaller() {
-    const { data } = await supabase.from('talleres').select('id, nombre, dia_semana, hora, duracion_min, valor_mensual, profesores(nombre), salones(nombre, sedes(nombre))').order('nombre')
-    setTalleres(data || []); setTallerSeleccionado(''); setTallerValorPagado(''); setTallerError(''); setModalTaller(true)
+    const { data } = await supabase
+      .from('talleres')
+      .select('id, nombre, dia_semana, hora, duracion_min, valor_mensual, profesores(nombre), salones(nombre, sedes(nombre))')
+      .neq('estado', 'archivado')
+      .order('nombre')
+    const hoy = new Date()
+    const mesDefault = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+    setTalleres(data || [])
+    setTallerSeleccionado('')
+    setTallerValorPagado('')
+    setTallerError('')
+    setMesTaller(mesDefault)
+    setModalTaller(true)
   }
 
+  // ── NUEVO: inscribir con mes seleccionable ──
   async function inscribirEnTaller() {
     if (!tallerSeleccionado) { setTallerError('Selecciona un taller'); return }
+    if (!mesTaller) { setTallerError('Selecciona el mes'); return }
     setTallerGuardando(true); setTallerError('')
-    const hoy = new Date()
-    const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
-    const { data: yaInscrito } = await supabase.from('taller_inscripciones').select('id').eq('taller_id', tallerSeleccionado).eq('cliente_id', clienteSeleccionado.id).eq('estado', 'activo').gte('mes', mes)
-    if (yaInscrito && yaInscrito.length > 0) { setTallerError('Este cliente ya está inscrito en ese taller este mes.'); setTallerGuardando(false); return }
+    const { data: yaInscrito } = await supabase
+      .from('taller_inscripciones').select('id')
+      .eq('taller_id', tallerSeleccionado)
+      .eq('cliente_id', clienteSeleccionado.id)
+      .eq('estado', 'activo')
+      .eq('mes', mesTaller)
+    if (yaInscrito && yaInscrito.length > 0) {
+      setTallerError('Este cliente ya está inscrito en ese taller ese mes.')
+      setTallerGuardando(false); return
+    }
     const taller = talleres.find((t: any) => t.id === tallerSeleccionado)
-    const { error } = await supabase.from('taller_inscripciones').insert({ taller_id: tallerSeleccionado, cliente_id: clienteSeleccionado.id, mes, valor_pagado: tallerValorPagado !== '' ? Number(tallerValorPagado) : (taller?.valor_mensual || null), estado: 'activo' })
+    const { error } = await supabase.from('taller_inscripciones').insert({
+      taller_id: tallerSeleccionado, cliente_id: clienteSeleccionado.id, mes: mesTaller,
+      valor_pagado: tallerValorPagado !== '' ? Number(tallerValorPagado) : (taller?.valor_mensual || null),
+      estado: 'activo'
+    })
     if (error) { setTallerError('Error: ' + error.message); setTallerGuardando(false); return }
     setModalTaller(false); setTallerGuardando(false)
+    await cargarDatosCliente(clienteSeleccionado)
   }
 
-  // ── CAMBIO 2: al renovar, reasignar clases futuras programadas al nuevo plan ──
   async function guardarPlan(payload: any, planId?: string) {
     const registro = { ...payload, cliente_id: clienteSeleccionado.id }
     if (planId) {
@@ -584,14 +629,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       if (esRenovacion && modalPlan?.id && nuevoPlan) {
         const hoy = new Date().toISOString().split('T')[0]
         const updateClases: any = { contrato_id: nuevoPlan.id }
-        if (Number(payload.duracion_min) !== Number(modalPlan.duracion_min)) {
-          updateClases.duracion_min = payload.duracion_min
-        }
-        await supabase.from('clases')
-          .update(updateClases)
-          .eq('contrato_id', modalPlan.id)
-          .eq('estado', 'programada')
-          .gte('fecha', hoy)
+        if (Number(payload.duracion_min) !== Number(modalPlan.duracion_min)) updateClases.duracion_min = payload.duracion_min
+        await supabase.from('clases').update(updateClases).eq('contrato_id', modalPlan.id).eq('estado', 'programada').gte('fecha', hoy)
         await supabase.from('contratos').update({ estado: 'archivado' }).eq('id', modalPlan.id)
       }
     }
@@ -692,12 +731,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                           <td style={{ ...tdStyle, fontWeight: '600', color: TEAL, textAlign: 'left' }}>{c.nombres || c.nombre}</td>
                           <td style={{ ...tdStyle, textAlign: 'left' }}>{c.apellidos || '—'}</td>
                           <td style={{ ...tdStyle, textAlign: 'left' }}>{c.grupo_whatsapp || '—'}</td>
-                          <td style={{ ...tdStyle, textAlign: 'left' }}>
-                            {c.tiene_plan_activo ? <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>✓ Sí</span> : <span style={{ background: '#f1f5f9', color: '#94a3b8', padding: '2px 10px', borderRadius: '20px', fontSize: '12px' }}>No</span>}
-                          </td>
-                          <td style={tdStyle}>
-                            <span style={{ background: c.estado === 'activo' ? '#dcfce7' : '#fee2e2', color: c.estado === 'activo' ? '#166534' : '#991b1b', padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>{c.estado === 'activo' ? 'Activo' : 'Inactivo'}</span>
-                          </td>
+                          <td style={{ ...tdStyle, textAlign: 'left' }}>{c.tiene_plan_activo ? <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>✓ Sí</span> : <span style={{ background: '#f1f5f9', color: '#94a3b8', padding: '2px 10px', borderRadius: '20px', fontSize: '12px' }}>No</span>}</td>
+                          <td style={tdStyle}><span style={{ background: c.estado === 'activo' ? '#dcfce7' : '#fee2e2', color: c.estado === 'activo' ? '#166534' : '#991b1b', padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>{c.estado === 'activo' ? 'Activo' : 'Inactivo'}</span></td>
                         </tr>
                       ))}
                     </tbody>
@@ -754,7 +789,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                         <tbody>
                           {datos.length === 0 && <tr><td colSpan={9} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin planes activos</td></tr>}
                           {datos.map((p: any, i) => {
-                            const tomadas = p.clases_tomadas || 0; const total = p.total_clases || 0; const restantes = total - tomadas
+                            const tomadas = p.clases_tomadas || 0, total = p.total_clases || 0, restantes = total - tomadas
                             const nombreCliente = p.clientes?.nombres ? `${p.clientes.nombres} ${p.clientes.apellidos || ''}`.trim() : p.clientes?.nombre || '—'
                             const colorFila = restantes === 0 ? '#fefce8' : restantes <= 2 ? '#fff7ed' : i % 2 === 0 ? 'white' : '#fafbfc'
                             return (
@@ -768,9 +803,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                                 <td style={{ ...tdStyle, textAlign: 'center' }}>{p.duracion_min || '—'}</td>
                                 <td style={{ ...tdStyle, textAlign: 'center' }}>{total}</td>
                                 <td style={{ ...tdStyle, textAlign: 'center' }}>{tomadas}</td>
-                                <td style={{ ...tdStyle, textAlign: 'center' }}>
-                                  <span style={{ fontWeight: '700', color: restantes === 0 ? '#854d0e' : restantes <= 2 ? '#c2410c' : '#166534' }}>{restantes === 0 ? '✓ Completo' : restantes}</span>
-                                </td>
+                                <td style={{ ...tdStyle, textAlign: 'center' }}><span style={{ fontWeight: '700', color: restantes === 0 ? '#854d0e' : restantes <= 2 ? '#c2410c' : '#166534' }}>{restantes === 0 ? '✓ Completo' : restantes}</span></td>
                               </tr>
                             )
                           })}
@@ -796,6 +829,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
         <div style={{ flex: 1, overflowY: 'auto' }}>
           <button onClick={() => { setModo('lista'); setBusqueda(''); setClientes([]) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: TEAL, fontSize: '14px', marginBottom: '20px', padding: 0, fontWeight: '500' }}>← Volver a la lista</button>
 
+          {/* Ficha cliente */}
           <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.08)', marginBottom: '24px' }}>
             <div style={{ background: TEAL, padding: '24px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -812,10 +846,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             </div>
             <div style={{ padding: '14px 28px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
               {[{ icon: '📱', label: 'Teléfono', valor: form.telefono }, { icon: '✉️', label: 'Correo', valor: form.email }, { icon: '💬', label: 'Grupo WhatsApp', valor: form.grupo_whatsapp }].map(d => (
-                <div key={d.label}>
-                  <p style={{ margin: '0 0 3px', fontSize: '12px', color: '#999', fontWeight: '600' }}>{d.icon} {d.label}</p>
-                  <p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{d.valor || '—'}</p>
-                </div>
+                <div key={d.label}><p style={{ margin: '0 0 3px', fontSize: '12px', color: '#999', fontWeight: '600' }}>{d.icon} {d.label}</p><p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{d.valor || '—'}</p></div>
               ))}
             </div>
             <div style={{ borderTop: '1px solid #eef2f7' }}>
@@ -824,10 +855,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             {expandirFicha && (
               <div style={{ padding: '14px 28px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', background: '#fafbfc', borderTop: '1px solid #eef2f7' }}>
                 {[{ icon: '🎂', label: 'Fecha de nacimiento', valor: form.fecha_nacimiento }, { icon: '🪪', label: 'Identificación', valor: form.numero_identificacion }, { icon: '💼', label: 'Ocupación', valor: form.ocupacion }, { icon: '📍', label: 'Dirección', valor: form.direccion }, { icon: '🏙️', label: 'Ciudad', valor: form.ciudad }, { icon: '🚨', label: 'Contacto emergencia', valor: form.contacto_emergencia_nombre ? `${form.contacto_emergencia_nombre} · ${form.contacto_emergencia_telefono}` : null }].map(d => (
-                  <div key={d.label}>
-                    <p style={{ margin: '0 0 3px', fontSize: '12px', color: '#999', fontWeight: '600' }}>{d.icon} {d.label}</p>
-                    <p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{d.valor || '—'}</p>
-                  </div>
+                  <div key={d.label}><p style={{ margin: '0 0 3px', fontSize: '12px', color: '#999', fontWeight: '600' }}>{d.icon} {d.label}</p><p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{d.valor || '—'}</p></div>
                 ))}
                 {form.menor_de_edad && (
                   <div style={{ gridColumn: '1 / -1', background: TEAL_LIGHT, borderRadius: '8px', padding: '10px 14px' }}>
@@ -857,6 +885,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             </div>
           )}
 
+          {/* Planes */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <h3 style={{ margin: 0, fontSize: '20px', color: '#1a1a1a' }}>Planes activos <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({planesActivos.length})</span></h3>
@@ -912,6 +941,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             )
           })}
 
+          {/* Talleres */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '32px 0 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <h3 style={{ margin: 0, fontSize: '20px', color: '#1a1a1a' }}>Talleres activos <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({inscripcionesTalleres.filter((i: any) => i.estado !== 'archivado').length})</span></h3>
@@ -922,38 +952,59 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
           {inscripcionesTalleres.length === 0 && <div style={{ background: 'white', borderRadius: '12px', padding: '24px', textAlign: 'center', color: '#888', marginBottom: '24px' }}>Sin inscripciones a talleres</div>}
 
           {inscripcionesTalleres.filter((i: any) => i.estado !== 'archivado').map((ins: any) => {
-            const esActivo = ins.estado === 'activo'; const esCompletado = ins.estado === 'completado'
+            const esVencida = estaVencida(ins)  // ── NUEVO
+            const esActivo = ins.estado === 'activo' && !esVencida
+            const esCompletado = ins.estado === 'completado'
             const fechaMes = ins.mes ? new Date(ins.mes + 'T12:00:00') : null
             const mesLabel = fechaMes ? `${fechaMes.getDate()} de ${['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][fechaMes.getMonth()]} ${fechaMes.getFullYear()}` : '—'
-            const colorEstado = esActivo ? { bg: '#f3e8ff', color: '#7c3aed', border: '#d8b4fe' } : esCompletado ? { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' } : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' }
+            // ── NUEVO: color según estado + vencimiento ──
+            const colorEstado = esVencida
+              ? { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' }
+              : esActivo ? { bg: '#f3e8ff', color: '#7c3aed', border: '#d8b4fe' }
+              : esCompletado ? { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
+              : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' }
             return (
               <div key={ins.id} style={{ background: 'white', borderRadius: '14px', padding: '16px 20px', border: `1px solid ${colorEstado.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', marginBottom: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                       <p style={{ margin: 0, fontWeight: '600', fontSize: '16px', color: '#1a1a1a' }}>🎸 {ins.talleres?.nombre || '—'}</p>
-                      <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600', background: colorEstado.bg, color: colorEstado.color }}>{ins.estado}</span>
+                      {/* ── NUEVO: badge vencida ── */}
+                      <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600', background: colorEstado.bg, color: colorEstado.color }}>
+                        {esVencida ? '⚠️ Vencida' : ins.estado}
+                      </span>
                     </div>
                     <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>🏫 {ins.talleres?.salones?.nombre} — {ins.talleres?.salones?.sedes?.nombre}</p>
                     <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>📅 Desde: {mesLabel} · {ins.talleres?.dia_semana} {ins.talleres?.hora?.substring(0,5)} · {ins.talleres?.duracion_min} min</p>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#7c3aed' }}>${ins.valor_pagado ? Number(ins.valor_pagado).toLocaleString() : '—'}</p>
+                    <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: esVencida ? '#c2410c' : '#7c3aed' }}>${ins.valor_pagado ? Number(ins.valor_pagado).toLocaleString() : '—'}</p>
                     <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#aaa' }}>valor pagado</p>
                   </div>
                 </div>
                 <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '12px', color: '#999' }}>Estado:</span>
-                  {['activo', 'completado'].map(est => {
-                    const esActual = ins.estado === est
-                    const c2 = est === 'activo' ? { bg: '#f3e8ff', color: '#7c3aed', border: '#d8b4fe' } : { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
-                    return <button key={est} onClick={() => !esActual && cambiarEstadoInscripcion(ins.id, est)} disabled={esActual} style={{ padding: '5px 14px', borderRadius: '8px', cursor: esActual ? 'default' : 'pointer', fontSize: '12px', fontWeight: '600', border: `1px solid ${esActual ? c2.border : '#e2e8f0'}`, background: esActual ? c2.bg : 'white', color: esActual ? c2.color : '#666' }}>{est.charAt(0).toUpperCase() + est.slice(1)}</button>
-                  })}
-                  <button onClick={() => cargarSesionesInscripcion(ins.id, ins.taller_id)} style={{ padding: '5px 14px', background: inscripcionExpandida === ins.id ? '#f3e8ff' : 'white', color: '#7c3aed', border: '1px solid #d8b4fe', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>{inscripcionExpandida === ins.id ? '▲ Ocultar sesiones' : '▼ Ver sesiones'}</button>
-                  {esCompletado && (
+                  {/* ── NUEVO: si está vencida, mostrar Renovar y Finalizar en lugar de los estados ── */}
+                  {esVencida ? (
                     <>
-                      <button onClick={() => renovarInscripcionTaller(ins)} style={{ marginLeft: 'auto', padding: '5px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>🔄 Renovar</button>
-                      <button onClick={() => cambiarEstadoInscripcion(ins.id, 'archivado')} style={{ padding: '5px 14px', background: '#f1f5f9', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>📁 Archivar</button>
+                      <span style={{ fontSize: '12px', color: '#c2410c', fontWeight: '500' }}>Inscripción vencida — ¿qué deseas hacer?</span>
+                      <button onClick={() => renovarInscripcionTaller(ins)} style={{ marginLeft: 'auto', padding: '5px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>🔄 Renovar al mes actual</button>
+                      <button onClick={() => cambiarEstadoInscripcion(ins.id, 'archivado')} style={{ padding: '5px 14px', background: '#f1f5f9', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>📁 Finalizar</button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: '12px', color: '#999' }}>Estado:</span>
+                      {['activo', 'completado'].map(est => {
+                        const esActual = ins.estado === est
+                        const c2 = est === 'activo' ? { bg: '#f3e8ff', color: '#7c3aed', border: '#d8b4fe' } : { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
+                        return <button key={est} onClick={() => !esActual && cambiarEstadoInscripcion(ins.id, est)} disabled={esActual} style={{ padding: '5px 14px', borderRadius: '8px', cursor: esActual ? 'default' : 'pointer', fontSize: '12px', fontWeight: '600', border: `1px solid ${esActual ? c2.border : '#e2e8f0'}`, background: esActual ? c2.bg : 'white', color: esActual ? c2.color : '#666' }}>{est.charAt(0).toUpperCase() + est.slice(1)}</button>
+                      })}
+                      <button onClick={() => cargarSesionesInscripcion(ins.id, ins.taller_id)} style={{ padding: '5px 14px', background: inscripcionExpandida === ins.id ? '#f3e8ff' : 'white', color: '#7c3aed', border: '1px solid #d8b4fe', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>{inscripcionExpandida === ins.id ? '▲ Ocultar sesiones' : '▼ Ver sesiones'}</button>
+                      {esCompletado && (
+                        <>
+                          <button onClick={() => renovarInscripcionTaller(ins)} style={{ marginLeft: 'auto', padding: '5px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>🔄 Renovar</button>
+                          <button onClick={() => cambiarEstadoInscripcion(ins.id, 'archivado')} style={{ padding: '5px 14px', background: '#f1f5f9', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>📁 Archivar</button>
+                        </>
+                      )}
                     </>
                   )}
                 </div>
@@ -982,7 +1033,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             )
           })}
 
-          {/* Histórico de clases con filtro */}
+          {/* Clases */}
           {(() => {
             const hoy = new Date().toISOString().split('T')[0]
             const formatFecha = (fecha: string) => fecha === hoy ? 'Hoy' : fecha
@@ -994,80 +1045,59 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
               return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
             }
             return (
-          <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '32px 0 14px' }}>
-            <h3 style={{ margin: 0, fontSize: '18px', color: '#1a1a1a' }}>Clases</h3>
-            <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '3px' }}>
-              {([
-                { key: 'realizadas', label: '✅ Dadas / Confirmadas' },
-                { key: 'programadas', label: '📅 Programadas' },
-              ] as const).map(op => (
-                <button key={op.key} onClick={() => setFiltroClases(op.key)}
-                  style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: '500',
-                    background: filtroClases === op.key ? 'white' : 'transparent',
-                    color: filtroClases === op.key ? TEAL : '#666',
-                    boxShadow: filtroClases === op.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
-                  {op.label}
-                </button>
-              ))}
-            </div>
-            <span style={{ fontSize: '13px', color: '#aaa' }}>
-              {(() => {
-                const filtradas = filtroClases === 'realizadas'
-                  ? clases.filter(c => c.estado === 'dada' || c.estado === 'confirmada' || c.estado === 'cancelada')
-                  : clases.filter(c => c.estado === 'programada')
-                return `${filtradas.length} clase${filtradas.length !== 1 ? 's' : ''}`
-              })()}
-            </span>
-          </div>
-          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: TEAL_LIGHT }}>
-                  {['#', 'Fecha', 'Hora', 'Profesor', 'Instrumento', 'Duración', 'Estado'].map(h => <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', color: TEAL, fontWeight: '600' }}>{h}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {(() => {
-                  const filtradas = filtroClases === 'realizadas'
-                    ? clases.filter((c: any) => c.estado === 'dada' || c.estado === 'confirmada' || c.estado === 'cancelada')
-                    : clases.filter((c: any) => c.estado === 'programada').sort((a: any, b: any) => {
-                        const da = `${a.fecha}T${a.hora || '00:00'}`
-                        const db = `${b.fecha}T${b.hora || '00:00'}`
-                        return da.localeCompare(db)
-                      })
-                  if (filtradas.length === 0) return (
-                    <tr><td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#888' }}>
-                      {filtroClases === 'realizadas' ? 'Sin clases dadas o confirmadas' : 'Sin clases programadas'}
-                    </td></tr>
-                  )
-                  return filtradas.map((c: any, i) => (
-                    <tr key={c.id} style={{ borderTop: '1px solid #f8fafc', background: c.fecha === hoy ? '#f0fdf4' : i % 2 === 0 ? 'white' : '#fafbfc' }}>
-                      <td style={{ padding: '12px 16px', fontSize: '14px', color: TEAL, fontWeight: '600' }}>{c.numero_en_plan || '—'}</td>
-                      <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: c.fecha === hoy ? '700' : '400', color: c.fecha === hoy ? '#166534' : '#333' }}>{formatFecha(c.fecha)}</td>
-                      <td style={{ padding: '12px 16px', fontSize: '14px', color: '#555' }}>{formatHora(c.hora)}</td>
-                      <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.profesores?.nombre || '—'}</td>
-                      <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.contratos?.instrumentos?.nombre || '—'}</td>
-                      <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.duracion_min} min</td>
-                      <td style={{ padding: '12px 16px', fontSize: '14px' }}>
-                        <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px',
-                          background: c.estado === 'dada' ? '#fefce8' : c.estado === 'cancelada' ? '#fee2e2' : c.estado === 'confirmada' ? '#dcfce7' : TEAL_LIGHT,
-                          color: c.estado === 'dada' ? '#854d0e' : c.estado === 'cancelada' ? '#991b1b' : c.estado === 'confirmada' ? '#166534' : TEAL }}>
-                          {c.estado}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                })()}
-              </tbody>
-            </table>
-          </div>
-          </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '32px 0 14px' }}>
+                  <h3 style={{ margin: 0, fontSize: '18px', color: '#1a1a1a' }}>Clases</h3>
+                  <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '3px' }}>
+                    {([{ key: 'realizadas', label: '✅ Dadas / Confirmadas' }, { key: 'programadas', label: '📅 Programadas' }] as const).map(op => (
+                      <button key={op.key} onClick={() => setFiltroClases(op.key)}
+                        style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: '500', background: filtroClases === op.key ? 'white' : 'transparent', color: filtroClases === op.key ? TEAL : '#666', boxShadow: filtroClases === op.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                        {op.label}
+                      </button>
+                    ))}
+                  </div>
+                  <span style={{ fontSize: '13px', color: '#aaa' }}>
+                    {(() => {
+                      const f = filtroClases === 'realizadas' ? clases.filter(c => c.estado === 'dada' || c.estado === 'confirmada' || c.estado === 'cancelada') : clases.filter(c => c.estado === 'programada')
+                      return `${f.length} clase${f.length !== 1 ? 's' : ''}`
+                    })()}
+                  </span>
+                </div>
+                <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: TEAL_LIGHT }}>{['#', 'Fecha', 'Hora', 'Profesor', 'Instrumento', 'Duración', 'Estado'].map(h => <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', color: TEAL, fontWeight: '600' }}>{h}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const filtradas = filtroClases === 'realizadas'
+                          ? clases.filter((c: any) => c.estado === 'dada' || c.estado === 'confirmada' || c.estado === 'cancelada')
+                          : clases.filter((c: any) => c.estado === 'programada').sort((a: any, b: any) => `${a.fecha}T${a.hora||'00:00'}`.localeCompare(`${b.fecha}T${b.hora||'00:00'}`))
+                        if (filtradas.length === 0) return <tr><td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#888' }}>{filtroClases === 'realizadas' ? 'Sin clases dadas o confirmadas' : 'Sin clases programadas'}</td></tr>
+                        return filtradas.map((c: any, i) => (
+                          <tr key={c.id} style={{ borderTop: '1px solid #f8fafc', background: c.fecha === hoy ? '#f0fdf4' : i % 2 === 0 ? 'white' : '#fafbfc' }}>
+                            <td style={{ padding: '12px 16px', fontSize: '14px', color: TEAL, fontWeight: '600' }}>{c.numero_en_plan || '—'}</td>
+                            <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: c.fecha === hoy ? '700' : '400', color: c.fecha === hoy ? '#166534' : '#333' }}>{formatFecha(c.fecha)}</td>
+                            <td style={{ padding: '12px 16px', fontSize: '14px', color: '#555' }}>{formatHora(c.hora)}</td>
+                            <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.profesores?.nombre || '—'}</td>
+                            <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.contratos?.instrumentos?.nombre || '—'}</td>
+                            <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.duracion_min} min</td>
+                            <td style={{ padding: '12px 16px', fontSize: '14px' }}>
+                              <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', background: c.estado === 'dada' ? '#fefce8' : c.estado === 'cancelada' ? '#fee2e2' : c.estado === 'confirmada' ? '#dcfce7' : TEAL_LIGHT, color: c.estado === 'dada' ? '#854d0e' : c.estado === 'cancelada' ? '#991b1b' : c.estado === 'confirmada' ? '#166534' : TEAL }}>{c.estado}</span>
+                            </td>
+                          </tr>
+                        ))
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )
           })()}
         </div>
       )}
 
+      {/* Modal historial talleres */}
       {modalHistorialTalleres && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
           <div style={{ background: 'white', borderRadius: '16px', width: '95%', maxWidth: '700px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
@@ -1101,6 +1131,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
         </div>
       )}
 
+      {/* Modal asignar a taller — con selector de mes */}
       {modalTaller && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
@@ -1112,6 +1143,13 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
               <button onClick={() => setModalTaller(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ padding: '24px' }}>
+              {/* ── NUEVO: selector de mes ── */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={labelStyle}>Mes de inscripción *</label>
+                <select value={mesTaller} onChange={e => setMesTaller(e.target.value)} style={estiloInput}>
+                  {opcionesMesTaller().map(op => <option key={op.valor} value={op.valor}>{op.etiqueta}</option>)}
+                </select>
+              </div>
               <div style={{ marginBottom: '16px' }}>
                 <label style={labelStyle}>Taller *</label>
                 <select value={tallerSeleccionado} onChange={e => { setTallerSeleccionado(e.target.value); const t = talleres.find((x: any) => x.id === e.target.value); if (t?.valor_mensual) setTallerValorPagado(String(t.valor_mensual)); else setTallerValorPagado('') }} style={estiloInput}>
@@ -1125,7 +1163,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
               </div>
               {tallerError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{tallerError}</p>}
               <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={inscribirEnTaller} disabled={tallerGuardando} style={{ flex: 1, padding: '11px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>{tallerGuardando ? 'Inscribiendo...' : 'Inscribir al mes actual'}</button>
+                <button onClick={inscribirEnTaller} disabled={tallerGuardando} style={{ flex: 1, padding: '11px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>{tallerGuardando ? 'Inscribiendo...' : 'Inscribir'}</button>
                 <button onClick={() => setModalTaller(false)} style={{ padding: '11px 18px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>Cancelar</button>
               </div>
             </div>
