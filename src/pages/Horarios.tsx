@@ -93,6 +93,7 @@ export default function Horarios() {
   const [sesionActual, setSesionActual] = useState<any>(null)
   const [fechaSesionViendo, setFechaSesionViendo] = useState('')
   const [guardandoSesion, setGuardandoSesion] = useState(false)
+  const [errorSesion, setErrorSesion] = useState('')
   const [modoEdicionTaller, setModoEdicionTaller] = useState(false)
   const [teNombre, setTeNombre] = useState('')
   const [teProfesorId, setTeProfesorId] = useState('')
@@ -259,12 +260,27 @@ export default function Horarios() {
   }
 
   async function marcarSesion(nuevoEstado:string) {
-    setGuardandoSesion(true); let sesionId=sesionActual?.id
-    if (sesionActual) { const {error}=await supabase.from('taller_sesiones').update({estado:nuevoEstado}).eq('id',sesionActual.id); if (!error) setSesionActual({...sesionActual,estado:nuevoEstado}) }
-    else { const {data,error}=await supabase.from('taller_sesiones').insert({taller_id:tallerViendo.id,fecha:fechaSesionViendo,estado:nuevoEstado}).select().single(); if (!error&&data){setSesionActual(data);sesionId=data.id} }
-    if (nuevoEstado==='dada'&&sesionId) {
-      const {data:ex}=await supabase.from('taller_asistencias').select('id').eq('sesion_id',sesionId)
-      if (!ex||ex.length===0) { if (inscritosDelTaller.length>0) await supabase.from('taller_asistencias').insert(inscritosDelTaller.map((ins:any)=>({sesion_id:sesionId,inscripcion_id:ins.id,asistio:true}))) }
+    setErrorSesion()
+    setGuardandoSesion(true)
+    let sesionId = sesionActual?.id
+    if (sesionActual) {
+      const { error } = await supabase.from('taller_sesiones').update({ estado: nuevoEstado }).eq('id', sesionActual.id)
+      if (error) { setErrorSesion('Error al guardar: ' + error.message); setGuardandoSesion(false); return }
+      setSesionActual({ ...sesionActual, estado: nuevoEstado })
+    } else {
+      const { data, error } = await supabase.from('taller_sesiones')
+        .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: nuevoEstado })
+        .select().single()
+      if (error) { setErrorSesion('Error al guardar: ' + error.message); setGuardandoSesion(false); return }
+      if (data) { setSesionActual(data); sesionId = data.id }
+    }
+    if (nuevoEstado === 'dada' && sesionId) {
+      const { data: ex } = await supabase.from('taller_asistencias').select('id').eq('sesion_id', sesionId)
+      if (!ex || ex.length === 0) {
+        if (inscritosDelTaller.length > 0) {
+          await supabase.from('taller_asistencias').insert(inscritosDelTaller.map((ins: any) => ({ sesion_id: sesionId, inscripcion_id: ins.id, asistio: true })))
+        }
+      }
     }
     setGuardandoSesion(false)
   }
@@ -567,9 +583,10 @@ export default function Horarios() {
                     <div style={{display:'flex',gap:'8px'}}>
                       {[{est:'programada',label:'Programada',bg:'#eff6ff',color:'#1d4ed8'},{est:'dada',label:'Dada',bg:'#fefce8',color:'#854d0e'},{est:'cancelada',label:'Cancelada',bg:'#fee2e2',color:'#991b1b'}].map(op=>{
                         const esA=(sesionActual?.estado||'programada')===op.est
-                        return <button key={op.est} onClick={()=>!esA&&marcarSesion(op.est)} disabled={guardandoSesion||esA} style={{flex:1,padding:'6px',borderRadius:'8px',cursor:esA?'default':'pointer',fontSize:'12px',fontWeight:'600',border:`1px solid ${esA?op.color:'#e2e8f0'}`,background:esA?op.bg:'white',color:esA?op.color:'#666'}}>{op.label}</button>
+                        return <button key={op.est} onClick={()=>{ if(!esA) marcarSesion(op.est) }} disabled={guardandoSesion||esA} style={{flex:1,padding:'6px',borderRadius:'8px',cursor:esA?'default':'pointer',fontSize:'12px',fontWeight:'600',border:`1px solid ${esA?op.color:'#e2e8f0'}`,background:esA?op.bg:'white',color:esA?op.color:'#666'}}>{guardandoSesion&&!esA?'...':op.label}</button>
                       })}
                     </div>
+                  {errorSesion&&<p style={{color:'#ef4444',fontSize:'12px',marginTop:'8px',marginBottom:0}}>{errorSesion}</p>}
                   </div>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'14px'}}>
                     <p style={{margin:0,fontSize:'15px',fontWeight:'600',color:'#333'}}>Inscritos este mes <span style={{color:TALLER_COLOR}}>({inscritosDelTaller.length})</span></p>
