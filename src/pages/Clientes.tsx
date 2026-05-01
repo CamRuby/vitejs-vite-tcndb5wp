@@ -4,6 +4,7 @@ import { supabase } from '../supabase'
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
+const METODOS_PAGO = ['Efectivo', 'Transferencia', 'Nequi', 'Daviplata', 'Tarjeta BOLD']
 
 const estiloInput = {
   width: '100%', padding: '10px 12px',
@@ -32,7 +33,25 @@ function colorEstadoPlan(e: string) {
   return { bg: TEAL_LIGHT, color: TEAL, border: TEAL_MID }
 }
 
-// ── NUEVO: detectar inscripción vencida ──
+function calcularEstadoPago(valorPlan: number | null, pagos: any[]) {
+  const totalPagado = (pagos || []).reduce((s, p) => s + Number(p.monto), 0)
+  const saldo = valorPlan !== null ? valorPlan - totalPagado : null
+  let estado = 'Sin valor'
+  if (valorPlan !== null) {
+    if (totalPagado === 0) estado = 'Sin pagar'
+    else if (totalPagado >= valorPlan) estado = 'Pagado'
+    else estado = 'Parcial'
+  }
+  return { totalPagado, saldo, estado }
+}
+
+function colorEstadoPago(estado: string) {
+  if (estado === 'Pagado')    return { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
+  if (estado === 'Parcial')   return { bg: '#fef3c7', color: '#92400e', border: '#fde68a' }
+  if (estado === 'Sin pagar') return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' }
+  return { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' }
+}
+
 function estaVencida(inscripcion: any): boolean {
   if (!inscripcion?.mes || inscripcion.estado !== 'activo') return false
   const hoy = new Date()
@@ -40,7 +59,6 @@ function estaVencida(inscripcion: any): boolean {
   return inscripcion.mes < mesActual
 }
 
-// ── NUEVO: opciones de mes (actual + 5 futuros) ──
 function opcionesMesTaller(): { valor: string; etiqueta: string }[] {
   const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
   const opciones = []
@@ -337,6 +355,101 @@ function TablaPlanesVista({ planes, onVerCliente }) {
   )
 }
 
+// ── NUEVO: Modal para registrar abonos ──
+function ModalAbono({ plan, pagos, onRegistrar, onCerrar, guardando, error }) {
+  const hoy = new Date().toISOString().split('T')[0]
+  const [form, setForm] = useState({ monto: '', metodo: 'Efectivo', fecha: hoy, notas: '' })
+  const { totalPagado, saldo, estado } = calcularEstadoPago(plan?.valor_plan ?? null, pagos)
+  const cPago = colorEstadoPago(estado)
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200 }}>
+      <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+        <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
+          <div>
+            <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>💰 Registrar abono</h3>
+            <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.85)', fontSize: '13px' }}>{plan?.instrumentos?.nombre || '—'}</p>
+          </div>
+          <button onClick={onCerrar} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
+        </div>
+
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {/* Resumen de pagos */}
+          <div style={{ padding: '16px 24px', background: '#fafbfc', borderBottom: '1px solid #eef2f7' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+              {[
+                { label: 'Valor del plan', valor: plan?.valor_plan ? `$${Number(plan.valor_plan).toLocaleString()}` : '—', color: '#333' },
+                { label: 'Total pagado', valor: `$${totalPagado.toLocaleString()}`, color: '#166534' },
+                { label: 'Saldo pendiente', valor: saldo !== null ? `$${Math.max(saldo, 0).toLocaleString()}` : '—', color: saldo && saldo > 0 ? '#991b1b' : '#166534' },
+              ].map(d => (
+                <div key={d.label} style={{ background: 'white', borderRadius: '8px', padding: '10px 12px', border: '1px solid #eef2f7', textAlign: 'center' }}>
+                  <p style={{ margin: '0 0 3px', fontSize: '11px', color: '#999', fontWeight: '600' }}>{d.label}</p>
+                  <p style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: d.color }}>{d.valor}</p>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <span style={{ padding: '4px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: cPago.bg, color: cPago.color, border: `1px solid ${cPago.border}` }}>{estado}</span>
+            </div>
+          </div>
+
+          {/* Historial de abonos */}
+          {pagos.length > 0 && (
+            <div style={{ padding: '12px 24px', borderBottom: '1px solid #eef2f7' }}>
+              <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Abonos registrados</p>
+              {pagos.map((pg: any) => (
+                <div key={pg.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: '#fafbfc', borderRadius: '8px', marginBottom: '5px', border: '1px solid #f1f5f9' }}>
+                  <div>
+                    <span style={{ fontSize: '13px', color: '#333', fontWeight: '500' }}>{pg.fecha}</span>
+                    <span style={{ marginLeft: '8px', fontSize: '12px', color: '#888' }}>{pg.metodo}</span>
+                    {pg.notas && <span style={{ marginLeft: '8px', fontSize: '12px', color: '#aaa' }}>· {pg.notas}</span>}
+                  </div>
+                  <span style={{ fontSize: '14px', fontWeight: '700', color: TEAL }}>${Number(pg.monto).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Formulario nuevo abono */}
+          <div style={{ padding: '16px 24px' }}>
+            <p style={{ margin: '0 0 14px', fontSize: '13px', fontWeight: '600', color: '#555' }}>Nuevo abono</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+              <div>
+                <label style={labelStyle}>Monto ($) *</label>
+                <input type="number" min={1} value={form.monto} onChange={e => setForm({ ...form, monto: e.target.value })}
+                  placeholder={saldo !== null && saldo > 0 ? `Saldo: $${saldo.toLocaleString()}` : '0'}
+                  style={estiloInput} autoFocus />
+              </div>
+              <div>
+                <label style={labelStyle}>Fecha *</label>
+                <input type="date" value={form.fecha} onChange={e => setForm({ ...form, fecha: e.target.value })} style={estiloInput} />
+              </div>
+              <div>
+                <label style={labelStyle}>Método de pago</label>
+                <select value={form.metodo} onChange={e => setForm({ ...form, metodo: e.target.value })} style={estiloInput}>
+                  {METODOS_PAGO.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Notas (opcional)</label>
+                <input type="text" value={form.notas} onChange={e => setForm({ ...form, notas: e.target.value })} placeholder="Ej: referencia transferencia" style={estiloInput} />
+              </div>
+            </div>
+            {error && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px', background: '#fef2f2', padding: '8px 12px', borderRadius: '6px' }}>{error}</p>}
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => onRegistrar(form)} disabled={guardando}
+                style={{ flex: 1, padding: '11px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
+                {guardando ? 'Guardando...' : '✓ Registrar abono'}
+              </button>
+              <button onClick={onCerrar} style={{ padding: '11px 18px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [busqueda, setBusqueda] = useState('')
   const [clientes, setClientes] = useState<any[]>([])
@@ -367,7 +480,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [talleres, setTalleres] = useState<any[]>([])
   const [tallerSeleccionado, setTallerSeleccionado] = useState('')
   const [tallerValorPagado, setTallerValorPagado] = useState('')
-  const [mesTaller, setMesTaller] = useState('')  // ── NUEVO
+  const [mesTaller, setMesTaller] = useState('')
   const [tallerGuardando, setTallerGuardando] = useState(false)
   const [tallerError, setTallerError] = useState('')
   const [esRenovacion, setEsRenovacion] = useState(false)
@@ -380,6 +493,13 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [filtroProfesor, setFiltroProfesor] = useState('')
   const [profesoresFiltro, setProfesoresFiltro] = useState<any[]>([])
   const [filtroClases, setFiltroClases] = useState<'realizadas' | 'programadas'>('realizadas')
+
+  // ── NUEVO: estado de pagos ──
+  const [pagosPlanes, setPagosPlanes] = useState<Record<string, any[]>>({})
+  const [pagosActivosTotales, setPagosActivosTotales] = useState<Record<string, number>>({})
+  const [modalAbono, setModalAbono] = useState<any>(null)
+  const [abonoGuardando, setAbonoGuardando] = useState(false)
+  const [abonoError, setAbonoError] = useState('')
 
   useEffect(() => {
     cargarBase()
@@ -427,6 +547,19 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       const planSelect2 = 'id, cliente_id, total_clases, clases_tomadas, duracion_min, valor_plan, fecha_inicio, estado, clientes(id, nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre), sedes(id, nombre)'
       const { data } = await supabase.from('contratos').select(planSelect2).eq('estado', 'activo').order('clases_tomadas', { ascending: false })
       setDatosVista(data || [])
+
+      // ── NUEVO: cargar totales de pagos para vista activos ──
+      const planIds = (data || []).map((p: any) => p.id)
+      if (planIds.length > 0) {
+        const { data: pgData } = await supabase.from('pagos').select('contrato_id, monto').in('contrato_id', planIds)
+        const totales: Record<string, number> = {}
+        ;(pgData || []).forEach((pg: any) => {
+          totales[pg.contrato_id] = (totales[pg.contrato_id] || 0) + Number(pg.monto)
+        })
+        setPagosActivosTotales(totales)
+      } else {
+        setPagosActivosTotales({})
+      }
     } else if (vista === 'reactivacion') {
       const { data: completados } = await supabase.from('contratos').select(planSelect).eq('estado', 'completado').order('fecha_inicio', { ascending: false })
       if (!completados?.length) { setDatosVista([]); setCargandoVista(false); return }
@@ -449,6 +582,21 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     setInscripcionesTalleres(talleresData || [])
     const { data: planesData } = await supabase.from('contratos').select('id, total_clases, clases_tomadas, valor_plan, tipo_plan, estado, fecha_inicio, duracion_min, instrumento_id, profesor_id, sede_id, instrumentos(nombre), profesores(nombre), sedes(nombre)').eq('cliente_id', c.id).order('fecha_inicio', { ascending: false })
     setPlanes(planesData || [])
+
+    // ── NUEVO: cargar pagos de todos los planes ──
+    const planIds = (planesData || []).map((p: any) => p.id)
+    if (planIds.length > 0) {
+      const { data: pgData } = await supabase.from('pagos').select('*').in('contrato_id', planIds).order('fecha', { ascending: false })
+      const map: Record<string, any[]> = {}
+      ;(pgData || []).forEach((pg: any) => {
+        if (!map[pg.contrato_id]) map[pg.contrato_id] = []
+        map[pg.contrato_id].push(pg)
+      })
+      setPagosPlanes(map)
+    } else {
+      setPagosPlanes({})
+    }
+
     const { data: ctList } = await supabase.from('contratos').select('id').eq('cliente_id', c.id)
     const ids = (ctList || []).map((ct: any) => ct.id)
     if (ids.length > 0) {
@@ -520,6 +668,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       const inscripIds = (inscrip || []).map((i: any) => i.id)
       if (inscripIds.length > 0) await supabase.from('taller_asistencias').delete().in('inscripcion_id', inscripIds)
       await supabase.from('taller_inscripciones').delete().eq('cliente_id', clienteId)
+      await supabase.from('pagos').delete().in('contrato_id', ids)
       await supabase.from('clases').delete().in('contrato_id', ids)
       await supabase.from('contratos').delete().eq('cliente_id', clienteId)
     }
@@ -575,7 +724,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     await cargarDatosCliente(clienteSeleccionado)
   }
 
-  // ── NUEVO: abrir modal taller — solo talleres activos, con mes selector ──
   async function abrirModalTaller() {
     const { data } = await supabase
       .from('talleres')
@@ -592,7 +740,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     setModalTaller(true)
   }
 
-  // ── NUEVO: inscribir con mes seleccionable ──
   async function inscribirEnTaller() {
     if (!tallerSeleccionado) { setTallerError('Selecciona un taller'); return }
     if (!mesTaller) { setTallerError('Selecciona el mes'); return }
@@ -637,6 +784,24 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     setModalPlan(null); setEsRenovacion(false)
     await cargarDatosCliente(clienteSeleccionado)
     cargarVista(vistaActual)
+  }
+
+  // ── NUEVO: registrar abono ──
+  async function registrarAbono(formAbono: { monto: string; metodo: string; fecha: string; notas: string }) {
+    if (!formAbono.monto || Number(formAbono.monto) <= 0) { setAbonoError('Ingresa un monto válido'); return }
+    if (!formAbono.fecha) { setAbonoError('Selecciona una fecha'); return }
+    setAbonoGuardando(true); setAbonoError('')
+    const { error } = await supabase.from('pagos').insert({
+      contrato_id: modalAbono.id,
+      monto: Number(formAbono.monto),
+      fecha: formAbono.fecha,
+      metodo: formAbono.metodo,
+      notas: formAbono.notas || null
+    })
+    if (error) { setAbonoError('Error: ' + error.message); setAbonoGuardando(false); return }
+    setModalAbono(null); setAbonoGuardando(false)
+    await cargarDatosCliente(clienteSeleccionado)
+    if (vistaActual === 'activos') cargarVista('activos')
   }
 
   function formatFechaCorta(iso: string) {
@@ -784,14 +949,21 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                     <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
-                          <tr>{['#', 'Cliente', 'Instrumento', 'Profesor', 'Sede', 'Min', 'Total', 'Tomadas', 'Restantes'].map(h => <th key={h} style={{ ...thStyle, textAlign: ['#','Min','Total','Tomadas','Restantes'].includes(h) ? 'center' : 'left' }}>{h}</th>)}</tr>
+                          <tr>{['#', 'Cliente', 'Instrumento', 'Profesor', 'Sede', 'Min', 'Total', 'Tomadas', 'Restantes', 'Valor plan', 'Pagado', 'Saldo', 'Pago'].map(h => <th key={h} style={{ ...thStyle, textAlign: ['#','Min','Total','Tomadas','Restantes','Valor plan','Pagado','Saldo'].includes(h) ? 'center' : 'left' }}>{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                          {datos.length === 0 && <tr><td colSpan={9} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin planes activos</td></tr>}
+                          {datos.length === 0 && <tr><td colSpan={13} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin planes activos</td></tr>}
                           {datos.map((p: any, i) => {
                             const tomadas = p.clases_tomadas || 0, total = p.total_clases || 0, restantes = total - tomadas
                             const nombreCliente = p.clientes?.nombres ? `${p.clientes.nombres} ${p.clientes.apellidos || ''}`.trim() : p.clientes?.nombre || '—'
                             const colorFila = restantes === 0 ? '#fefce8' : restantes <= 2 ? '#fff7ed' : i % 2 === 0 ? 'white' : '#fafbfc'
+                            // ── NUEVO: calcular estado de pago ──
+                            const totalPagado = pagosActivosTotales[p.id] || 0
+                            const valorPlan = p.valor_plan ? Number(p.valor_plan) : null
+                            const saldoPlan = valorPlan !== null ? valorPlan - totalPagado : null
+                            const { estado: estPago } = calcularEstadoPago(valorPlan, [])
+                            const estPagoReal = valorPlan === null ? 'Sin valor' : totalPagado === 0 ? 'Sin pagar' : totalPagado >= valorPlan ? 'Pagado' : 'Parcial'
+                            const cPago = colorEstadoPago(estPagoReal)
                             return (
                               <tr key={p.id} onClick={() => seleccionarClientePorId(p.cliente_id)} style={{ borderTop: '1px solid #f8fafc', background: colorFila, cursor: 'pointer' }}
                                 onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)} onMouseLeave={e => (e.currentTarget.style.background = colorFila)}>
@@ -804,6 +976,13 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                                 <td style={{ ...tdStyle, textAlign: 'center' }}>{total}</td>
                                 <td style={{ ...tdStyle, textAlign: 'center' }}>{tomadas}</td>
                                 <td style={{ ...tdStyle, textAlign: 'center' }}><span style={{ fontWeight: '700', color: restantes === 0 ? '#854d0e' : restantes <= 2 ? '#c2410c' : '#166534' }}>{restantes === 0 ? '✓ Completo' : restantes}</span></td>
+                                {/* ── NUEVO: columnas de pago ── */}
+                                <td style={{ ...tdStyle, textAlign: 'center' }}>{valorPlan ? `$${valorPlan.toLocaleString()}` : '—'}</td>
+                                <td style={{ ...tdStyle, textAlign: 'center', color: '#166534', fontWeight: '500' }}>{totalPagado > 0 ? `$${totalPagado.toLocaleString()}` : '—'}</td>
+                                <td style={{ ...tdStyle, textAlign: 'center', color: saldoPlan && saldoPlan > 0 ? '#991b1b' : '#166534', fontWeight: '500' }}>{saldoPlan !== null ? (saldoPlan > 0 ? `$${saldoPlan.toLocaleString()}` : '✓') : '—'}</td>
+                                <td style={{ ...tdStyle, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                                  <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: cPago.bg, color: cPago.color, whiteSpace: 'nowrap' }}>{estPagoReal}</span>
+                                </td>
                               </tr>
                             )
                           })}
@@ -901,6 +1080,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
 
           {planesActivos.map((p: any) => {
             const est = colorEstadoPlan(p.estado || 'activo')
+            const pagosPlan = pagosPlanes[p.id] || []
+            const { totalPagado, saldo, estado: estPago } = calcularEstadoPago(p.valor_plan ?? null, pagosPlan)
+            const cPago = colorEstadoPago(estPago)
             return (
               <div key={p.id} style={{ background: 'white', borderRadius: '18px', padding: '20px 24px', border: `1px solid ${est.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', marginBottom: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -922,8 +1104,33 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <span style={{ fontSize: '12px', color: '#999' }}>{p.total_clases - p.clases_tomadas} clases restantes</span>
-                  <span style={{ fontSize: '14px', color: '#555', fontWeight: '500' }}>${p.valor_plan?.toLocaleString() || '—'}</span>
+                  <span style={{ fontSize: '14px', color: '#555', fontWeight: '500' }}>{p.valor_plan ? `$${Number(p.valor_plan).toLocaleString()}` : '—'}</span>
                 </div>
+
+                {/* ── NUEVO: sección de pagos ── */}
+                <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+                    <div>
+                      <p style={{ margin: '0 0 2px', fontSize: '11px', color: '#555', fontWeight: '600' }}>TOTAL PAGADO</p>
+                      <p style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: '#166534' }}>${totalPagado.toLocaleString()}</p>
+                    </div>
+                    {saldo !== null && (
+                      <div>
+                        <p style={{ margin: '0 0 2px', fontSize: '11px', color: '#555', fontWeight: '600' }}>SALDO PENDIENTE</p>
+                        <p style={{ margin: 0, fontSize: '15px', fontWeight: '700', color: saldo > 0 ? '#991b1b' : '#166534' }}>{saldo > 0 ? `$${saldo.toLocaleString()}` : '✓ Al día'}</p>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: cPago.bg, color: cPago.color, border: `1px solid ${cPago.border}` }}>{estPago}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setModalAbono(p); setAbonoError('') }}
+                    style={{ padding: '7px 16px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                    + Registrar abono
+                  </button>
+                </div>
+
                 <div style={{ paddingTop: '12px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '12px', color: '#999' }}>Estado:</span>
                   {['activo', 'aplazado', 'completado'].map(est2 => {
@@ -952,12 +1159,11 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
           {inscripcionesTalleres.length === 0 && <div style={{ background: 'white', borderRadius: '12px', padding: '24px', textAlign: 'center', color: '#888', marginBottom: '24px' }}>Sin inscripciones a talleres</div>}
 
           {inscripcionesTalleres.filter((i: any) => i.estado !== 'archivado').map((ins: any) => {
-            const esVencida = estaVencida(ins)  // ── NUEVO
+            const esVencida = estaVencida(ins)
             const esActivo = ins.estado === 'activo' && !esVencida
             const esCompletado = ins.estado === 'completado'
             const fechaMes = ins.mes ? new Date(ins.mes + 'T12:00:00') : null
             const mesLabel = fechaMes ? `${fechaMes.getDate()} de ${['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][fechaMes.getMonth()]} ${fechaMes.getFullYear()}` : '—'
-            // ── NUEVO: color según estado + vencimiento ──
             const colorEstado = esVencida
               ? { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' }
               : esActivo ? { bg: '#f3e8ff', color: '#7c3aed', border: '#d8b4fe' }
@@ -969,7 +1175,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                       <p style={{ margin: 0, fontWeight: '600', fontSize: '16px', color: '#1a1a1a' }}>🎸 {ins.talleres?.nombre || '—'}</p>
-                      {/* ── NUEVO: badge vencida ── */}
                       <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600', background: colorEstado.bg, color: colorEstado.color }}>
                         {esVencida ? '⚠️ Vencida' : ins.estado}
                       </span>
@@ -983,7 +1188,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                   </div>
                 </div>
                 <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  {/* ── NUEVO: si está vencida, mostrar Renovar y Finalizar en lugar de los estados ── */}
                   {esVencida ? (
                     <>
                       <span style={{ fontSize: '12px', color: '#c2410c', fontWeight: '500' }}>Inscripción vencida — ¿qué deseas hacer?</span>
@@ -1131,7 +1335,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
         </div>
       )}
 
-      {/* Modal asignar a taller — con selector de mes */}
+      {/* Modal asignar a taller */}
       {modalTaller && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
@@ -1143,7 +1347,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
               <button onClick={() => setModalTaller(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ padding: '24px' }}>
-              {/* ── NUEVO: selector de mes ── */}
               <div style={{ marginBottom: '16px' }}>
                 <label style={labelStyle}>Mes de inscripción *</label>
                 <select value={mesTaller} onChange={e => setMesTaller(e.target.value)} style={estiloInput}>
@@ -1177,6 +1380,18 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       )}
 
       {modalHistorial && <ModalHistorialPlanes planes={planesArchivados} onCerrar={() => setModalHistorial(false)} />}
+
+      {/* ── NUEVO: Modal de abono ── */}
+      {modalAbono && (
+        <ModalAbono
+          plan={modalAbono}
+          pagos={pagosPlanes[modalAbono.id] || []}
+          onRegistrar={registrarAbono}
+          onCerrar={() => { setModalAbono(null); setAbonoError('') }}
+          guardando={abonoGuardando}
+          error={abonoError}
+        />
+      )}
     </div>
   )
 }
