@@ -188,7 +188,7 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar,
     await onGuardar({
       tipo_plan: 'regular', instrumento_id: fp.instrumento_id, profesor_id: fp.profesor_id,
       sede_id: fp.sede_id, total_clases: Number(fp.total_clases),
-      clases_tomadas: esNuevo ? 0 : Number(fp.clases_tomadas),
+      clases_tomadas: esNuevo ? 0 : parseFloat(String(fp.clases_tomadas)),
       valor_plan: fp.valor_plan !== '' ? Number(fp.valor_plan) : null,
       duracion_min: Number(fp.duracion_min), fecha_inicio: fp.fecha_inicio, estado: fp.estado,
     }, esRenovacion ? undefined : plan?.id)
@@ -258,7 +258,7 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar,
             {!esNuevo && (
               <div>
                 <label style={labelStyle}>Clases tomadas</label>
-                <input type="number" min={0} value={fp.clases_tomadas} onChange={e => setFp({ ...fp, clases_tomadas: e.target.value })} style={estiloInput} />
+                <input type="number" min={0} step={0.25} value={fp.clases_tomadas} onChange={e => setFp({ ...fp, clases_tomadas: e.target.value })} style={estiloInput} />
               </div>
             )}
           </div>
