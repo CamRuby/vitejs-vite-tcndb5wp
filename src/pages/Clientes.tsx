@@ -17,13 +17,9 @@ const labelStyle = { fontWeight: '500' as const, fontSize: '13px', color: '#555'
 const CLASES_PRESET = [4, 8, 16, 20, 40, 80]
 
 const VISTAS = [
-  { value: 'todos',        label: '👥 Todos los clientes (A–Z)' },
-  { value: 'clientes',     label: '👤 Últimos 30 clientes registrados' },
-  { value: 'planes',       label: '📋 Últimos 30 planes creados' },
-  { value: 'completados',  label: '📁 Últimos 30 planes archivados' },
-  { value: 'aplazados',    label: '⏸ Planes aplazados' },
-  { value: 'reactivacion', label: '🔄 Planes completados (por renovar)' },
-  { value: 'activos',      label: '✅ Todos los planes activos' },
+  { value: 'activos',   label: '✅ Todos los planes activos' },
+  { value: 'talleres',  label: '🎸 Todos los talleres' },
+  { value: 'todos',     label: '👥 Todos los clientes (A–Z)' },
 ]
 
 function colorEstadoPlan(e: string) {
@@ -356,11 +352,18 @@ function TablaPlanesVista({ planes, onVerCliente }) {
 }
 
 // ── NUEVO: Modal para registrar abonos ──
-function ModalAbono({ plan, pagos, onRegistrar, onCerrar, guardando, error }) {
+function ModalAbono({ plan, pagos, onRegistrar, onAnular, onCerrar, guardando, error }) {
   const hoy = new Date().toISOString().split('T')[0]
   const [form, setForm] = useState({ monto: '', metodo: 'Efectivo', fecha: hoy, notas: '' })
+  const [anulando, setAnulando] = useState<string | null>(null)
   const { totalPagado, saldo, estado } = calcularEstadoPago(plan?.valor_plan ?? null, pagos)
   const cPago = colorEstadoPago(estado)
+
+  async function handleAnular(pagoId: string) {
+    setAnulando(pagoId)
+    await onAnular(pagoId, plan.id)
+    setAnulando(null)
+  }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200 }}>
@@ -404,7 +407,13 @@ function ModalAbono({ plan, pagos, onRegistrar, onCerrar, guardando, error }) {
                     <span style={{ marginLeft: '8px', fontSize: '12px', color: '#888' }}>{pg.metodo}</span>
                     {pg.notas && <span style={{ marginLeft: '8px', fontSize: '12px', color: '#aaa' }}>· {pg.notas}</span>}
                   </div>
-                  <span style={{ fontSize: '14px', fontWeight: '700', color: TEAL }}>${Number(pg.monto).toLocaleString()}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '14px', fontWeight: '700', color: TEAL }}>${Number(pg.monto).toLocaleString()}</span>
+                    <button onClick={() => handleAnular(pg.id)} disabled={anulando === pg.id}
+                      style={{ padding: '3px 10px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600' }}>
+                      {anulando === pg.id ? '...' : 'Anular'}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -453,7 +462,7 @@ function ModalAbono({ plan, pagos, onRegistrar, onCerrar, guardando, error }) {
 export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [busqueda, setBusqueda] = useState('')
   const [clientes, setClientes] = useState<any[]>([])
-  const [vistaActual, setVistaActual] = useState('todos')
+  const [vistaActual, setVistaActual] = useState('activos')
   const [datosVista, setDatosVista] = useState<any[]>([])
   const [cargandoVista, setCargandoVista] = useState(false)
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null)
@@ -521,7 +530,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
 
   async function cargarVista(vista: string) {
     setCargandoVista(true)
-    const planSelect = 'id, cliente_id, total_clases, clases_tomadas, duracion_min, valor_plan, fecha_inicio, estado, instrumento_id, profesor_id, sede_id, clientes(id, nombre), instrumentos(nombre), sedes(nombre)'
     if (vista === 'todos') {
       const { data } = await supabase.from('clientes').select('id, nombre, nombres, apellidos, grupo_whatsapp, estado').order('nombre', { ascending: true })
       const clienteIds = (data || []).map((c: any) => c.id)
@@ -531,24 +539,10 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
         ;(contratos || []).forEach((ct: any) => { planesActivos[ct.cliente_id] = true })
       }
       setDatosVista((data || []).map((c: any) => ({ ...c, tiene_plan_activo: !!planesActivos[c.id] })))
-    } else if (vista === 'clientes') {
-      const { data } = await supabase.from('clientes').select('id, nombre, telefono, email, grupo_whatsapp, estado, created_at').not('created_at', 'is', null).order('created_at', { ascending: false }).limit(30)
-      setDatosVista(data || [])
-    } else if (vista === 'planes') {
-      const { data } = await supabase.from('contratos').select(planSelect).order('fecha_inicio', { ascending: false }).limit(30)
-      setDatosVista(data || [])
-    } else if (vista === 'completados') {
-      const { data } = await supabase.from('contratos').select(planSelect).eq('estado', 'archivado').order('fecha_inicio', { ascending: false }).limit(30)
-      setDatosVista(data || [])
-    } else if (vista === 'aplazados') {
-      const { data } = await supabase.from('contratos').select(planSelect).eq('estado', 'aplazado').order('fecha_inicio', { ascending: false })
-      setDatosVista(data || [])
     } else if (vista === 'activos') {
       const planSelect2 = 'id, cliente_id, total_clases, clases_tomadas, duracion_min, valor_plan, fecha_inicio, estado, clientes(id, nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre), sedes(id, nombre)'
       const { data } = await supabase.from('contratos').select(planSelect2).eq('estado', 'activo').order('clases_tomadas', { ascending: false })
       setDatosVista(data || [])
-
-      // ── NUEVO: cargar totales de pagos para vista activos ──
       const planIds = (data || []).map((p: any) => p.id)
       if (planIds.length > 0) {
         const { data: pgData } = await supabase.from('pagos').select('contrato_id, monto').in('contrato_id', planIds)
@@ -560,13 +554,13 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       } else {
         setPagosActivosTotales({})
       }
-    } else if (vista === 'reactivacion') {
-      const { data: completados } = await supabase.from('contratos').select(planSelect).eq('estado', 'completado').order('fecha_inicio', { ascending: false })
-      if (!completados?.length) { setDatosVista([]); setCargandoVista(false); return }
-      const clienteIds = [...new Set(completados.map((p: any) => p.cliente_id))]
-      const { data: activos } = await supabase.from('contratos').select('cliente_id').eq('estado', 'activo').in('cliente_id', clienteIds)
-      const clientesConActivo = new Set((activos || []).map((p: any) => p.cliente_id))
-      setDatosVista(completados.filter((p: any) => !clientesConActivo.has(p.cliente_id)))
+    } else if (vista === 'talleres') {
+      const { data } = await supabase
+        .from('taller_inscripciones')
+        .select('id, mes, valor_pagado, estado, taller_id, cliente_id, clientes(nombre, nombres, apellidos), talleres(nombre, valor_mensual, salones(sedes(nombre)))')
+        .neq('estado', 'archivado')
+        .order('taller_id', { ascending: true })
+      setDatosVista(data || [])
     }
     setCargandoVista(false)
   }
@@ -804,6 +798,17 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     if (vistaActual === 'activos') cargarVista('activos')
   }
 
+  async function anularAbono(pagoId: string, contratoId: string) {
+    const { error } = await supabase.from('pagos').delete().eq('id', pagoId)
+    if (error) { alert('Error al anular: ' + error.message); return }
+    // Actualizar estado local inmediatamente
+    setPagosPlanes(prev => ({
+      ...prev,
+      [contratoId]: (prev[contratoId] || []).filter((p: any) => p.id !== pagoId)
+    }))
+    if (vistaActual === 'activos') cargarVista('activos')
+  }
+
   function formatFechaCorta(iso: string) {
     if (!iso) return '—'
     const d = new Date(iso)
@@ -905,29 +910,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                 </div>
               )}
 
-              {!cargandoVista && vistaActual === 'clientes' && (
-                <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
-                      <tr>{['Nombre', 'Teléfono', 'Correo electrónico', 'Grupo WhatsApp', 'Fecha ingreso'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
-                    </thead>
-                    <tbody>
-                      {datosVista.length === 0 && <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Los clientes nuevos aparecerán aquí</td></tr>}
-                      {datosVista.map((c: any, i) => (
-                        <tr key={c.id} onClick={() => seleccionarCliente(c)} style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc', cursor: 'pointer' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)} onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafbfc')}>
-                          <td style={{ ...tdStyle, fontWeight: '600', color: TEAL }}>{c.nombre}</td>
-                          <td style={tdStyle}>{c.telefono || '—'}</td>
-                          <td style={tdStyle}>{c.email || '—'}</td>
-                          <td style={tdStyle}>{c.grupo_whatsapp || '—'}</td>
-                          <td style={{ ...tdStyle, color: '#888' }}>{formatFechaCorta(c.created_at)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
               {!cargandoVista && vistaActual === 'activos' && (() => {
                 let datos = [...datosVista]
                 if (filtroSede) datos = datos.filter((p: any) => p.sedes?.id === filtroSede)
@@ -993,9 +975,76 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                 )
               })()}
 
-              {!cargandoVista && vistaActual !== 'clientes' && vistaActual !== 'todos' && vistaActual !== 'activos' && (
-                <TablaPlanesVista planes={datosVista} onVerCliente={seleccionarClientePorId} />
-              )}
+              {!cargandoVista && vistaActual === 'talleres' && (() => {
+                const hoy = new Date().toISOString().split('T')[0].substring(0, 7) + '-01'
+                // Agrupar por taller
+                const grupos: Record<string, any[]> = {}
+                datosVista.forEach((ins: any) => {
+                  const nombre = ins.talleres?.nombre || '—'
+                  if (!grupos[nombre]) grupos[nombre] = []
+                  grupos[nombre].push(ins)
+                })
+                // Ordenar grupos alfabéticamente
+                const gruposOrdenados = Object.keys(grupos).sort()
+                const thS: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }
+                const tdS: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }
+                return (
+                  <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
+                        <tr>{['Cliente', 'Taller', 'Sede', 'Fecha inicio', 'Fecha fin', 'Valor mensual', 'Valor pagado', 'Estado'].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
+                      </thead>
+                      <tbody>
+                        {gruposOrdenados.length === 0 && <tr><td colSpan={8} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin inscripciones activas</td></tr>}
+                        {gruposOrdenados.map(nombreTaller => {
+                          const inscrips = grupos[nombreTaller].slice().sort((a: any, b: any) => {
+                            const nA = a.clientes?.nombres || a.clientes?.nombre || ''
+                            const nB = b.clientes?.nombres || b.clientes?.nombre || ''
+                            return nA.localeCompare(nB, 'es')
+                          })
+                          return inscrips.map((ins: any, i) => {
+                            const nombreCliente = ins.clientes?.nombres
+                              ? `${ins.clientes.nombres} ${ins.clientes.apellidos || ''}`.trim()
+                              : ins.clientes?.nombre || '—'
+                            const fechaIni = ins.mes ? ins.mes.substring(0, 10) : '—'
+                            // Fecha fin: 1 mes después del mes de inicio (último día del mes de inicio)
+                            const fechaFinLabel = ins.mes ? (() => {
+                              const d = new Date(ins.mes + 'T12:00:00')
+                              const fin = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+                              return fin.toISOString().split('T')[0]
+                            })() : '—'
+                            const vencida = ins.mes ? ins.mes < hoy : false
+                            const bgFila = vencida ? '#fff0ee' : i % 2 === 0 ? 'white' : '#fafbfc'
+                            const colorEstBadge = ins.estado === 'activo'
+                              ? { bg: '#f3e8ff', color: '#7c3aed' }
+                              : ins.estado === 'completado'
+                              ? { bg: '#dcfce7', color: '#166534' }
+                              : { bg: '#f1f5f9', color: '#64748b' }
+                            return (
+                              <tr key={ins.id}
+                                onClick={() => seleccionarClientePorId(ins.cliente_id)}
+                                style={{ borderTop: i === 0 ? `2px solid ${TEAL_MID}` : '1px solid #f8fafc', background: bgFila, cursor: 'pointer' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)}
+                                onMouseLeave={e => (e.currentTarget.style.background = bgFila)}>
+                                <td style={{ ...tdS, fontWeight: '600', color: TEAL }}>{nombreCliente}</td>
+                                <td style={{ ...tdS, fontWeight: i === 0 ? '700' : '400', color: i === 0 ? '#1a1a1a' : '#555' }}>{nombreTaller}</td>
+                                <td style={tdS}>{ins.talleres?.salones?.sedes?.nombre || '—'}</td>
+                                <td style={{ ...tdS, color: '#888' }}>{fechaIni}</td>
+                                <td style={{ ...tdS, color: vencida ? '#dc2626' : '#888', fontWeight: vencida ? '600' : '400' }}>{fechaFinLabel} {vencida ? '⚠️' : ''}</td>
+                                <td style={tdS}>{ins.talleres?.valor_mensual ? `$${Number(ins.talleres.valor_mensual).toLocaleString()}` : '—'}</td>
+                                <td style={{ ...tdS, color: '#166534', fontWeight: '500' }}>{ins.valor_pagado ? `$${Number(ins.valor_pagado).toLocaleString()}` : '—'}</td>
+                                <td style={tdS}><span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600', background: colorEstBadge.bg, color: colorEstBadge.color }}>{ins.estado}</span></td>
+                              </tr>
+                            )
+                          })
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              })()}
+
+              {!cargandoVista && vistaActual !== 'activos' && vistaActual !== 'talleres' && vistaActual !== 'todos' && null}
             </div>
           )}
         </div>
@@ -1387,6 +1436,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
           plan={modalAbono}
           pagos={pagosPlanes[modalAbono.id] || []}
           onRegistrar={registrarAbono}
+          onAnular={anularAbono}
           onCerrar={() => { setModalAbono(null); setAbonoError('') }}
           guardando={abonoGuardando}
           error={abonoError}
