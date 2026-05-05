@@ -2,8 +2,14 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import Login from './Login'
 import Dashboard from './Dashboard'
+import ProfesorApp from './components/ProfesorApp'
 
 export default function App() {
+
+  if (window.location.pathname.startsWith('/profesor')) {
+    return <ProfesorApp />
+  }
+
   const [sesion, setSesion] = useState(null)
   const [cargando, setCargando] = useState(true)
 
@@ -12,7 +18,6 @@ export default function App() {
       setSesion(session)
       setCargando(false)
     })
-
     supabase.auth.onAuthStateChange((_event, session) => {
       setSesion(session)
     })
@@ -32,4 +37,3 @@ export default function App() {
   if (!sesion) return <Login />
   return <Dashboard usuario={sesion.user} />
 }
- 
