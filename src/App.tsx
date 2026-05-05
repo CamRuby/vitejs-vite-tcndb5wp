@@ -4,16 +4,15 @@ import Login from './Login'
 import Dashboard from './Dashboard'
 import ProfesorApp from './pages/ProfesorApp'
 
+// Se calcula UNA vez fuera del componente, no dentro
+const esProfesor = window.location.pathname.startsWith('/profesor')
+
 export default function App() {
-
-  if (window.location.pathname.startsWith('/profesor')) {
-    return <ProfesorApp />
-  }
-
   const [sesion, setSesion] = useState(null)
-  const [cargando, setCargando] = useState(true)
+  const [cargando, setCargando] = useState(!esProfesor)
 
   useEffect(() => {
+    if (esProfesor) return
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSesion(session)
       setCargando(false)
@@ -22,6 +21,8 @@ export default function App() {
       setSesion(session)
     })
   }, [])
+
+  if (esProfesor) return <ProfesorApp />
 
   if (cargando) return (
     <div style={{
