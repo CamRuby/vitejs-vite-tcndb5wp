@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-
+if (typeof window !== 'undefined') {
+  window.onerror = (msg) => { document.body.innerHTML = '<pre style="color:red;padding:20px;font-size:12px">' + msg + '</pre>' }
+}
 // ─── Colores de la academia ───────────────────────────────
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
