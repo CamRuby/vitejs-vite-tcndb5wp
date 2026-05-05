@@ -225,7 +225,7 @@ export default function ProfesorApp() {
 
   // ─── Cargando auth ────────────────────────────────────────
   if (cargandoAuth) return (
-    <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: TEAL }}>
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: TEAL }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       <div style={{ width: '36px', height: '36px', border: '3px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
     </div>
@@ -233,7 +233,7 @@ export default function ProfesorApp() {
 
   // ─── Pantalla de login ────────────────────────────────────
   if (!sesion) return (
-    <div style={{ minHeight: '100dvh', background: `linear-gradient(150deg, ${TEAL} 0%, #0d5f5f 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+    <div style={{ minHeight: '100vh', background: `linear-gradient(150deg, ${TEAL} 0%, #0d5f5f 100%)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
       <style>{`
         @keyframes fadeUp { from { opacity:0; transform:translateY(20px) } to { opacity:1; transform:translateY(0) } }
         .login-input:focus { border-color: ${TEAL} !important; box-shadow: 0 0 0 3px ${TEAL}33 !important; outline: none !important; }
@@ -293,7 +293,7 @@ export default function ProfesorApp() {
 
   // ─── Email no vinculado a ningún profesor ─────────────────
   if (!profesor) return (
-    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px', textAlign: 'center', gap: '14px' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px', textAlign: 'center', gap: '14px' }}>
       <div style={{ fontSize: '52px' }}>🔍</div>
       <p style={{ color: '#1f2937', fontSize: '17px', fontWeight: '700', margin: 0 }}>Cuenta no vinculada</p>
       <p style={{ color: '#6b7280', fontSize: '14px', margin: 0, lineHeight: '1.6', maxWidth: '280px' }}>
@@ -318,7 +318,7 @@ export default function ProfesorApp() {
   const fechaHoy    = `${DIAS[hoy.getDay()]} ${hoy.getDate()} de ${MESES_CORTO[hoy.getMonth()]}`
 
   return (
-    <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', background: '#f8fafc', maxWidth: '480px', margin: '0 auto', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#f8fafc', maxWidth: '480px', margin: '0 auto', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       <style>{`
         @keyframes fadeUp  { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
         @keyframes slideUp { from { transform:translateY(100%) } to { transform:translateY(0) } }
@@ -504,7 +504,7 @@ export default function ProfesorApp() {
           onClick={e => e.target === e.currentTarget && cerrarModal()}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', zIndex: 200, animation: 'fadeIn 0.2s ease' }}
         >
-          <div style={{ width: '100%', maxWidth: '480px', margin: '0 auto', background: 'white', borderRadius: '28px 28px 0 0', padding: '20px 20px 36px', animation: 'slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)', maxHeight: '88dvh', overflow: 'auto' }}>
+          <div style={{ width: '100%', maxWidth: '480px', margin: '0 auto', background: 'white', borderRadius: '28px 28px 0 0', padding: '20px 20px 36px', animation: 'slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)', maxHeight: '88vh', overflow: 'auto' }}>
 
             {/* Handle */}
             <div style={{ width: '44px', height: '5px', background: '#e5e7eb', borderRadius: '3px', margin: '0 auto 22px' }} />
