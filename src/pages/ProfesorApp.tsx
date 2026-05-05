@@ -224,6 +224,12 @@ export default function ProfesorApp() {
   // ════════════════════════════════════════════════════════
 
   // ─── Cargando auth ────────────────────────────────────────
+  useEffect(() => {
+    document.body.style.background = '#f8fafc'
+    document.body.style.margin = '0'
+    return () => { document.body.style.background = '' }
+  }, [])
+
   if (cargandoAuth) return (
     <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: TEAL }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
