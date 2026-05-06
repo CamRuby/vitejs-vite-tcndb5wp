@@ -1085,23 +1085,6 @@ export default function Horarios() {
                     </select>
                   </div>
 
-                  {/* PATCH: selector de modalidad */}
-                  <div style={{ marginBottom: '14px' }}>
-                    <label style={labelStyle}>Modalidad</label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      {MODALIDADES_CLASE.map(m => (
-                        <button key={m} onClick={() => setModalidadClase(m)} style={{
-                          flex: 1, padding: '9px', border: `1px solid ${modalidadClase === m ? TEAL : TEAL_MID}`,
-                          borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
-                          background: modalidadClase === m ? TEAL : 'white',
-                          color: modalidadClase === m ? 'white' : '#333',
-                          fontWeight: modalidadClase === m ? '600' : '400',
-                          textTransform: 'capitalize'
-                        }}>{m}</button>
-                      ))}
-                    </div>
-                  </div>
-
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Duración</label>
                     <div style={{ display: 'flex', gap: '8px' }}>
