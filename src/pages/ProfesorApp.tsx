@@ -510,7 +510,7 @@ export default function ProfesorApp() {
           </div>
           <div style={{ display: 'flex', gap: '3px' }}>
             {([
-              { key: 'hoy',       label: '📅 Hoy' },
+              { key: 'hoy',       label: '📅 Esta semana' },
               { key: 'talleres',  label: '🎸 Talleres' },
               { key: 'historial', label: '📋 Historial' },
             ] as const).map(v => (
