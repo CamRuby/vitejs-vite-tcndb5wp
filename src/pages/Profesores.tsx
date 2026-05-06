@@ -249,12 +249,7 @@ export default function Profesores() {
               </div>
               <div><label style={lS}>Teléfono</label><input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={fS} /></div>
               <div><label style={lS}>Correo</label><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={fS} /></div>
-              <div>
-                <label style={lS}>Ciudad</label>
-                <select value={form.ciudad} onChange={e => setForm({ ...form, ciudad: e.target.value })} style={fS}>
-                  {MODALIDADES.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
+             
               <div>
                 <label style={lS}>Estado</label>
                 <select value={form.activo ? 'activo' : 'inactivo'} onChange={e => setForm({ ...form, activo: e.target.value === 'activo' })}
