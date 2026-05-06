@@ -311,17 +311,32 @@ export default function Horarios() {
     if (!profId) return null
     const inicio = horaAMinutos(hora)
     const fin = inicio + durMin
+    const diaSemana = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
+    // Verificar clases regulares
     const { data } = await supabase.from('clases').select('id, hora, duracion_min, salones(nombre), contratos(clientes(nombre))')
       .eq('profesor_id', profId).eq('fecha', fecha).neq('estado', 'cancelada')
-    if (!data) return null
-    for (const c of data) {
-      if (excluirId && c.id === excluirId) continue
-      const cI = horaAMinutos((c.hora || '').substring(0, 5))
-      const cF = cI + ((c as any).duracion_min || 60)
-      if (inicio < cF && fin > cI) {
-        const cliente = (c as any).contratos?.clientes?.nombre || 'otro cliente'
-        const salon = (c as any).salones?.nombre || 'otro salón'
-        return `Profesor ya tiene clase con ${cliente} en ${salon} (${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}–${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')})`
+    if (data) {
+      for (const c of data) {
+        if (excluirId && c.id === excluirId) continue
+        const cI = horaAMinutos((c.hora || '').substring(0, 5))
+        const cF = cI + ((c as any).duracion_min || 60)
+        if (inicio < cF && fin > cI) {
+          const cliente = (c as any).contratos?.clientes?.nombre || 'otro cliente'
+          const salon = (c as any).salones?.nombre || 'otro salón'
+          return `Profesor ya tiene clase con ${cliente} en ${salon} (${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}–${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')})`
+        }
+      }
+    }
+    // Verificar talleres
+    const { data: talleresPro } = await supabase.from('talleres')
+      .select('id, nombre, hora, duracion_min').eq('profesor_id', profId).eq('dia_semana', diaSemana)
+    if (talleresPro) {
+      for (const t of talleresPro) {
+        const tI = horaAMinutos((t.hora || '').substring(0, 5))
+        const tF = tI + (t.duracion_min || 60)
+        if (inicio < tF && fin > tI) {
+          return `Profesor tiene taller "${t.nombre}" ese día (${String(Math.floor(tI/60)).padStart(2,'0')}:${String(tI%60).padStart(2,'0')}–${String(Math.floor(tF/60)).padStart(2,'0')}:${String(tF%60).padStart(2,'0')})`
+        }
       }
     }
     return null
