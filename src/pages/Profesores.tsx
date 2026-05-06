@@ -399,9 +399,9 @@ export default function Profesores() {
                   ))}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '6px', marginTop: '10px', alignItems: 'end' }}>
                     <div>
-                      <label style={{ ...lS, fontSize: '11px' }}>Ciudad</label>
-                      <select value={tCiudad} onChange={e => setTCiudad(e.target.value)} style={{ ...fS, fontSize: '12px', padding: '6px 8px' }}>
-                        {CIUDADES.map(c => <option key={c} value={c}>{c}</option>)}
+                      <label style={{ ...lS, fontSize: '11px' }}>Modalidad</label>
+                      <select value={tModalidad} onChange={e => setTModalidad(e.target.value)} style={{ ...fS, fontSize: '12px', padding: '6px 8px', textTransform: 'capitalize' }}>
+                        {MODALIDADES.map(m => <option key={m} value={m} style={{ textTransform: 'capitalize' }}>{m}</option>)}
                       </select>
                     </div>
                     <div>
