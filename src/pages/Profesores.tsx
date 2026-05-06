@@ -43,7 +43,7 @@ export default function Profesores() {
   const [nHF, setNHF] = useState('12:00')
 
   const [tarifas, setTarifas] = useState<any[]>([])
-  const [tCiudad, setTCiudad] = useState('Bogotá')
+  const [tModalidad, setTModalidad] = useState('presencial')
   const [tDur, setTDur] = useState(60)
   const [tTaller, setTTaller] = useState(false)
   const [tValor, setTValor] = useState('')
