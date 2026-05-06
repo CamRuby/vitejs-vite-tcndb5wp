@@ -252,7 +252,7 @@ export default function Profesores() {
               <div>
                 <label style={lS}>Ciudad</label>
                 <select value={form.ciudad} onChange={e => setForm({ ...form, ciudad: e.target.value })} style={fS}>
-                  {CIUDADES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {MODALIDADES.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
               <div>
@@ -320,7 +320,7 @@ export default function Profesores() {
                 <div>
                   <label style={lS}>Ciudad</label>
                   <select value={form.ciudad} onChange={e => setForm({ ...form, ciudad: e.target.value })} style={fS}>
-                    {CIUDADES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {MODALIDADES.map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </div>
                 <div>
