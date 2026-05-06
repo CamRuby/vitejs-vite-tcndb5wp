@@ -614,7 +614,7 @@ export default function Horarios() {
           confirmada_profesor: false,
           patron_id: patronId,
           recurrente: true,
-          modalidad: modalidadClase, // PATCH
+          modalidad: slotSeleccionado.salon.nombre === 'Domicilio' ? 'domicilio' : 'presencial', // PATCH
         })
         i++
       }
@@ -634,7 +634,7 @@ export default function Horarios() {
         estado: 'programada',
         confirmada_cliente: false,
         confirmada_profesor: false,
-        modalidad: modalidadClase, // PATCH
+        modalidad: slotSeleccionado.salon.nombre === 'Domicilio' ? 'domicilio' : 'presencial', // PATCH
       })
       if (err) setError('Error: ' + err.message)
       else { setModalAbierto(false); cargarClases() }
