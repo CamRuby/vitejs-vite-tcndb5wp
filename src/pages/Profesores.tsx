@@ -390,7 +390,7 @@ export default function Profesores() {
                   {tarifas.length === 0 && <p style={{ color: '#aaa', fontSize: '13px', margin: '0 0 10px' }}>Sin tarifas registradas</p>}
                   {tarifas.map(t => (
                     <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: '#fafbfc', borderRadius: '8px', marginBottom: '5px', border: '1px solid #f1f5f9' }}>
-                      <span style={{ fontSize: '13px', color: '#333' }}>{t.ciudad} · {t.taller_grupal ? 'Taller grupal' : `${t.duracion_min} min`}</span>
+                      <span style={{ fontSize: '13px', color: '#333', textTransform: 'capitalize' }}>{t.modalidad} · {t.taller_grupal ? 'Taller grupal' : `${t.duracion_min} min`}</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <span style={{ fontSize: '14px', fontWeight: '700', color: TEAL }}>${Number(t.valor).toLocaleString()}</span>
                         <button onClick={() => borrarTarifa(t.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: '16px' }}>x</button>
