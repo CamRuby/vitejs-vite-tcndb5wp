@@ -534,7 +534,7 @@ export default function ProfesorApp() {
           {/* ── HOY ──────────────────────────────────────── */}
           {vista === 'hoy' && (
             <div style={{ animation: 'fadeUp 0.3s ease' }}>
-              <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: '13px', fontWeight: '600', textTransform: 'capitalize' }}>{fechaHoy}</p>
+              <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: '13px', fontWeight: '600' }}>Desde hoy hasta el sábado</p>
               {cargandoClases && <p style={{ textAlign: 'center', color: '#9ca3af', padding: '50px 0' }}>Cargando...</p>}
               {!cargandoClases && clases.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '70px 20px', color: '#9ca3af' }}>
