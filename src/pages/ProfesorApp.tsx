@@ -738,11 +738,7 @@ export default function ProfesorApp() {
                 <div style={{ background: 'rgba(0,0,0,0.08)', color: '#374151', padding: '5px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: '600' }}>
                   🏠 {claseActiva.salones?.nombre || '—'}
                 </div>
-                {claseActiva.modalidad && (
-                  <div style={{ background: 'rgba(0,0,0,0.06)', color: '#374151', padding: '5px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: '600', textTransform: 'capitalize' }}>
-                    {claseActiva.modalidad === 'virtual' ? '💻' : claseActiva.modalidad === 'domicilio' ? '🏡' : '🏫'} {claseActiva.modalidad}
-                  </div>
-                )}
+               
               </div>
             </div>
 
