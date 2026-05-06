@@ -915,7 +915,8 @@ export default function Horarios() {
                         borderLeft: '1px solid #f1f5f9',
                         cursor: (mainClass || taller) ? 'default' : 'pointer',
                         width: vista === 'semana' ? '80px' : '160px', minWidth: vista === 'semana' ? '80px' : '160px',
-                        background: esCeldaPasada && !mainClass && !taller ? '#f9fafb' : undefined
+                        background: esCeldaPasada && !mainClass && !taller ? '#f0f0f0' :
+                        (!mainClass && !taller && (col.salon.nombre === 'Virtual' || col.salon.nombre === 'Domicilio')) ? '#f0f4f4' : undefined
                       }}
                       onMouseEnter={e => { if (!mainClass && !taller) e.currentTarget.style.background = TEAL_LIGHT }}
                       onMouseLeave={e => { if (!mainClass && !taller) e.currentTarget.style.background = esCeldaPasada ? '#fafafa' : '' }}
