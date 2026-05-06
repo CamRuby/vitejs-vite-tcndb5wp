@@ -139,7 +139,7 @@ export default function Profesores() {
     if (!tValor) { alert('Ingresa un valor'); return }
     // Verificar duplicado
     const existe = tarifas.some(t =>
-      t.ciudad === tCiudad &&
+      t.modalidad === tModalidad &&
       t.taller_grupal === tTaller &&
       (tTaller ? true : t.duracion_min === tDur)
     )
