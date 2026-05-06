@@ -173,12 +173,6 @@ export default function ProfesorApp() {
     setCargandoClases(true)
     const hoy = new Date().toISOString().split('T')[0]
     const { data } = await supabase
-      .from('clases').select(SELECT_CLASES)
-      .eq('profesor_id', profesor.id).eq('fecha', hoy).order('hora')
-    setClases(data || [])
-    setCargandoClases(false)
-  }
-
   async function cargarHistorial() {
     if (!profesor) return
     setCargandoClases(true)
