@@ -809,11 +809,15 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '4px' }}>
             <span style={{ fontSize: '22px', fontWeight: '800', color: '#111', letterSpacing: '-1px', lineHeight: 1 }}>
-              {/* En historial muestra fecha, en hoy muestra hora */}
               {mostrarHonorario
                 ? `${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}`
                 : c.hora?.substring(0, 5)}
             </span>
+            {!mostrarHonorario && (
+              <span style={{ fontSize: '12px', color: '#9ca3af', fontWeight: '600' }}>
+                {c.fecha === new Date().toISOString().split('T')[0] ? 'Hoy' : `${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}`}
+              </span>
+            )}
             {mostrarHonorario && (
               <span style={{ fontSize: '13px', color: '#9ca3af', fontWeight: '600' }}>{c.hora?.substring(0, 5)}</span>
             )}
