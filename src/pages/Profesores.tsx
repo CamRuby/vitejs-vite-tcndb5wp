@@ -143,7 +143,7 @@ export default function Profesores() {
       t.taller_grupal === tTaller &&
       (tTaller ? true : t.duracion_min === tDur)
     )
-    if (existe) { alert(`Ya existe una tarifa para ${tCiudad} · ${tTaller ? 'Taller grupal' : tDur + ' min'}`); return }
+    if (existe) { alert(`Ya existe una tarifa para ${tModalidad} · ${tTaller ? 'Taller grupal' : tDur + ' min'}`); return }
     const { data, error } = await supabase.from('profesor_tarifas')
       .insert({ profesor_id: prof.id, ciudad: tCiudad, duracion_min: tTaller ? null : tDur, taller_grupal: tTaller, valor: Number(tValor) })
       .select().single()
