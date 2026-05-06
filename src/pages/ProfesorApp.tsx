@@ -835,11 +835,7 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
             <span style={{ background: '#f1f5f9', color: '#374151', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
               🏠 {c.salones?.nombre || '—'}
             </span>
-            {c.modalidad && (
-              <span style={{ background: '#f0fdf4', color: '#166534', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '600', textTransform: 'capitalize' }}>
-                {c.modalidad}
-              </span>
-            )}
+        
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
