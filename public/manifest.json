@@ -1,0 +1,19 @@
+{
+  "name": "Academia Ruby — Profesores",
+  "short_name": "Ruby Prof",
+  "description": "Portal de profesores Academia Ruby Salamanca",
+  "start_url": "/profesor",
+  "scope": "/profesor",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a8a8a",
+  "theme_color": "#1a8a8a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
