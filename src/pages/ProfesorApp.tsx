@@ -13,8 +13,9 @@ const DIAS_SEMANA: Record<string, number> = {
 const MESES_NOMBRE = ['enero','febrero','marzo','abril','mayo','junio',
   'julio','agosto','septiembre','octubre','noviembre','diciembre']
 
-function badgeEstado(estado: string, revisionPendiente?: boolean) {
+function badgeEstado(estado: string, revisionPendiente?: boolean, esTaller?: boolean) {
   if (revisionPendiente) return { label: 'Inasistencia', bg: '#fff7ed', color: '#c2410c' }
+  if (esTaller) return { label: 'Taller ✓', bg: '#f3e8ff', color: '#7c3aed' }
   switch (estado) {
     case 'dada':       return { label: 'Dada ✓',    bg: '#dcfce7', color: '#166534' }
     case 'confirmada': return { label: 'Confirmada', bg: '#dbeafe', color: '#1e40af' }
@@ -47,7 +48,7 @@ export default function ProfesorApp() {
   const [loginError, setLoginError]       = useState('')
   const [loginCargando, setLoginCargando] = useState(false)
 
-  const [vista, setVista]                 = useState<'hoy' | 'talleres' | 'historial'>('hoy')
+  const [vista, setVista]                 = useState<'hoy' | 'historial'>('hoy')
   const [clases, setClases]               = useState<any[]>([])
   const [cargandoClases, setCargandoClases] = useState(false)
   const [tarifas, setTarifas]             = useState<any[]>([])
@@ -55,14 +56,6 @@ export default function ProfesorApp() {
     const h = new Date()
     return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`
   })
-
-  // Talleres
-  const [talleres, setTalleres]           = useState<any[]>([])
-  const [cargandoTalleres, setCargandoTalleres] = useState(false)
-  const [tallerModal, setTallerModal]     = useState<any>(null)
-  const [inscritosTaller, setInscritosTaller] = useState<any[]>([])
-  const [sesionHoy, setSesionHoy]         = useState<any>(null)
-  const [guardandoSesion, setGuardandoSesion] = useState(false)
 
   // Modal clase
   const [claseActiva, setClaseActiva]     = useState<any>(null)
@@ -103,8 +96,7 @@ export default function ProfesorApp() {
     if (!profesor) return
     cargarTarifas()
     if (vista === 'hoy') cargarHoy()
-    else if (vista === 'historial') cargarHistorial()
-    else cargarTalleres()
+    else cargarHistorial()
   }, [vista, mes, profesor])
 
   async function buscarProfesor(email: string) {
@@ -132,32 +124,25 @@ export default function ProfesorApp() {
     setLoginCargando(false)
   }
 
-  // ── Tarifas del profesor ──────────────────────────────
+  // ── Tarifas ───────────────────────────────────────────
   async function cargarTarifas() {
     if (!profesor) return
     const { data } = await supabase
-      .from('profesor_tarifas')
-      .select('*')
-      .eq('profesor_id', profesor.id)
-      .eq('taller_grupal', false)
+      .from('profesor_tarifas').select('*')
+      .eq('profesor_id', profesor.id).eq('taller_grupal', false)
     setTarifas(data || [])
   }
 
-  // ── Calcula honorario de una clase ────────────────────
   function getHonorario(c: any): number | 'pendiente' {
     if (c.revision_pendiente) return 'pendiente'
     if (c.estado !== 'dada') return 0
-    // Si ya tiene valor editado manualmente (admin lo ajustó)
     if (c.honorario_valor !== null && c.honorario_valor !== undefined)
       return Number(c.honorario_valor)
     const modalidad = (c.modalidad || 'presencial').toLowerCase()
     const duracion  = Number(c.duracion_min)
-    // Busca tarifa exacta por modalidad
     let tarifa = tarifas.find((t: any) =>
-      t.modalidad?.toLowerCase() === modalidad &&
-      Number(t.duracion_min) === duracion
+      t.modalidad?.toLowerCase() === modalidad && Number(t.duracion_min) === duracion
     )
-    // Presencial y virtual comparten tarifa
     if (!tarifa && (modalidad === 'presencial' || modalidad === 'virtual')) {
       tarifa = tarifas.find((t: any) =>
         (t.modalidad?.toLowerCase() === 'presencial' || t.modalidad?.toLowerCase() === 'virtual') &&
@@ -167,12 +152,74 @@ export default function ProfesorApp() {
     return tarifa ? Number(tarifa.valor) : 0
   }
 
-  // ── Clases ────────────────────────────────────────────
+  // ── Clases de la semana (hoy → sábado) ───────────────
   async function cargarHoy() {
     if (!profesor) return
     setCargandoClases(true)
-    const hoy = new Date().toISOString().split('T')[0]
+    const hoy = new Date()
+    const diaSemana = hoy.getDay()
+    const diasHastaSabado = diaSemana === 6 ? 7 : 6 - diaSemana
+    const sabado = new Date(hoy)
+    sabado.setDate(hoy.getDate() + diasHastaSabado)
+    const fi = hoy.toISOString().split('T')[0]
+    const ff = sabado.toISOString().split('T')[0]
+
     const { data } = await supabase
+      .from('clases').select(SELECT_CLASES)
+      .eq('profesor_id', profesor.id)
+      .gte('fecha', fi).lte('fecha', ff)
+      .order('fecha').order('hora')
+
+    // ── Cargar talleres confirmados y mezclarlos ──────
+    const hoyDate = new Date()
+    const mesT = `${hoyDate.getFullYear()}-${String(hoyDate.getMonth() + 1).padStart(2, '0')}-01`
+    const { data: talleresData } = await supabase
+      .from('talleres')
+      .select('id, nombre, dia_semana, hora, duracion_min, salones(nombre, sedes(nombre))')
+      .eq('profesor_id', profesor.id)
+
+    const ids = (talleresData || []).map((t: any) => t.id)
+    let talleresConfirmados: any[] = []
+    if (ids.length > 0) {
+      const { data: inscrip } = await supabase
+        .from('taller_inscripciones').select('taller_id')
+        .in('taller_id', ids).eq('estado', 'activo').gte('mes', mesT)
+      const confirmados = new Set((inscrip || []).map((i: any) => i.taller_id))
+      talleresConfirmados = (talleresData || []).filter((t: any) => confirmados.has(t.id))
+    }
+
+    // Generar una entrada por cada día de la semana que coincida con el día del taller
+    const clasesFinales = [...(data || [])]
+    for (let offset = 0; offset <= diasHastaSabado; offset++) {
+      const dia = new Date(hoy)
+      dia.setDate(hoy.getDate() + offset)
+      const fechaStr = dia.toISOString().split('T')[0]
+      talleresConfirmados.forEach((t: any) => {
+        if (DIAS_SEMANA[t.dia_semana] === dia.getDay()) {
+          clasesFinales.push({
+            id: `taller-${t.id}-${fechaStr}`,
+            fecha: fechaStr,
+            hora: t.hora,
+            duracion_min: t.duracion_min,
+            estado: 'confirmada',
+            esTaller: true,
+            nombreTaller: t.nombre,
+            salones: t.salones,
+            contratos: null,
+            revision_pendiente: false,
+            observaciones: null,
+            honorario_valor: null,
+            modalidad: null,
+          })
+        }
+      })
+    }
+    clasesFinales.sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`))
+    setClases(clasesFinales)
+    setCargandoClases(false)
+  }
+
+  // ── Historial del mes ─────────────────────────────────
   async function cargarHistorial() {
     if (!profesor) return
     setCargandoClases(true)
@@ -187,67 +234,6 @@ export default function ProfesorApp() {
       .order('fecha', { ascending: false })
     setClases(data || [])
     setCargandoClases(false)
-  }
-
-  // ── Talleres ──────────────────────────────────────────
-  async function cargarTalleres() {
-    if (!profesor) return
-    setCargandoTalleres(true)
-    const hoy  = new Date()
-    const mesT = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
-    const { data: talleresData } = await supabase
-      .from('talleres')
-      .select('id, nombre, dia_semana, hora, duracion_min, salones(nombre, sedes(nombre))')
-      .eq('profesor_id', profesor.id)
-    if (!talleresData?.length) { setTalleres([]); setCargandoTalleres(false); return }
-    const ids = talleresData.map((t: any) => t.id)
-    const { data: inscripciones } = await supabase
-      .from('taller_inscripciones').select('taller_id')
-      .in('taller_id', ids).eq('estado', 'activo').gte('mes', mesT)
-    const confirmados = new Set((inscripciones || []).map((i: any) => i.taller_id))
-    setTalleres(talleresData.filter((t: any) => confirmados.has(t.id)))
-    setCargandoTalleres(false)
-  }
-
-  async function abrirTaller(taller: any) {
-    setTallerModal(taller)
-    const hoy  = new Date()
-    const mesT = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
-    const fechaHoy = hoy.toISOString().split('T')[0]
-    const { data: inscritos } = await supabase
-      .from('taller_inscripciones')
-      .select('id, clientes(nombre, nombres, apellidos)')
-      .eq('taller_id', taller.id).eq('estado', 'activo').gte('mes', mesT)
-    setInscritosTaller(inscritos || [])
-    const { data: sesion } = await supabase
-      .from('taller_sesiones').select('id, fecha, estado')
-      .eq('taller_id', taller.id).eq('fecha', fechaHoy).maybeSingle()
-    setSesionHoy(sesion || null)
-  }
-
-  async function marcarSesionTaller(nuevoEstado: string) {
-    if (!tallerModal) return
-    setGuardandoSesion(true)
-    const fechaHoy = new Date().toISOString().split('T')[0]
-    if (sesionHoy) {
-      await supabase.from('taller_sesiones').update({ estado: nuevoEstado }).eq('id', sesionHoy.id)
-      setSesionHoy({ ...sesionHoy, estado: nuevoEstado })
-    } else {
-      const { data } = await supabase.from('taller_sesiones')
-        .insert({ taller_id: tallerModal.id, fecha: fechaHoy, estado: nuevoEstado })
-        .select().single()
-      if (data) {
-        setSesionHoy(data)
-        if (nuevoEstado === 'dada' && inscritosTaller.length > 0) {
-          await supabase.from('taller_asistencias').insert(
-            inscritosTaller.map((ins: any) => ({
-              sesion_id: data.id, inscripcion_id: ins.id, asistio: true
-            }))
-          )
-        }
-      }
-    }
-    setGuardandoSesion(false)
   }
 
   // ── Marcar DADA ───────────────────────────────────────
@@ -298,13 +284,18 @@ export default function ProfesorApp() {
     setGuardando(false)
   }
 
-  function abrirModal(clase: any) { setClaseActiva(clase); setResumen(clase.observaciones || '') }
-  function cerrarModal() {
-    setClaseActiva(null); setResumen('')
-    if (vista === 'hoy') cargarHoy(); else if (vista === 'historial') cargarHistorial()
+  function abrirModal(clase: any) {
+    if (clase.esTaller) return // los talleres no tienen modal de acción
+    setClaseActiva(clase)
+    setResumen(clase.observaciones || '')
   }
 
-  // ── Exportar PDF de honorarios ────────────────────────
+  function cerrarModal() {
+    setClaseActiva(null); setResumen('')
+    if (vista === 'hoy') cargarHoy(); else cargarHistorial()
+  }
+
+  // ── Exportar PDF ──────────────────────────────────────
   function exportarPDF() {
     const [anio, mesNum] = mes.split('-')
     const mesLabel = `${MESES_NOMBRE[parseInt(mesNum) - 1]} ${anio}`
@@ -313,13 +304,11 @@ export default function ProfesorApp() {
       const h = getHonorario(c)
       return h === 'pendiente' ? s : s + h
     }, 0)
-
     const filas = clasesDadas.map(c => {
       const hon = getHonorario(c)
       const honLabel = hon === 'pendiente'
         ? '<span style="color:#c2410c;font-weight:700">Pendiente revisión</span>'
         : `$${Number(hon).toLocaleString('es-CO')}`
-      const modalidad = c.modalidad || 'presencial'
       return `
         <tr>
           <td>${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}</td>
@@ -327,87 +316,52 @@ export default function ProfesorApp() {
           <td>${nombreCliente(c)}</td>
           <td>${c.contratos?.instrumentos?.nombre || '—'}</td>
           <td>${c.duracion_min} min</td>
-          <td style="text-transform:capitalize">${modalidad}</td>
           <td style="font-weight:600">${honLabel}</td>
         </tr>
         ${c.observaciones ? `
         <tr class="resumen-row">
-          <td colspan="7">
-            <div class="resumen-box">📝 <em>${c.observaciones.replace(/\n/g, '<br>')}</em></div>
-          </td>
+          <td colspan="6"><div class="resumen-box">📝 <em>${c.observaciones.replace(/\n/g, '<br>')}</em></div></td>
         </tr>` : ''}
       `
     }).join('')
-
     const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
+<html lang="es"><head><meta charset="UTF-8">
 <title>Honorarios ${mesLabel} — ${profesor?.nombre}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #1a1a1a; font-size: 13px; }
-  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 32px; border-bottom: 3px solid #1a8a8a; padding-bottom: 20px; }
-  .logo-area h1 { font-size: 22px; color: #1a8a8a; font-weight: 800; }
-  .logo-area p { color: #666; font-size: 12px; margin-top: 4px; }
-  .info-area { text-align: right; }
-  .info-area h2 { font-size: 16px; color: #1a1a1a; font-weight: 700; }
-  .info-area p { color: #555; font-size: 12px; margin-top: 3px; }
-  table { width:100%; border-collapse: collapse; margin-top: 20px; }
-  thead tr { background: #e8f5f5; }
-  th { padding: 10px 12px; text-align: left; font-size: 11px; color: #1a8a8a; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-  td { padding: 9px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-  tr:hover td { background: #fafbfc; }
-  .resumen-row td { padding: 0 12px 10px; border-bottom: 1px solid #f1f5f9; }
-  .resumen-box { background: #f8fafc; border-left: 3px solid #b2d8d8; padding: 8px 12px; font-size: 12px; color: #555; line-height: 1.6; border-radius: 0 6px 6px 0; }
-  .total-row { background: #e8f5f5; font-weight: 700; }
-  .total-row td { padding: 14px 12px; font-size: 15px; color: #1a8a8a; border-top: 2px solid #1a8a8a; }
-  .footer { margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 11px; color: #aaa; display: flex; justify-content: space-between; }
-  @media print { 
-    body { padding: 20px; }
-    .no-print { display: none !important; }
-    tr { page-break-inside: avoid; }
-  }
-  .print-btn { margin-bottom: 24px; padding: 10px 24px; background: #1a8a8a; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; }
-</style>
-</head>
-<body>
-<button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+  body { font-family:'Segoe UI',Arial,sans-serif; padding:40px; color:#1a1a1a; font-size:13px; }
+  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:32px; border-bottom:3px solid #1a8a8a; padding-bottom:20px; }
+  .logo-area h1 { font-size:22px; color:#1a8a8a; font-weight:800; }
+  .logo-area p { color:#666; font-size:12px; margin-top:4px; }
+  .info-area { text-align:right; }
+  .info-area h2 { font-size:16px; color:#1a1a1a; font-weight:700; }
+  .info-area p { color:#555; font-size:12px; margin-top:3px; }
+  table { width:100%; border-collapse:collapse; margin-top:20px; }
+  thead tr { background:#e8f5f5; }
+  th { padding:10px 12px; text-align:left; font-size:11px; color:#1a8a8a; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
+  td { padding:9px 12px; border-bottom:1px solid #f1f5f9; vertical-align:top; }
+  .resumen-row td { padding:0 12px 10px; }
+  .resumen-box { background:#f8fafc; border-left:3px solid #b2d8d8; padding:8px 12px; font-size:12px; color:#555; line-height:1.6; border-radius:0 6px 6px 0; }
+  .total-row { background:#e8f5f5; font-weight:700; }
+  .total-row td { padding:14px 12px; font-size:15px; color:#1a8a8a; border-top:2px solid #1a8a8a; }
+  .footer { margin-top:40px; border-top:1px solid #e2e8f0; padding-top:16px; font-size:11px; color:#aaa; display:flex; justify-content:space-between; }
+  .print-btn { margin-bottom:24px; padding:10px 24px; background:#1a8a8a; color:white; border:none; border-radius:8px; cursor:pointer; font-size:14px; font-weight:600; }
+  @media print { .print-btn { display:none; } tr { page-break-inside:avoid; } }
+</style></head><body>
+<button class="print-btn" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 <div class="header">
-  <div class="logo-area">
-    <h1>Academia Ruby Salamanca</h1>
-    <p>Cuenta de cobro de honorarios</p>
-  </div>
-  <div class="info-area">
-    <h2>${profesor?.nombre}</h2>
-    <p>${mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1)}</p>
-    <p>Generado: ${new Date().toLocaleDateString('es-CO')}</p>
-  </div>
+  <div class="logo-area"><h1>Academia Ruby Salamanca</h1><p>Cuenta de cobro de honorarios</p></div>
+  <div class="info-area"><h2>${profesor?.nombre}</h2><p>${mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1)}</p><p>Generado: ${new Date().toLocaleDateString('es-CO')}</p></div>
 </div>
-
 <table>
-  <thead>
-    <tr>
-      <th>Fecha</th><th>Hora</th><th>Estudiante</th><th>Instrumento</th>
-      <th>Duración</th><th>Modalidad</th><th>Honorario</th>
-    </tr>
-  </thead>
+  <thead><tr><th>Fecha</th><th>Hora</th><th>Estudiante</th><th>Instrumento</th><th>Duración</th><th>Honorario</th></tr></thead>
   <tbody>
-    ${filas || '<tr><td colspan="7" style="text-align:center;color:#aaa;padding:24px">Sin clases dadas este mes</td></tr>'}
-    <tr class="total-row">
-      <td colspan="6">TOTAL HONORARIOS ${mesLabel.toUpperCase()}</td>
-      <td>$${totalHon.toLocaleString('es-CO')}</td>
-    </tr>
+    ${filas || '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px">Sin clases dadas este mes</td></tr>'}
+    <tr class="total-row"><td colspan="5">TOTAL HONORARIOS ${mesLabel.toUpperCase()}</td><td>$${totalHon.toLocaleString('es-CO')}</td></tr>
   </tbody>
 </table>
-
-<div class="footer">
-  <span>Academia Ruby Salamanca</span>
-  <span>Documento generado desde el portal del profesor</span>
-</div>
-</body>
-</html>`
-
+<div class="footer"><span>Academia Ruby Salamanca</span><span>Documento generado desde el portal del profesor</span></div>
+</body></html>`
     const w = window.open('', '_blank')
     if (w) { w.document.write(html); w.document.close() }
   }
@@ -466,19 +420,10 @@ export default function ProfesorApp() {
   )
 
   // ── Dashboard ─────────────────────────────────────────
-  const hoyDate     = new Date()
-  const DIAS_CORTO  = ['dom','lun','mar','mié','jue','vie','sáb']
-  const MESES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
-  const fechaHoy    = `${DIAS_CORTO[hoyDate.getDay()]} ${hoyDate.getDate()} de ${MESES_CORTO[hoyDate.getMonth()]}`
-
-  // Stats del mes para historial
-  const dadas      = clases.filter(c => c.estado === 'dada')
+  const dadas         = clases.filter(c => c.estado === 'dada')
   const inasistencias = clases.filter(c => c.revision_pendiente)
-  const totalHon   = dadas.reduce((s, c) => {
-    const h = getHonorario(c)
-    return h === 'pendiente' ? s : s + h
-  }, 0)
-  const pendientesCobro = clases.filter(c => c.revision_pendiente).length
+  const totalHon      = dadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
+  const pendientesCobro = inasistencias.length
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#f8fafc', display: 'flex', justifyContent: 'center' }}>
@@ -511,7 +456,6 @@ export default function ProfesorApp() {
           <div style={{ display: 'flex', gap: '3px' }}>
             {([
               { key: 'hoy',       label: '📅 Esta semana' },
-              { key: 'talleres',  label: '🎸 Talleres' },
               { key: 'historial', label: '📋 Historial' },
             ] as const).map(v => (
               <button key={v.key} onClick={() => setVista(v.key)}
@@ -531,7 +475,7 @@ export default function ProfesorApp() {
             </div>
           )}
 
-          {/* ── HOY ──────────────────────────────────────── */}
+          {/* ── ESTA SEMANA ───────────────────────────── */}
           {vista === 'hoy' && (
             <div style={{ animation: 'fadeUp 0.3s ease' }}>
               <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: '13px', fontWeight: '600' }}>Desde hoy hasta el sábado</p>
@@ -539,7 +483,7 @@ export default function ProfesorApp() {
               {!cargandoClases && clases.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '70px 20px', color: '#9ca3af' }}>
                   <div style={{ fontSize: '44px', marginBottom: '12px' }}>🎵</div>
-                  <p style={{ fontSize: '15px', fontWeight: '700', margin: '0 0 6px', color: '#6b7280' }}>Sin clases hoy</p>
+                  <p style={{ fontSize: '15px', fontWeight: '700', margin: '0 0 6px', color: '#6b7280' }}>Sin clases esta semana</p>
                   <p style={{ fontSize: '13px', margin: 0 }}>Consulta el historial para ver clases anteriores</p>
                 </div>
               )}
@@ -551,53 +495,12 @@ export default function ProfesorApp() {
             </div>
           )}
 
-          {/* ── TALLERES ─────────────────────────────────── */}
-          {vista === 'talleres' && (
-            <div style={{ animation: 'fadeUp 0.3s ease' }}>
-              <p style={{ margin: '0 0 14px', color: '#6b7280', fontSize: '13px', fontWeight: '600' }}>Talleres confirmados este mes</p>
-              {cargandoTalleres && <p style={{ textAlign: 'center', color: '#9ca3af', padding: '50px 0' }}>Cargando...</p>}
-              {!cargandoTalleres && talleres.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '70px 20px', color: '#9ca3af' }}>
-                  <div style={{ fontSize: '44px', marginBottom: '12px' }}>🎸</div>
-                  <p style={{ fontSize: '15px', fontWeight: '700', margin: '0 0 6px', color: '#6b7280' }}>Sin talleres este mes</p>
-                  <p style={{ fontSize: '13px', margin: 0 }}>Un taller aparece aquí cuando tiene inscritos activos</p>
-                </div>
-              )}
-              {talleres.map((t: any, i) => {
-                const esHoy = DIAS_SEMANA[t.dia_semana] === hoyDate.getDay()
-                return (
-                  <div key={t.id} className="tc" onClick={() => abrirTaller(t)}
-                    style={{ background: 'white', borderRadius: '18px', padding: '16px', marginBottom: '12px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', borderLeft: `4px solid ${esHoy ? '#7c3aed' : '#e5e7eb'}`, cursor: 'pointer', animation: `fadeUp ${0.1 + i * 0.05}s ease` }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1 }}>
-                        <p style={{ margin: '0 0 6px', fontSize: '16px', fontWeight: '800', color: '#1f2937' }}>🎸 {t.nombre}</p>
-                        <div style={{ display: 'inline-block', background: '#7c3aed', color: 'white', padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', marginBottom: '6px' }}>
-                          📍 {t.salones?.sedes?.nombre || '—'}
-                        </div>
-                        <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>
-                          🏠 {t.salones?.nombre || '—'} · {t.dia_semana} {t.hora?.substring(0, 5)} · {t.duracion_min} min
-                        </p>
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: '#f3e8ff', color: '#7c3aed', display: 'block', marginBottom: '6px' }}>Confirmado</span>
-                        {esHoy && <span style={{ fontSize: '11px', color: '#7c3aed', fontWeight: '700' }}>Hoy →</span>}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {/* ── HISTORIAL + HONORARIOS ────────────────────── */}
+          {/* ── HISTORIAL + HONORARIOS ────────────────── */}
           {vista === 'historial' && (
             <div style={{ animation: 'fadeUp 0.3s ease' }}>
-
-              {/* Selector de mes */}
               <input type="month" value={mes} onChange={e => setMes(e.target.value)}
                 style={{ width: '100%', padding: '13px 16px', border: `2px solid ${TEAL_MID}`, borderRadius: '14px', fontSize: '15px', fontWeight: '700', color: TEAL, background: 'white', boxSizing: 'border-box', marginBottom: '14px', fontFamily: 'inherit' }} />
 
-              {/* Stats */}
               {!cargandoClases && clases.length > 0 && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
                   <div style={{ background: '#dcfce7', borderRadius: '14px', padding: '14px', textAlign: 'center' }}>
@@ -608,22 +511,16 @@ export default function ProfesorApp() {
                     <p style={{ margin: 0, fontSize: '24px', fontWeight: '800', color: pendientesCobro > 0 ? '#c2410c' : '#9ca3af', lineHeight: 1 }}>{pendientesCobro}</p>
                     <p style={{ margin: '4px 0 0', fontSize: '10px', fontWeight: '700', color: pendientesCobro > 0 ? '#c2410c' : '#9ca3af', letterSpacing: '0.3px' }}>INASISTENCIAS</p>
                   </div>
-                  {/* Honorarios totales — ancho completo */}
                   <div style={{ gridColumn: '1 / -1', background: TEAL_LIGHT, borderRadius: '14px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                       <p style={{ margin: 0, fontSize: '11px', fontWeight: '700', color: TEAL, letterSpacing: '0.5px' }}>HONORARIOS CONFIRMADOS</p>
-                      {pendientesCobro > 0 && (
-                        <p style={{ margin: '3px 0 0', fontSize: '11px', color: '#c2410c', fontWeight: '600' }}>+ {pendientesCobro} clase(s) pendiente(s) de revisión</p>
-                      )}
+                      {pendientesCobro > 0 && <p style={{ margin: '3px 0 0', fontSize: '11px', color: '#c2410c', fontWeight: '600' }}>+ {pendientesCobro} clase(s) pendiente(s) de revisión</p>}
                     </div>
-                    <p style={{ margin: 0, fontSize: '28px', fontWeight: '800', color: TEAL, letterSpacing: '-1px' }}>
-                      ${totalHon.toLocaleString('es-CO')}
-                    </p>
+                    <p style={{ margin: 0, fontSize: '28px', fontWeight: '800', color: TEAL, letterSpacing: '-1px' }}>${totalHon.toLocaleString('es-CO')}</p>
                   </div>
                 </div>
               )}
 
-              {/* Botón exportar PDF */}
               {!cargandoClases && clases.length > 0 && (
                 <button onClick={exportarPDF}
                   style={{ width: '100%', padding: '14px', background: TEAL, color: 'white', border: 'none', borderRadius: '14px', fontSize: '15px', fontWeight: '700', cursor: 'pointer', marginBottom: '16px', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
@@ -634,7 +531,6 @@ export default function ProfesorApp() {
               {cargandoClases && <p style={{ textAlign: 'center', color: '#9ca3af', padding: '50px 0' }}>Cargando...</p>}
               {!cargandoClases && clases.length === 0 && <p style={{ textAlign: 'center', color: '#9ca3af', padding: '40px 0' }}>Sin clases este mes</p>}
 
-              {/* Lista de clases con honorario */}
               {clases.map((c, i) => (
                 <TarjetaClase key={c.id} c={c} i={i} onTap={() => abrirModal(c)}
                   resumenExpandido={resumenExpandido} setResumenExpandido={setResumenExpandido}
@@ -645,66 +541,6 @@ export default function ProfesorApp() {
         </div>
       </div>
 
-      {/* ══ MODAL TALLER ══ */}
-      {tallerModal && (
-        <div onClick={e => e.target === e.currentTarget && setTallerModal(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 200, animation: 'fadeIn 0.2s ease' }}>
-          <div style={{ width: '100%', maxWidth: '480px', background: 'white', borderRadius: '28px 28px 0 0', padding: '20px 20px 36px', animation: 'slideUp 0.3s ease', maxHeight: '88vh', overflow: 'auto' }}>
-            <div style={{ width: '44px', height: '5px', background: '#e5e7eb', borderRadius: '3px', margin: '0 auto 22px' }} />
-            <div style={{ background: '#f3e8ff', borderRadius: '16px', padding: '16px', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <p style={{ margin: '0 0 6px', fontSize: '18px', fontWeight: '800', color: '#7c3aed' }}>🎸 {tallerModal.nombre}</p>
-                  <div style={{ display: 'inline-block', background: '#7c3aed', color: 'white', padding: '4px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: '700', marginBottom: '6px' }}>
-                    📍 {tallerModal.salones?.sedes?.nombre || '—'}
-                  </div>
-                  <p style={{ margin: 0, fontSize: '13px', color: '#6b5b95' }}>
-                    🏠 {tallerModal.salones?.nombre} · {tallerModal.dia_semana} {tallerModal.hora?.substring(0, 5)} · {tallerModal.duracion_min} min
-                  </p>
-                </div>
-                <button onClick={() => setTallerModal(null)}
-                  style={{ width: '34px', height: '34px', border: 'none', background: 'rgba(124,58,237,0.15)', borderRadius: '50%', cursor: 'pointer', fontSize: '18px', color: '#7c3aed', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}>×</button>
-              </div>
-            </div>
-            <div style={{ background: '#fafbfc', borderRadius: '14px', padding: '14px', marginBottom: '20px', border: '1px solid #f1f5f9' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#555' }}>Sesión de hoy — {new Date().toISOString().split('T')[0]}</p>
-                <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700',
-                  background: sesionHoy?.estado === 'dada' ? '#dcfce7' : sesionHoy?.estado === 'cancelada' ? '#fee2e2' : '#eff6ff',
-                  color: sesionHoy?.estado === 'dada' ? '#166534' : sesionHoy?.estado === 'cancelada' ? '#991b1b' : '#1d4ed8' }}>
-                  {sesionHoy?.estado || 'programada'}
-                </span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <button className="ba" onClick={() => marcarSesionTaller('dada')} disabled={guardandoSesion || sesionHoy?.estado === 'dada'}
-                  style={{ padding: '14px', background: sesionHoy?.estado === 'dada' ? '#dcfce7' : '#7c3aed', color: sesionHoy?.estado === 'dada' ? '#166534' : 'white', border: sesionHoy?.estado === 'dada' ? '2px solid #86efac' : 'none', borderRadius: '14px', fontSize: '15px', fontWeight: '800', cursor: guardandoSesion ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
-                  {sesionHoy?.estado === 'dada' ? '✓ Dada' : 'Marcar dada'}
-                </button>
-                <button className="ba" onClick={() => marcarSesionTaller('cancelada')} disabled={guardandoSesion}
-                  style={{ padding: '14px', background: '#fff7ed', color: '#c2410c', border: '2px solid #fed7aa', borderRadius: '14px', fontSize: '15px', fontWeight: '800', cursor: guardandoSesion ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
-                  Cancelar
-                </button>
-              </div>
-            </div>
-            <p style={{ margin: '0 0 10px', fontSize: '14px', fontWeight: '700', color: '#374151' }}>
-              Inscritos activos <span style={{ color: '#7c3aed' }}>({inscritosTaller.length})</span>
-            </p>
-            {inscritosTaller.map((ins: any, i) => {
-              const cl = ins.clientes
-              const nombre = cl?.nombre || `${cl?.nombres || ''} ${cl?.apellidos || ''}`.trim() || '—'
-              return (
-                <div key={ins.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', background: i % 2 === 0 ? '#fafbfc' : 'white', borderRadius: '10px', marginBottom: '4px' }}>
-                  <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: '#f3e8ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: '700', color: '#7c3aed', flexShrink: 0 }}>
-                    {nombre.charAt(0).toUpperCase()}
-                  </div>
-                  <p style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#1f2937' }}>{nombre}</p>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
       {/* ══ MODAL CLASE ══ */}
       {claseActiva && (
         <div onClick={e => e.target === e.currentTarget && cerrarModal()}
@@ -712,7 +548,6 @@ export default function ProfesorApp() {
           <div style={{ width: '100%', maxWidth: '480px', background: 'white', borderRadius: '28px 28px 0 0', padding: '20px 20px 36px', animation: 'slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)', maxHeight: '92vh', overflow: 'auto' }}>
             <div style={{ width: '44px', height: '5px', background: '#e5e7eb', borderRadius: '3px', margin: '0 auto 22px' }} />
 
-            {/* Info clase */}
             <div style={{ background: TEAL_LIGHT, borderRadius: '16px', padding: '16px', marginBottom: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                 <div>
@@ -732,7 +567,6 @@ export default function ProfesorApp() {
                 <div style={{ background: 'rgba(0,0,0,0.08)', color: '#374151', padding: '5px 12px', borderRadius: '20px', fontSize: '13px', fontWeight: '600' }}>
                   🏠 {claseActiva.salones?.nombre || '—'}
                 </div>
-               
               </div>
             </div>
 
@@ -742,7 +576,6 @@ export default function ProfesorApp() {
               </div>
             )}
 
-            {/* Resumen */}
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#6b7280', marginBottom: '8px', letterSpacing: '0.8px' }}>
                 RESUMEN DE LA CLASE <span style={{ fontWeight: '500', color: '#9ca3af' }}>— puedes completarlo después</span>
@@ -799,12 +632,14 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
   honorario: number | 'pendiente',
   mostrarHonorario: boolean
 }) {
-  const badge      = badgeEstado(c.estado, c.revision_pendiente)
-  const confirmada = c.estado === 'confirmada' && !c.revision_pendiente
+  const badge      = badgeEstado(c.estado, c.revision_pendiente, c.esTaller)
+  const confirmada = c.estado === 'confirmada' && !c.revision_pendiente && !c.esTaller
   const expandido  = resumenExpandido === c.id
+  const hoyStr     = new Date().toISOString().split('T')[0]
 
   return (
-    <div style={{ background: 'white', borderRadius: '18px', padding: '16px', marginBottom: '12px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', borderLeft: `4px solid ${confirmada ? '#1a8a8a' : '#e5e7eb'}`, animation: `fadeUp ${0.15 + i * 0.06}s ease` }}>
+    <div style={{ background: 'white', borderRadius: '18px', padding: '16px', marginBottom: '12px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)', borderLeft: `4px solid ${c.esTaller ? '#7c3aed' : confirmada ? '#1a8a8a' : '#e5e7eb'}`, animation: `fadeUp ${0.15 + i * 0.06}s ease`, cursor: c.esTaller ? 'default' : 'pointer' }}
+      onClick={c.esTaller ? undefined : onTap}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', marginBottom: '8px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '4px' }}>
@@ -815,41 +650,45 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
             </span>
             {!mostrarHonorario && (
               <span style={{ fontSize: '12px', color: '#9ca3af', fontWeight: '600' }}>
-                {c.fecha === new Date().toISOString().split('T')[0] ? 'Hoy' : `${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}`}
+                {c.fecha === hoyStr ? 'Hoy' : `${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}`}
               </span>
             )}
-            {mostrarHonorario && (
-              <span style={{ fontSize: '13px', color: '#9ca3af', fontWeight: '600' }}>{c.hora?.substring(0, 5)}</span>
-            )}
+            {mostrarHonorario && <span style={{ fontSize: '13px', color: '#9ca3af', fontWeight: '600' }}>{c.hora?.substring(0, 5)}</span>}
             <span style={{ fontSize: '12px', color: '#9ca3af', fontWeight: '600' }}>{c.duracion_min} min</span>
           </div>
-          <p style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: '700', color: '#1f2937', textAlign: 'left' }}>
-            {c.contratos?.clientes?.nombre || `${c.contratos?.clientes?.nombres || ''} ${c.contratos?.clientes?.apellidos || ''}`.trim() || '—'}
+          <p style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: '700', color: c.esTaller ? '#7c3aed' : '#1f2937', textAlign: 'left' }}>
+            {c.esTaller
+              ? `🎸 ${c.nombreTaller}`
+              : (c.contratos?.clientes?.nombre || `${c.contratos?.clientes?.nombres || ''} ${c.contratos?.clientes?.apellidos || ''}`.trim() || '—')}
           </p>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '4px' }}>
-            <span style={{ background: '#1a8a8a', color: 'white', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '700' }}>
+          {!c.esTaller && (
+            <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#6b7280', textAlign: 'left' }}>
+              🎸 {c.contratos?.instrumentos?.nombre || '—'}
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <span style={{ background: c.esTaller ? '#7c3aed' : '#1a8a8a', color: 'white', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '700' }}>
               📍 {c.salones?.sedes?.nombre || '—'}
             </span>
             <span style={{ background: '#f1f5f9', color: '#374151', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
               🏠 {c.salones?.nombre || '—'}
             </span>
-        
           </div>
         </div>
+
         <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
           <span style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: badge.bg, color: badge.color, whiteSpace: 'nowrap' }}>
             {badge.label}
           </span>
-          {/* Honorario punto 15 */}
-          {mostrarHonorario && (
+          {mostrarHonorario && !c.esTaller && (
             honorario === 'pendiente'
-              ? <span style={{ fontSize: '11px', fontWeight: '700', color: '#c2410c', background: '#fff7ed', padding: '3px 8px', borderRadius: '10px', whiteSpace: 'nowrap' }}>⏳ Pendiente revisión</span>
+              ? <span style={{ fontSize: '11px', fontWeight: '700', color: '#c2410c', background: '#fff7ed', padding: '3px 8px', borderRadius: '10px', whiteSpace: 'nowrap' }}>⏳ Pendiente</span>
               : honorario > 0
                 ? <span style={{ fontSize: '14px', fontWeight: '800', color: '#1a8a8a' }}>${Number(honorario).toLocaleString('es-CO')}</span>
                 : <span style={{ fontSize: '12px', color: '#d1d5db' }}>Sin tarifa</span>
           )}
           {confirmada && !mostrarHonorario && (
-            <button onClick={onTap}
+            <button onClick={e => { e.stopPropagation(); onTap() }}
               style={{ padding: '8px 14px', background: '#1a8a8a', color: 'white', border: 'none', borderRadius: '12px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
               Marcar →
             </button>
@@ -857,7 +696,6 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
         </div>
       </div>
 
-      {/* Resumen colapsable */}
       {c.observaciones && (
         <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
           <button onClick={e => { e.stopPropagation(); setResumenExpandido(expandido ? null : c.id) }}
@@ -872,15 +710,12 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
         </div>
       )}
 
-      {/* Acción en historial para clases ya marcadas */}
-      {mostrarHonorario && (c.estado === 'dada' || c.revision_pendiente) && (
-        <div style={{ borderTop: c.observaciones ? 'none' : '1px solid #f1f5f9', paddingTop: c.observaciones ? '0' : '8px', marginTop: c.observaciones ? '0' : '4px' }}>
-          {!c.observaciones && (
-            <button onClick={onTap}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: '#9ca3af', fontWeight: '600', padding: '2px 0', fontFamily: 'inherit' }}>
-              + Agregar resumen
-            </button>
-          )}
+      {!c.esTaller && !c.observaciones && (c.estado === 'dada' || c.revision_pendiente) && (
+        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+          <button onClick={e => { e.stopPropagation(); onTap() }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: '#9ca3af', fontWeight: '600', padding: '2px 0', fontFamily: 'inherit' }}>
+            + Agregar resumen
+          </button>
         </div>
       )}
     </div>
