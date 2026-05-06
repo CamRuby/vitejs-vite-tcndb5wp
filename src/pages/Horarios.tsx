@@ -21,8 +21,8 @@ const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const DIAS_LARGO = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 const DURACIONES = ['30', '45', '60', '90', '120']
+const MODALIDADES_CLASE = ['presencial', 'virtual', 'domicilio'] as const
 
-// Mapeo nombre día → número getDay()
 const DIA_NUM: Record<string, number> = {
   'domingo': 0, 'lunes': 1, 'martes': 2, 'miércoles': 3, 'jueves': 4, 'viernes': 5, 'sábado': 6
 }
@@ -81,7 +81,9 @@ const labelStyle: React.CSSProperties = {
   display: 'block', fontWeight: '500', fontSize: '13px', marginBottom: '5px', color: '#555'
 }
 
+// PATCH: revision check added as first condition
 function getColorEstado(estado: string, revision?: boolean) {
+  if (revision) return { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' }
   if (estado === 'cancelada' && revision) return { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' }
   switch (estado) {
     case 'programada': return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' }
@@ -105,7 +107,6 @@ export default function Horarios() {
   const [inscritosPorTaller, setInscritosPorTaller] = useState<Record<string, number>>({})
   const [cargando, setCargando] = useState(false)
 
-  // Modal crear — tipo clase o taller
   const [tipoModal, setTipoModal] = useState<'clase' | 'taller'>('clase')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [slotSeleccionado, setSlotSeleccionado] = useState<any>(null)
@@ -124,6 +125,8 @@ export default function Horarios() {
   const [fechaFinRecurrencia, setFechaFinRecurrencia] = useState(`${new Date().getFullYear()}-12-31`)
   const [avisoCrear, setAvisoCrear] = useState<string[]>([])
   const [confirmarSedeDiferente, setConfirmarSedeDiferente] = useState(false)
+  // PATCH: modalidad de la clase
+  const [modalidadClase, setModalidadClase] = useState<'presencial' | 'virtual' | 'domicilio'>('presencial')
 
   // Taller nuevo
   const [tallerNombre, setTallerNombre] = useState('')
@@ -189,7 +192,6 @@ export default function Horarios() {
 
   const skipSet = useMemo(() => {
     const skip = new Set<string>()
-    // Clases regulares
     clases.forEach((c: any) => {
       const salonId = c.salones?.id
       if (!salonId || !c.fecha || !c.hora || c.estado === 'cancelada') return
@@ -202,7 +204,6 @@ export default function Horarios() {
         skip.add(`${salonId}-${c.fecha}-${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`)
       }
     })
-    // Talleres — ocupan su slot en cada columna que coincida con su día de semana
     talleres.forEach((t: any) => {
       if (!t.salon_id || !t.hora) return
       const tInicio = horaAMinutos(t.hora.substring(0, 5))
@@ -253,8 +254,8 @@ export default function Horarios() {
     const { data } = await supabase
       .from('clases')
       .select(`
-        id, fecha, hora, duracion_min, estado, patron_id, recurrente, revision_pendiente, numero_en_plan,
-        contratos (id, clases_tomadas, total_clases, sede_id, clientes (id, nombre), instrumentos (nombre)),
+        id, fecha, hora, duracion_min, estado, patron_id, recurrente, revision_pendiente, numero_en_plan, modalidad,
+        contratos (id, clases_tomadas, total_clases, sede_id, duracion_min, clientes (id, nombre), instrumentos (nombre)),
         profesores (id, nombre),
         salones (id, nombre, sede_id)
       `)
@@ -274,7 +275,6 @@ export default function Horarios() {
       .in('salon_id', ids)
     setTalleres(data || [])
     if (data?.length) {
-      // Contar inscritos activos del mes actual
       const hoy = new Date()
       const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
       const { data: ins } = await supabase
@@ -431,6 +431,7 @@ export default function Horarios() {
     setError('')
     setAvisoCrear([])
     setConfirmarSedeDiferente(false)
+    setModalidadClase('presencial') // PATCH: reset modalidad
     setTallerNombre('')
     setTallerProfesorId('')
     setTallerDuracion('60')
@@ -469,7 +470,6 @@ export default function Horarios() {
     setTeDuracion(String(taller.duracion_min || 60))
     setTeValor(taller.valor_mensual !== null && taller.valor_mensual !== undefined ? String(taller.valor_mensual) : '')
     setTeError('')
-    // Cargar inscritos activos del mes
     const hoy = new Date()
     const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
     const { data } = await supabase
@@ -479,7 +479,6 @@ export default function Horarios() {
       .eq('estado', 'activo')
       .gte('mes', mes)
     setInscritosDelTaller(data || [])
-    // Cargar sesión de esta fecha específica
     const { data: sesion } = await supabase
       .from('taller_sesiones')
       .select('id, fecha, estado')
@@ -493,12 +492,8 @@ export default function Horarios() {
   async function marcarSesion(nuevoEstado: string) {
     setGuardandoSesion(true)
     let sesionId = sesionActual?.id
-
     if (sesionActual) {
-      const { error } = await supabase
-        .from('taller_sesiones')
-        .update({ estado: nuevoEstado })
-        .eq('id', sesionActual.id)
+      const { error } = await supabase.from('taller_sesiones').update({ estado: nuevoEstado }).eq('id', sesionActual.id)
       if (!error) setSesionActual({ ...sesionActual, estado: nuevoEstado })
     } else {
       const { data, error } = await supabase
@@ -510,28 +505,17 @@ export default function Horarios() {
         sesionId = data.id
       }
     }
-
-    // Si se marca como "dada", crear asistencias para todos los inscritos activos
     if (nuevoEstado === 'dada' && sesionId) {
-      // Verificar si ya existen asistencias para esta sesión
-      const { data: existentes } = await supabase
-        .from('taller_asistencias')
-        .select('id')
-        .eq('sesion_id', sesionId)
-
+      const { data: existentes } = await supabase.from('taller_asistencias').select('id').eq('sesion_id', sesionId)
       if (!existentes || existentes.length === 0) {
-        // Crear una asistencia por cada inscrito activo
         if (inscritosDelTaller.length > 0) {
           const asistencias = inscritosDelTaller.map((ins: any) => ({
-            sesion_id: sesionId,
-            inscripcion_id: ins.id,
-            asistio: true
+            sesion_id: sesionId, inscripcion_id: ins.id, asistio: true
           }))
           await supabase.from('taller_asistencias').insert(asistencias)
         }
       }
     }
-
     setGuardandoSesion(false)
   }
 
@@ -539,15 +523,10 @@ export default function Horarios() {
     if (!teNombre.trim()) { setTeError('El nombre es obligatorio'); return }
     if (!teProfesorId) { setTeError('Selecciona un profesor'); return }
     if (!teSalonId) { setTeError('Selecciona un salón'); return }
-    setTeGuardando(true)
-    setTeError('')
+    setTeGuardando(true); setTeError('')
     const { error } = await supabase.from('talleres').update({
-      nombre: teNombre.trim(),
-      profesor_id: teProfesorId,
-      salon_id: teSalonId,
-      dia_semana: teDiaSemana,
-      hora: teHora + ':00',
-      duracion_min: parseInt(teDuracion),
+      nombre: teNombre.trim(), profesor_id: teProfesorId, salon_id: teSalonId,
+      dia_semana: teDiaSemana, hora: teHora + ':00', duracion_min: parseInt(teDuracion),
       valor_mensual: teValor !== '' ? Number(teValor) : null
     }).eq('id', tallerViendo.id)
     if (error) { setTeError('Error: ' + error.message); setTeGuardando(false); return }
@@ -558,20 +537,14 @@ export default function Horarios() {
 
   async function borrarTaller() {
     setTeGuardando(true)
-    // Verificar inscritos activos
     const hoy = new Date()
     const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
     const { data: inscritos } = await supabase
-      .from('taller_inscripciones')
-      .select('id')
-      .eq('taller_id', tallerViendo.id)
-      .eq('estado', 'activo')
-      .gte('mes', mes)
+      .from('taller_inscripciones').select('id')
+      .eq('taller_id', tallerViendo.id).eq('estado', 'activo').gte('mes', mes)
     if (inscritos && inscritos.length > 0) {
-      setTeError(`No se puede borrar: tiene ${inscritos.length} inscrito(s) activo(s) este mes. Retíralos primero.`)
-      setConfirmarBorrarTaller(false)
-      setTeGuardando(false)
-      return
+      setTeError(`No se puede borrar: tiene ${inscritos.length} inscrito(s) activo(s) este mes.`)
+      setConfirmarBorrarTaller(false); setTeGuardando(false); return
     }
     await supabase.from('talleres').delete().eq('id', tallerViendo.id)
     setModalVerTaller(false)
@@ -582,16 +555,12 @@ export default function Horarios() {
   async function crearTaller() {
     if (!tallerNombre.trim()) { setTallerError('El nombre es obligatorio'); return }
     if (!tallerProfesorId) { setTallerError('Selecciona un profesor'); return }
-    setTallerGuardando(true)
-    setTallerError('')
+    setTallerGuardando(true); setTallerError('')
     const diaSemana = DIAS_LARGO[parseFechaLocal(slotSeleccionado.fecha).getDay()]
     const { error } = await supabase.from('talleres').insert({
-      nombre: tallerNombre.trim(),
-      profesor_id: tallerProfesorId,
-      salon_id: slotSeleccionado.salon.id,
-      dia_semana: diaSemana,
-      hora: slotSeleccionado.hora + ':00',
-      duracion_min: parseInt(tallerDuracion),
+      nombre: tallerNombre.trim(), profesor_id: tallerProfesorId,
+      salon_id: slotSeleccionado.salon.id, dia_semana: diaSemana,
+      hora: slotSeleccionado.hora + ':00', duracion_min: parseInt(tallerDuracion),
       valor_mensual: tallerValor !== '' ? Number(tallerValor) : null
     })
     if (error) { setTallerError('Error: ' + error.message); setTallerGuardando(false); return }
@@ -605,16 +574,13 @@ export default function Horarios() {
     if (!contratoSeleccionado) { setError('Selecciona un plan'); return }
     if (!profesorId) { setError('Selecciona un profesor'); return }
 
-    // Si sede del plan ≠ sede del salón y el usuario aún no confirmó → mostrar aviso
     const sedePlan = (contratoSeleccionado as any)?.sede_id
     const sedeSalon = slotSeleccionado?.salon?.sede_id
     if (sedePlan && sedeSalon && sedePlan !== sedeSalon && !confirmarSedeDiferente) {
-      setConfirmarSedeDiferente(true)
-      return
+      setConfirmarSedeDiferente(true); return
     }
 
-    setGuardando(true)
-    setError('')
+    setGuardando(true); setError('')
 
     if (recurrente) {
       const patronId = crypto.randomUUID()
@@ -628,15 +594,13 @@ export default function Horarios() {
         const fechaStr = formatFecha(d)
         const conflicto = await verificarTodos(slotSeleccionado.salon.id, profesorId, (contratoSeleccionado as any).id, fechaStr, slotSeleccionado.hora, parseInt(duracion))
         if (conflicto) {
-          if (batch.length === 0) {
-            setError(`${conflicto} — semana 1. No se creó ninguna clase.`)
-          } else {
+          if (batch.length === 0) { setError(`${conflicto} — semana 1. No se creó ninguna clase.`) }
+          else {
             const { error: err } = await supabase.from('clases').insert(batch)
             if (err) setError('Error: ' + err.message)
             else { setError(`${conflicto} — semana ${i + 1}. Se crearon ${batch.length} clases.`); cargarClases() }
           }
-          setGuardando(false)
-          return
+          setGuardando(false); return
         }
         batch.push({
           contrato_id: (contratoSeleccionado as any).id,
@@ -649,7 +613,8 @@ export default function Horarios() {
           confirmada_cliente: false,
           confirmada_profesor: false,
           patron_id: patronId,
-          recurrente: true
+          recurrente: true,
+          modalidad: modalidadClase, // PATCH
         })
         i++
       }
@@ -668,7 +633,8 @@ export default function Horarios() {
         duracion_min: parseInt(duracion),
         estado: 'programada',
         confirmada_cliente: false,
-        confirmada_profesor: false
+        confirmada_profesor: false,
+        modalidad: modalidadClase, // PATCH
       })
       if (err) setError('Error: ' + err.message)
       else { setModalAbierto(false); cargarClases() }
@@ -677,20 +643,13 @@ export default function Horarios() {
   }
 
   async function guardarEdicion(alcance: 'esta' | 'futuras') {
-    setEditGuardando(true)
-    setEditError('')
-
+    setEditGuardando(true); setEditError('')
     const conflicto = await verificarTodos(
       editSalonId, editProfesorId, claseEditando.contratos?.id || '',
       editFecha, editHora, parseInt(editDuracion), claseEditando.id
     )
-    if (conflicto) {
-      setEditError(conflicto)
-      setEditGuardando(false)
-      return
-    }
+    if (conflicto) { setEditError(conflicto); setEditGuardando(false); return }
 
-    // Si se marca como dada, sumar la fracción correspondiente (duracion_clase / duracion_plan)
     let numeroPlan: number | undefined = undefined
     if (editEstado === 'dada' && claseEditando.estado !== 'dada' && claseEditando.contratos?.id) {
       const duracionPlan = claseEditando.contratos?.duracion_min || parseInt(editDuracion)
@@ -699,38 +658,28 @@ export default function Horarios() {
       numeroPlan = clasesTomadas
       const totalClases = claseEditando.contratos?.total_clases || 0
       const updateData: any = { clases_tomadas: clasesTomadas }
-      if (totalClases > 0 && clasesTomadas >= totalClases) {
-        updateData.estado = 'completado'
-      }
+      if (totalClases > 0 && clasesTomadas >= totalClases) updateData.estado = 'completado'
       await supabase.from('contratos').update(updateData).eq('id', claseEditando.contratos.id)
     }
 
     if (alcance === 'futuras' && claseEditando.patron_id) {
       const { data: clasesFuturas, error: errorBuscar } = await supabase
-        .from('clases')
-        .select('id')
+        .from('clases').select('id')
         .eq('patron_id', claseEditando.patron_id)
         .gte('fecha', claseEditando.fecha)
-
       if (errorBuscar || !clasesFuturas || clasesFuturas.length === 0) {
         setEditError('No se encontraron clases futuras en la serie.')
-        setEditGuardando(false)
-        return
+        setEditGuardando(false); return
       }
-
       const ids = clasesFuturas.map((c: any) => c.id)
-      const { error } = await supabase
-        .from('clases')
+      const { error } = await supabase.from('clases')
         .update({ hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado })
         .in('id', ids)
-
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
     } else {
-      const { error } = await supabase
-        .from('clases')
+      const { error } = await supabase.from('clases')
         .update({ hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha, ...(numeroPlan !== undefined ? { numero_en_plan: numeroPlan } : {}) })
         .eq('id', claseEditando.id)
-
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
     }
 
@@ -739,31 +688,47 @@ export default function Horarios() {
     setEditGuardando(false)
   }
 
-  async function resolverRevision(cobrar: boolean) {
+  // PATCH: resolverRevision con porcentaje de honorario
+  async function resolverRevision(cobrar: boolean, pctHonorario: number) {
     setProcesandoRevision(true)
     if (cobrar) {
-      // Sumar 1 a clases_tomadas del contrato
-      const clasesTomadas = (claseEditando.contratos?.clases_tomadas || 0) + 1
+      const durPlan  = claseEditando.contratos?.duracion_min || claseEditando.duracion_min || 60
+      const durClase = claseEditando.duracion_min || durPlan
+      const fraccion = parseFloat((durClase / durPlan).toFixed(4))
+      const clasesTomadas = parseFloat(((claseEditando.contratos?.clases_tomadas || 0) + fraccion).toFixed(4))
       await supabase.from('contratos').update({ clases_tomadas: clasesTomadas }).eq('id', claseEditando.contratos?.id)
     }
-    // Quitar flag revision_pendiente
-    await supabase.from('clases').update({ revision_pendiente: false }).eq('id', claseEditando.id)
+    // Calcular honorario según porcentaje
+    let honorarioFinal: number | null = null
+    if (pctHonorario > 0 && claseEditando.profesores?.id && claseEditando.duracion_min) {
+      const modalidad = (claseEditando.modalidad || 'presencial').toLowerCase()
+      const { data: tarifa } = await supabase
+        .from('profesor_tarifas').select('valor')
+        .eq('profesor_id', claseEditando.profesores.id)
+        .eq('duracion_min', claseEditando.duracion_min)
+        .eq('taller_grupal', false)
+        .or(`modalidad.ilike.${modalidad},modalidad.ilike.${modalidad === 'virtual' ? 'presencial' : modalidad}`)
+        .maybeSingle()
+      const base = tarifa?.valor || claseEditando.honorario_valor || 0
+      honorarioFinal = Math.round(Number(base) * pctHonorario / 100)
+    }
+    const updateData: any = { revision_pendiente: false }
+    if (honorarioFinal !== null) updateData.honorario_valor = honorarioFinal
+    await supabase.from('clases').update(updateData).eq('id', claseEditando.id)
     setModalEditar(false)
     cargarClases()
     setProcesandoRevision(false)
   }
 
-  // ── CAMBIO 1: borrarClase ahora resta 1 al contador si la clase era "dada"
-  //             y ya NO suma incorrectamente como antes
   async function borrarClase(alcance: 'esta' | 'futuras') {
     setEditGuardando(true)
-
-    // Si la clase ya estaba marcada como "dada", restar 1 al contador del plan
     if (claseEditando.estado === 'dada' && claseEditando.contratos?.id) {
-      const clasesTomadas = Math.max(0, (claseEditando.contratos?.clases_tomadas || 0) - 1)
+      const durPlan  = claseEditando.contratos?.duracion_min || claseEditando.duracion_min || 60
+      const durClase = claseEditando.duracion_min || durPlan
+      const fraccion = parseFloat((durClase / durPlan).toFixed(4))
+      const clasesTomadas = Math.max(0, parseFloat(((claseEditando.contratos?.clases_tomadas || 0) - fraccion).toFixed(4)))
       await supabase.from('contratos').update({ clases_tomadas: clasesTomadas }).eq('id', claseEditando.contratos.id)
     }
-
     if (alcance === 'futuras' && claseEditando.patron_id) {
       await supabase.from('clases').delete().eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
     } else {
@@ -783,9 +748,7 @@ export default function Horarios() {
   function getTallerSlot(salonId: string, hora: string, fecha: string) {
     const diaSemana = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
     return talleres.find(t =>
-      t.salon_id === salonId &&
-      t.dia_semana === diaSemana &&
-      t.hora?.substring(0, 5) === hora
+      t.salon_id === salonId && t.dia_semana === diaSemana && t.hora?.substring(0, 5) === hora
     ) || null
   }
 
@@ -849,8 +812,8 @@ export default function Horarios() {
           {[
             { label: 'Programada', color: '#1d4ed8', bg: '#eff6ff' },
             { label: 'Confirmada', color: '#166534', bg: '#dcfce7' },
-            { label: 'Dada', color: '#854d0e', bg: '#fefce8' },
-            { label: 'Cancelada', color: '#991b1b', bg: '#fee2e2' },
+            { label: 'Dada',       color: '#854d0e', bg: '#fefce8' },
+            { label: 'Cancelada',  color: '#991b1b', bg: '#fee2e2' },
           ].map(l => (
             <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
               <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: l.bg, border: `1px solid ${l.color}` }} />
@@ -879,20 +842,17 @@ export default function Horarios() {
           <thead style={{ position: 'sticky', top: 0, zIndex: 3 }}>
             {vista === 'semana' ? (
               <>
-                {/* Fila 1: días agrupados */}
                 <tr style={{ background: TEAL }}>
                   <th rowSpan={2} style={{ padding: '10px 12px', color: 'white', fontSize: '12px', width: '64px', position: 'sticky', left: 0, background: TEAL, zIndex: 4, verticalAlign: 'middle' }}>Hora</th>
                   {fechasSemana.map((fecha, i) => (
                     <th key={`dia-${i}`} colSpan={salones.length} style={{
                       padding: '6px 4px', color: 'white', textAlign: 'center', fontWeight: '700', fontSize: '12px',
-                      borderLeft: '3px solid rgba(255,255,255,0.6)',
-                      borderBottom: `2px solid ${TEAL_MID}`
+                      borderLeft: '3px solid rgba(255,255,255,0.6)', borderBottom: `2px solid ${TEAL_MID}`
                     }}>
                       {DIAS[i]} {formatFechaMostrar(fecha)}
                     </th>
                   ))}
                 </tr>
-                {/* Fila 2: salones */}
                 <tr style={{ background: TEAL }}>
                   {fechasSemana.flatMap((_, i) =>
                     salones.map((salon: any, j) => (
@@ -900,8 +860,7 @@ export default function Horarios() {
                         padding: '4px 4px', color: 'rgba(255,255,255,0.85)', textAlign: 'center',
                         fontSize: '10px', fontWeight: '400',
                         borderLeft: j === 0 ? '3px solid rgba(255,255,255,0.6)' : '1px solid rgba(255,255,255,0.15)',
-                        width: '80px', minWidth: '80px',
-                        background: TEAL
+                        width: '80px', minWidth: '80px', background: TEAL
                       }}>
                         {salon.nombre}
                       </th>
@@ -966,12 +925,10 @@ export default function Horarios() {
                         }
                       }}
                     >
-                      {/* Taller */}
                       {taller && (
                         <div onClick={e => abrirTaller(e, taller, col.fecha)} title="Clic para ver inscritos"
                           style={{
-                            background: TALLER_BG, color: TALLER_COLOR,
-                            border: `1px solid ${TALLER_BORDER}`,
+                            background: TALLER_BG, color: TALLER_COLOR, border: `1px solid ${TALLER_BORDER}`,
                             borderRadius: '6px', padding: '4px 7px',
                             fontSize: vista === 'dia' ? '13px' : '11px',
                             cursor: 'pointer', height: 'calc(100% - 4px)',
@@ -983,13 +940,10 @@ export default function Horarios() {
                               {inscritosPorTaller[taller.id] || 0} 👤
                             </span>
                           </div>
-                          {vista === 'dia' && (
-                            <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '1px' }}>{taller.profesores?.nombre}</div>
-                          )}
+                          {vista === 'dia' && <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '1px' }}>{taller.profesores?.nombre}</div>}
                         </div>
                       )}
 
-                      {/* Clase regular */}
                       {mainClass && !taller && (() => {
                         const col2 = getColorEstado(mainClass.estado, mainClass.revision_pendiente)
                         const numPlan = mainClass.contratos?.total_clases
@@ -1000,37 +954,29 @@ export default function Horarios() {
                         return (
                           <div onClick={(e) => abrirClaseExistente(e, mainClass)} title="Clic para editar"
                             style={{
-                              background: col2.bg, color: col2.color,
-                              border: `1px solid ${col2.border}`,
+                              background: col2.bg, color: col2.color, border: `1px solid ${col2.border}`,
                               borderRadius: '6px', padding: '4px 7px',
                               fontSize: vista === 'dia' ? '13px' : '11px',
                               cursor: 'pointer', height: 'calc(100% - 4px)',
                               overflow: 'hidden', boxSizing: 'border-box', margin: '2px 3px'
-                            }}
-                          >
+                            }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2px' }}>
                               <strong style={{ lineHeight: '1.3', fontSize: vista === 'dia' ? '13px' : '10px', wordBreak: 'break-word' }}>
                                 {mainClass.contratos?.clientes?.nombre}
                               </strong>
                               <div style={{ display: 'flex', gap: '2px', flexShrink: 0, alignItems: 'center' }}>
                                 {numPlan && vista === 'dia' && (
-                                  <span style={{ fontSize: '12px', fontWeight: '700', opacity: 0.9, whiteSpace: 'nowrap' }}>
-                                    {numPlan}
-                                  </span>
+                                  <span style={{ fontSize: '12px', fontWeight: '700', opacity: 0.9, whiteSpace: 'nowrap' }}>{numPlan}</span>
                                 )}
                                 {mainClass.recurrente && <span style={{ fontSize: '9px' }}>🔁</span>}
                                 {mainClass.revision_pendiente && <span style={{ fontSize: '9px' }}>⚠️</span>}
                               </div>
                             </div>
                             {vista === 'dia' && mainClass.profesores?.nombre && (
-                              <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '1px' }}>
-                                {mainClass.profesores.nombre}
-                              </div>
+                              <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '1px' }}>{mainClass.profesores.nombre}</div>
                             )}
                             {vista === 'dia' && rowSpan >= 3 && (
-                              <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '1px' }}>
-                                {mainClass.contratos?.instrumentos?.nombre}
-                              </div>
+                              <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '1px' }}>{mainClass.contratos?.instrumentos?.nombre}</div>
                             )}
                           </div>
                         )
@@ -1070,7 +1016,6 @@ export default function Horarios() {
               <button onClick={() => setModalAbierto(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
             </div>
 
-            {/* Tabs clase / taller */}
             <div style={{ display: 'flex', borderBottom: '1px solid #eef2f7' }}>
               {[{ key: 'clase', label: '📚 Clase regular' }, { key: 'taller', label: '🎸 Taller' }].map(op => (
                 <button key={op.key} onClick={() => setTipoModal(op.key as any)} style={{
@@ -1084,7 +1029,6 @@ export default function Horarios() {
 
             <div style={{ padding: '20px 24px', maxHeight: '65vh', overflowY: 'auto' }}>
 
-              {/* ── Tab Clase regular ── */}
               {tipoModal === 'clase' && (
                 <>
                   <div style={{ marginBottom: '14px', position: 'relative' }}>
@@ -1109,7 +1053,7 @@ export default function Horarios() {
                   {clienteSeleccionado && contratos.length === 0 && (
                     <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px' }}>
                       <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#991b1b' }}>🚫 Sin plan activo</p>
-                      <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#7f1d1d' }}>Este cliente no tiene un plan activo. Crea o renueva el plan desde la sección <strong>Clientes</strong> antes de asignar la clase.</p>
+                      <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#7f1d1d' }}>Este cliente no tiene un plan activo. Crea el plan desde <strong>Clientes</strong> antes de asignar la clase.</p>
                     </div>
                   )}
 
@@ -1140,6 +1084,23 @@ export default function Horarios() {
                     </select>
                   </div>
 
+                  {/* PATCH: selector de modalidad */}
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={labelStyle}>Modalidad</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {MODALIDADES_CLASE.map(m => (
+                        <button key={m} onClick={() => setModalidadClase(m)} style={{
+                          flex: 1, padding: '9px', border: `1px solid ${modalidadClase === m ? TEAL : TEAL_MID}`,
+                          borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+                          background: modalidadClase === m ? TEAL : 'white',
+                          color: modalidadClase === m ? 'white' : '#333',
+                          fontWeight: modalidadClase === m ? '600' : '400',
+                          textTransform: 'capitalize'
+                        }}>{m}</button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Duración</label>
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -1160,14 +1121,9 @@ export default function Horarios() {
                   {avisoCrear.length > 0 && (
                     <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px' }}>
                       <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: '600', color: '#92400e' }}>⚠️ Estás modificando:</p>
-                      <ul style={{ margin: '0', paddingLeft: '18px' }}>
-                        {avisoCrear.map((a, i) => (
-                          <li key={i} style={{ fontSize: '13px', color: '#78350f', marginBottom: '2px' }}>{a}</li>
-                        ))}
+                      <ul style={{ margin: 0, paddingLeft: '18px' }}>
+                        {avisoCrear.map((a, i) => <li key={i} style={{ fontSize: '13px', color: '#78350f', marginBottom: '2px' }}>{a}</li>)}
                       </ul>
-                      <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#92400e' }}>
-                        Este cambio aplica solo para esta clase. Si quieres que cambie para todas las demás, edita el plan del cliente.
-                      </p>
                     </div>
                   )}
 
@@ -1179,20 +1135,12 @@ export default function Horarios() {
                     {recurrente && (
                       <div style={{ marginTop: '10px' }}>
                         <label style={{ ...labelStyle, marginBottom: '6px' }}>Repetir hasta:</label>
-                        <input
-                          type="date"
-                          value={fechaFinRecurrencia}
+                        <input type="date" value={fechaFinRecurrencia}
                           min={slotSeleccionado?.fecha || formatFecha(new Date())}
-                          onChange={e => setFechaFinRecurrencia(e.target.value)}
-                          style={{ ...fieldStyle }}
-                        />
+                          onChange={e => setFechaFinRecurrencia(e.target.value)} style={fieldStyle} />
                         {fechaFinRecurrencia && slotSeleccionado?.fecha && (() => {
                           const semanas = Math.floor((parseFechaLocal(fechaFinRecurrencia).getTime() - parseFechaLocal(slotSeleccionado.fecha).getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
-                          return semanas > 0 ? (
-                            <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#666' }}>
-                              Se crearán aprox. <strong>{semanas}</strong> clases · mismo día y hora
-                            </p>
-                          ) : null
+                          return semanas > 0 ? <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#666' }}>Se crearán aprox. <strong>{semanas}</strong> clases · mismo día y hora</p> : null
                         })()}
                       </div>
                     )}
@@ -1200,57 +1148,37 @@ export default function Horarios() {
 
                   {error && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{error}</p>}
 
-                  {/* Panel confirmación sede diferente */}
                   {confirmarSedeDiferente && (
                     <div style={{ background: '#fff7ed', border: '2px solid #f97316', borderRadius: '10px', padding: '14px', marginBottom: '14px' }}>
-                      <p style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: '700', color: '#c2410c' }}>
-                        ⚠️ Sede diferente
-                      </p>
+                      <p style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: '700', color: '#c2410c' }}>⚠️ Sede diferente</p>
                       <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#9a3412' }}>
                         El plan es de <strong>{sedes.find(s => s.id === (contratoSeleccionado as any)?.sede_id)?.nombre}</strong>, pero el salón está en <strong>{sedes.find(s => s.id === slotSeleccionado?.salon?.sede_id)?.nombre || 'otra sede'}</strong>.
-                        ¿Deseas crear la clase de todas formas?
                       </p>
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={guardarClase} disabled={guardando} style={{
-                          flex: 1, padding: '9px', background: '#c2410c', color: 'white',
-                          border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600'
-                        }}>Crear de todas formas</button>
-                        <button onClick={() => setConfirmarSedeDiferente(false)} style={{
-                          padding: '9px 16px', background: 'white', color: '#333',
-                          border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px'
-                        }}>Cancelar</button>
+                        <button onClick={guardarClase} disabled={guardando} style={{ flex: 1, padding: '9px', background: '#c2410c', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>Crear de todas formas</button>
+                        <button onClick={() => setConfirmarSedeDiferente(false)} style={{ padding: '9px 16px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Cancelar</button>
                       </div>
                     </div>
                   )}
 
                   <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={guardarClase} disabled={guardando} style={{
-                      flex: 1, padding: '11px', background: TEAL, color: 'white',
-                      border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500'
-                    }}>
+                    <button onClick={guardarClase} disabled={guardando} style={{ flex: 1, padding: '11px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
                       {guardando ? 'Verificando...' : recurrente ? `Crear clases hasta ${fechaFinRecurrencia}` : 'Asignar clase'}
                     </button>
-                    <button onClick={() => setModalAbierto(false)} style={{
-                      padding: '11px 18px', background: '#f1f5f9', color: '#334155',
-                      border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px'
-                    }}>Cancelar</button>
+                    <button onClick={() => setModalAbierto(false)} style={{ padding: '11px 18px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>Cancelar</button>
                   </div>
                 </>
               )}
 
-              {/* ── Tab Taller ── */}
               {tipoModal === 'taller' && (
                 <>
                   <div style={{ background: TALLER_BG, borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: TALLER_COLOR }}>
                     Se repetirá cada <strong>{DIAS_LARGO[parseFechaLocal(slotSeleccionado.fecha).getDay()]}</strong> a las <strong>{slotSeleccionado.hora}</strong> en <strong>{slotSeleccionado.salon.nombre}</strong>
                   </div>
-
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Nombre del taller *</label>
-                    <input value={tallerNombre} onChange={e => setTallerNombre(e.target.value)}
-                      placeholder="Ej: Taller de guitarra eléctrica" style={fieldStyle} />
+                    <input value={tallerNombre} onChange={e => setTallerNombre(e.target.value)} placeholder="Ej: Taller de guitarra eléctrica" style={fieldStyle} />
                   </div>
-
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Profesor *</label>
                     <select value={tallerProfesorId} onChange={e => setTallerProfesorId(e.target.value)} style={fieldStyle}>
@@ -1258,14 +1186,12 @@ export default function Horarios() {
                       {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                     </select>
                   </div>
-
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Duración</label>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       {DURACIONES.map(d => (
                         <button key={d} onClick={() => setTallerDuracion(d)} style={{
-                          flex: 1, padding: '9px',
-                          border: `2px solid ${tallerDuracion === d ? TALLER_COLOR : TEAL_MID}`,
+                          flex: 1, padding: '9px', border: `2px solid ${tallerDuracion === d ? TALLER_COLOR : TEAL_MID}`,
                           borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
                           background: tallerDuracion === d ? TALLER_BG : 'white',
                           color: tallerDuracion === d ? TALLER_COLOR : '#333',
@@ -1274,27 +1200,16 @@ export default function Horarios() {
                       ))}
                     </div>
                   </div>
-
                   <div style={{ marginBottom: '20px' }}>
                     <label style={labelStyle}>Valor mensual ($)</label>
-                    <input type="number" min={0} value={tallerValor}
-                      onChange={e => setTallerValor(e.target.value)}
-                      placeholder="Opcional" style={fieldStyle} />
+                    <input type="number" min={0} value={tallerValor} onChange={e => setTallerValor(e.target.value)} placeholder="Opcional" style={fieldStyle} />
                   </div>
-
                   {tallerError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{tallerError}</p>}
-
                   <div style={{ display: 'flex', gap: '10px' }}>
-                    <button onClick={crearTaller} disabled={tallerGuardando} style={{
-                      flex: 1, padding: '11px', background: TALLER_COLOR, color: 'white',
-                      border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500'
-                    }}>
+                    <button onClick={crearTaller} disabled={tallerGuardando} style={{ flex: 1, padding: '11px', background: TALLER_COLOR, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
                       {tallerGuardando ? 'Creando...' : 'Crear taller'}
                     </button>
-                    <button onClick={() => setModalAbierto(false)} style={{
-                      padding: '11px 18px', background: '#f1f5f9', color: '#334155',
-                      border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px'
-                    }}>Cancelar</button>
+                    <button onClick={() => setModalAbierto(false)} style={{ padding: '11px 18px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>Cancelar</button>
                   </div>
                 </>
               )}
@@ -1326,12 +1241,9 @@ export default function Horarios() {
             <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px' }}>
               {!modoEdicionTaller ? (
                 <>
-                  {/* Panel estado de la sesión */}
                   <div style={{ background: '#fafbfc', border: '1px solid #eef2f7', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#555' }}>
-                        Sesión del {fechaSesionViendo}
-                      </p>
+                      <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#555' }}>Sesión del {fechaSesionViendo}</p>
                       <span style={{
                         padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600',
                         background: sesionActual?.estado === 'dada' ? '#fefce8' : sesionActual?.estado === 'cancelada' ? '#fee2e2' : '#eff6ff',
@@ -1350,27 +1262,18 @@ export default function Horarios() {
                         return (
                           <button key={op.est} onClick={() => !esActual && marcarSesion(op.est)}
                             disabled={guardandoSesion || esActual}
-                            style={{
-                              flex: 1, padding: '6px', borderRadius: '8px', cursor: esActual ? 'default' : 'pointer',
-                              fontSize: '12px', fontWeight: '600',
-                              border: `1px solid ${esActual ? op.color : '#e2e8f0'}`,
-                              background: esActual ? op.bg : 'white',
-                              color: esActual ? op.color : '#666'
-                            }}>
+                            style={{ flex: 1, padding: '6px', borderRadius: '8px', cursor: esActual ? 'default' : 'pointer', fontSize: '12px', fontWeight: '600', border: `1px solid ${esActual ? op.color : '#e2e8f0'}`, background: esActual ? op.bg : 'white', color: esActual ? op.color : '#666' }}>
                             {op.label}
                           </button>
                         )
                       })}
                     </div>
                   </div>
-
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                     <p style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
                       Inscritos este mes <span style={{ color: TALLER_COLOR }}>({inscritosDelTaller.length})</span>
                     </p>
-                    {tallerViendo.valor_mensual && (
-                      <span style={{ fontSize: '14px', color: '#555' }}>${Number(tallerViendo.valor_mensual).toLocaleString()}/mes</span>
-                    )}
+                    {tallerViendo.valor_mensual && <span style={{ fontSize: '14px', color: '#555' }}>${Number(tallerViendo.valor_mensual).toLocaleString()}/mes</span>}
                   </div>
                   {inscritosDelTaller.length === 0
                     ? <p style={{ textAlign: 'center', color: '#aaa', padding: '24px 0', fontSize: '14px' }}>Sin inscritos este mes</p>
@@ -1384,9 +1287,7 @@ export default function Horarios() {
                         </div>
                       ))
                   }
-                  <button onClick={() => setModalVerTaller(false)} style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
-                    Cerrar
-                  </button>
+                  <button onClick={() => setModalVerTaller(false)} style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>Cerrar</button>
                 </>
               ) : (
                 <>
@@ -1406,10 +1307,7 @@ export default function Horarios() {
                       <label style={labelStyle}>Salón *</label>
                       <select value={teSalonId} onChange={e => setTeSalonId(e.target.value)} style={fieldStyle}>
                         <option value="">— Seleccionar —</option>
-                        {todosSalones
-                          .filter((s: any) => s.sede_id === tallerViendo?.salones?.sede_id)
-                          .map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)
-                        }
+                        {todosSalones.filter((s: any) => s.sede_id === tallerViendo?.salones?.sede_id).map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                       </select>
                     </div>
                     <div>
@@ -1433,8 +1331,7 @@ export default function Horarios() {
                           <button key={d} onClick={() => setTeDuracion(d)} style={{
                             flex: 1, padding: '9px', border: `2px solid ${teDuracion === d ? TALLER_COLOR : TEAL_MID}`,
                             borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
-                            background: teDuracion === d ? TALLER_BG : 'white',
-                            color: teDuracion === d ? TALLER_COLOR : '#333',
+                            background: teDuracion === d ? TALLER_BG : 'white', color: teDuracion === d ? TALLER_COLOR : '#333',
                             fontWeight: teDuracion === d ? '600' : '400'
                           }}>{d}min</button>
                         ))}
@@ -1445,33 +1342,22 @@ export default function Horarios() {
                       <input type="number" min={0} value={teValor} onChange={e => setTeValor(e.target.value)} placeholder="Opcional" style={fieldStyle} />
                     </div>
                   </div>
-
                   {teError && <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '12px' }}>{teError}</p>}
-
                   <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
                     <button onClick={guardarEdicionTaller} disabled={teGuardando} style={{ flex: 1, padding: '10px', background: TALLER_COLOR, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
                       {teGuardando ? 'Guardando...' : 'Guardar cambios'}
                     </button>
-                    <button onClick={() => setModoEdicionTaller(false)} style={{ padding: '10px 16px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>
-                      Cancelar
-                    </button>
+                    <button onClick={() => setModoEdicionTaller(false)} style={{ padding: '10px 16px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>Cancelar</button>
                   </div>
-
                   {!confirmarBorrarTaller ? (
-                    <button onClick={() => setConfirmarBorrarTaller(true)} style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                      Borrar taller
-                    </button>
+                    <button onClick={() => setConfirmarBorrarTaller(true)} style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Borrar taller</button>
                   ) : (
                     <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '14px', marginTop: '10px' }}>
                       <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#991b1b', fontWeight: '700' }}>¿Borrar el taller "{tallerViendo.nombre}"?</p>
-                      <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#666' }}>Se eliminará permanentemente con todas sus inscripciones.</p>
+                      <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#666' }}>Se eliminará permanentemente.</p>
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={borrarTaller} disabled={teGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
-                          Sí, borrar
-                        </button>
-                        <button onClick={() => setConfirmarBorrarTaller(false)} style={{ padding: '8px 14px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                          Cancelar
-                        </button>
+                        <button onClick={borrarTaller} disabled={teGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>Sí, borrar</button>
+                        <button onClick={() => setConfirmarBorrarTaller(false)} style={{ padding: '8px 14px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Cancelar</button>
                       </div>
                     </div>
                   )}
@@ -1488,7 +1374,6 @@ export default function Horarios() {
           <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
             <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                {/* ── CAMBIO 2: título actualizado para clases dadas */}
                 <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>
                   {esBloqueada(claseEditando) ? '🔒 Clase dada' : 'Editar clase'}
                 </h3>
@@ -1500,22 +1385,35 @@ export default function Horarios() {
               <button onClick={() => setModalEditar(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ padding: '20px 24px', maxHeight: '75vh', overflowY: 'auto' }}>
-              <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px', marginBottom: '16px', fontSize: '13px', color: '#333' }}>
-                <div><strong>Cliente:</strong> {claseEditando.contratos?.clientes?.nombre}</div>
-                <div><strong>Instrumento:</strong> {claseEditando.contratos?.instrumentos?.nombre}</div>
-                <div><strong>Plan:</strong> {claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases</div>
-                <div><strong>Sede del plan:</strong> {sedes.find(s => s.id === claseEditando.contratos?.sede_id)?.nombre || '—'}</div>
-                {claseEditando.contratos?.sede_id && claseEditando.salones?.sede_id && claseEditando.contratos.sede_id !== claseEditando.salones.sede_id && (
-                  <div style={{ marginTop: '8px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '8px 10px', color: '#c2410c', fontWeight: '600', fontSize: '12px' }}>
-                    ⚠️ El salón pertenece a <strong>{sedes.find(s => s.id === claseEditando.salones?.sede_id)?.nombre || 'otra sede'}</strong>, pero el plan es de <strong>{sedes.find(s => s.id === claseEditando.contratos?.sede_id)?.nombre || 'otra sede'}</strong>
-                  </div>
-                )}
-                {claseEditando.recurrente && <div style={{ marginTop: '6px', color: TEAL, fontWeight: '600', fontSize: '12px' }}>🔁 Clase recurrente</div>}
-                {esBloqueada(claseEditando) && <div style={{ marginTop: '6px', color: '#854d0e', fontWeight: '600', fontSize: '12px' }}>🔒 No se puede editar — solo borrar si es necesario</div>}
-              </div>
+
+              {/* Info compacta cuando hay revisión pendiente — PATCH */}
+              {claseEditando.revision_pendiente ? (
+                <div style={{ background: TEAL_LIGHT, borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', fontSize: '12px', color: '#555', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                  <span>👤 {claseEditando.contratos?.clientes?.nombre}</span>
+                  <span>🎵 {claseEditando.contratos?.instrumentos?.nombre}</span>
+                  <span>🏫 {claseEditando.salones?.nombre}</span>
+                  <span>⏰ {claseEditando.hora?.substring(0,5)} · {claseEditando.duracion_min}min</span>
+                  {claseEditando.modalidad && <span style={{ textTransform: 'capitalize' }}>📱 {claseEditando.modalidad}</span>}
+                </div>
+              ) : (
+                <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px', marginBottom: '16px', fontSize: '13px', color: '#333' }}>
+                  <div><strong>Cliente:</strong> {claseEditando.contratos?.clientes?.nombre}</div>
+                  <div><strong>Instrumento:</strong> {claseEditando.contratos?.instrumentos?.nombre}</div>
+                  <div><strong>Plan:</strong> {claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases</div>
+                  <div><strong>Sede del plan:</strong> {sedes.find(s => s.id === claseEditando.contratos?.sede_id)?.nombre || '—'}</div>
+                  {claseEditando.modalidad && <div><strong>Modalidad:</strong> <span style={{ textTransform: 'capitalize' }}>{claseEditando.modalidad}</span></div>}
+                  {claseEditando.contratos?.sede_id && claseEditando.salones?.sede_id && claseEditando.contratos.sede_id !== claseEditando.salones.sede_id && (
+                    <div style={{ marginTop: '8px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '8px 10px', color: '#c2410c', fontWeight: '600', fontSize: '12px' }}>
+                      ⚠️ El salón pertenece a <strong>{sedes.find(s => s.id === claseEditando.salones?.sede_id)?.nombre || 'otra sede'}</strong>, pero el plan es de <strong>{sedes.find(s => s.id === claseEditando.contratos?.sede_id)?.nombre || 'otra sede'}</strong>
+                    </div>
+                  )}
+                  {claseEditando.recurrente && <div style={{ marginTop: '6px', color: TEAL, fontWeight: '600', fontSize: '12px' }}>🔁 Clase recurrente</div>}
+                  {esBloqueada(claseEditando) && <div style={{ marginTop: '6px', color: '#854d0e', fontWeight: '600', fontSize: '12px' }}>🔒 No se puede editar — solo borrar si es necesario</div>}
+                </div>
+              )}
 
               {/* Campos de edición — solo para clases NO dadas */}
-              {!esBloqueada(claseEditando) && (
+              {!esBloqueada(claseEditando) && !claseEditando.revision_pendiente && (
                 <>
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Estado</label>
@@ -1527,24 +1425,13 @@ export default function Horarios() {
                             if (est === 'confirmada' && editEstado !== 'confirmada') {
                               const tomadas = claseEditando.contratos?.clases_tomadas ?? 0
                               const total = claseEditando.contratos?.total_clases ?? 0
-                              if (total > 0 && tomadas >= total) {
-                                setPlanCompleto(true)
-                                setConfirmarDada(false)
-                              } else {
-                                setEditEstado('confirmada')
-                                setPlanCompleto(false)
-                              }
+                              if (total > 0 && tomadas >= total) { setPlanCompleto(true); setConfirmarDada(false) }
+                              else { setEditEstado('confirmada'); setPlanCompleto(false) }
                             } else if (est === 'dada' && editEstado !== 'dada') {
-                              if (editEstado !== 'confirmada') {
-                                setEditError('La clase debe estar Confirmada antes de marcarla como Dada')
-                                return
-                              }
-                              setConfirmarDada(true)
-                              setPlanCompleto(false)
+                              if (editEstado !== 'confirmada') { setEditError('La clase debe estar Confirmada antes de marcarla como Dada'); return }
+                              setConfirmarDada(true); setPlanCompleto(false)
                             } else {
-                              setEditEstado(est)
-                              setConfirmarDada(false)
-                              setPlanCompleto(false)
+                              setEditEstado(est); setConfirmarDada(false); setPlanCompleto(false)
                             }
                           }} style={{
                             padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500',
@@ -1556,36 +1443,22 @@ export default function Horarios() {
                       })}
                     </div>
 
-                    {/* Plan completo — bloqueo al confirmar */}
                     {planCompleto && (
                       <div style={{ marginTop: '10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px' }}>
                         <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#991b1b', fontWeight: '700' }}>
                           🚫 El plan está completo ({claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases)
                         </p>
-                        <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#666' }}>
-                          No es posible confirmar esta clase. Renueva el plan del cliente para continuar.
-                        </p>
-                        <button onClick={() => setPlanCompleto(false)} style={{
-                          padding: '6px 14px', background: 'white', color: '#333',
-                          border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px'
-                        }}>Entendido</button>
+                        <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#666' }}>Renueva el plan del cliente para continuar.</p>
+                        <button onClick={() => setPlanCompleto(false)} style={{ padding: '6px 14px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Entendido</button>
                       </div>
                     )}
 
                     {confirmarDada && (
                       <div style={{ marginTop: '10px', background: '#fefce8', border: '1px solid #fde68a', borderRadius: '10px', padding: '12px 14px' }}>
-                        <p style={{ margin: '0 0 8px', fontSize: '13px', color: '#854d0e', fontWeight: '600' }}>
-                          ⚠️ Una vez marcada como "Dada" no se podrá editar.
-                        </p>
+                        <p style={{ margin: '0 0 8px', fontSize: '13px', color: '#854d0e', fontWeight: '600' }}>⚠️ Una vez marcada como "Dada" no se podrá editar.</p>
                         <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={() => { setEditEstado('dada'); setConfirmarDada(false) }} style={{
-                            flex: 1, padding: '7px', background: '#854d0e', color: 'white',
-                            border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
-                          }}>Sí, marcar como dada</button>
-                          <button onClick={() => setConfirmarDada(false)} style={{
-                            padding: '7px 14px', background: 'white', color: '#333',
-                            border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px'
-                          }}>Cancelar</button>
+                          <button onClick={() => { setEditEstado('dada'); setConfirmarDada(false) }} style={{ flex: 1, padding: '7px', background: '#854d0e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>Sí, marcar como dada</button>
+                          <button onClick={() => setConfirmarDada(false)} style={{ padding: '7px 14px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Cancelar</button>
                         </div>
                       </div>
                     )}
@@ -1595,14 +1468,12 @@ export default function Horarios() {
                     <label style={labelStyle}>Fecha</label>
                     <input type="date" value={editFecha} onChange={e => setEditFecha(e.target.value)} style={fieldStyle} />
                   </div>
-
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Hora de inicio</label>
                     <select value={editHora} onChange={e => setEditHora(e.target.value)} style={fieldStyle}>
                       {HORAS.map(h => <option key={h} value={h}>{h}</option>)}
                     </select>
                   </div>
-
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Duración</label>
                     <div style={{ display: 'flex', gap: '8px' }}>
@@ -1616,7 +1487,6 @@ export default function Horarios() {
                       ))}
                     </div>
                   </div>
-
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Profesor</label>
                     <select value={editProfesorId} onChange={e => setEditProfesorId(e.target.value)} style={fieldStyle}>
@@ -1624,74 +1494,86 @@ export default function Horarios() {
                       {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                     </select>
                   </div>
-
                   <div style={{ marginBottom: '20px' }}>
                     <label style={labelStyle}>Salón</label>
                     <select value={editSalonId} onChange={e => setEditSalonId(e.target.value)} style={fieldStyle}>
                       {salones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                     </select>
                   </div>
-
-                  {/* Panel revisión de inasistencia */}
-                  {claseEditando.revision_pendiente && (
-                    <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '14px', marginBottom: '16px' }}>
-                      <p style={{ margin: '0 0 6px', fontSize: '14px', color: '#c2410c', fontWeight: '700' }}>⚠️ Inasistencia pendiente de revisión</p>
-                      <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#78350f' }}>
-                        El estudiante no asistió. Revisa el WhatsApp y decide:
-                      </p>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={() => resolverRevision(false)} disabled={procesandoRevision} style={{
-                          flex: 1, padding: '8px', background: '#dcfce7', color: '#166534',
-                          border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600'
-                        }}>✓ No cobrar (avisó a tiempo)</button>
-                        <button onClick={() => resolverRevision(true)} disabled={procesandoRevision} style={{
-                          flex: 1, padding: '8px', background: '#fee2e2', color: '#991b1b',
-                          border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600'
-                        }}>✗ Cobrar inasistencia</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {editError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{editError}</p>}
-
-                  {claseEditando.recurrente && claseEditando.patron_id && hayEdicionReal ? (
-                    <>
-                      <p style={{ fontSize: '13px', color: '#555', marginBottom: '8px', fontWeight: '500' }}>
-                        ¿A qué clases aplica el cambio?
-                      </p>
-                      <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                        <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{
-                          flex: 1, padding: '10px', background: TEAL, color: 'white',
-                          border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
-                        }}>{editGuardando ? '...' : 'Solo esta clase'}</button>
-                        <button onClick={() => guardarEdicion('futuras')} disabled={editGuardando} style={{
-                          flex: 1, padding: '10px', background: '#0f766e', color: 'white',
-                          border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500'
-                        }}>{editGuardando ? '...' : 'Esta y las siguientes'}</button>
-                      </div>
-                    </>
-                  ) : (
-                    <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{
-                      width: '100%', padding: '11px', background: TEAL, color: 'white',
-                      border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500', marginBottom: '10px'
-                    }}>{editGuardando ? 'Guardando...' : 'Guardar cambios'}</button>
-                  )}
                 </>
               )}
 
-              {/* ── CAMBIO 3: botón Borrar siempre visible, incluso para clases dadas ── */}
+              {/* PATCH: Panel revisión — compacto + 50%/100% */}
+              {claseEditando.revision_pendiente && (
+                <div style={{ background: '#fff7ed', border: '2px solid #fed7aa', borderRadius: '14px', padding: '16px', marginBottom: '16px' }}>
+                  <p style={{ margin: '0 0 16px', fontSize: '15px', color: '#c2410c', fontWeight: '800' }}>⚠️ Inasistencia — pendiente de revisión</p>
+
+                  <p style={{ margin: '0 0 8px', fontSize: '11px', fontWeight: '800', color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Honorario del profesor
+                  </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginBottom: '16px' }}>
+                    <button onClick={() => resolverRevision(false, 100)} disabled={procesandoRevision}
+                      style={{ padding: '10px 6px', background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '10px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', textAlign: 'center' }}>
+                      100%<br/><span style={{ fontSize: '10px', fontWeight: '400' }}>Fue solo por esta clase</span>
+                    </button>
+                    <button onClick={() => resolverRevision(false, 50)} disabled={procesandoRevision}
+                      style={{ padding: '10px 6px', background: '#fefce8', color: '#854d0e', border: '1px solid #fde68a', borderRadius: '10px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', textAlign: 'center' }}>
+                      50%<br/><span style={{ fontSize: '10px', fontWeight: '400' }}>Ya estaba en sede</span>
+                    </button>
+                    <button onClick={() => resolverRevision(false, 0)} disabled={procesandoRevision}
+                      style={{ padding: '10px 6px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', textAlign: 'center' }}>
+                      0%<br/><span style={{ fontSize: '10px', fontWeight: '400' }}>Sin honorario</span>
+                    </button>
+                  </div>
+
+                  <div style={{ borderTop: '1px solid #fde68a', paddingTop: '14px' }}>
+                    <p style={{ margin: '0 0 8px', fontSize: '11px', fontWeight: '800', color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      ¿Se le cobra al estudiante?
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={() => resolverRevision(false, 0)} disabled={procesandoRevision}
+                        style={{ flex: 1, padding: '9px', background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                        ✓ No cobrar (avisó a tiempo)
+                      </button>
+                      <button onClick={() => resolverRevision(true, 100)} disabled={procesandoRevision}
+                        style={{ flex: 1, padding: '9px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                        ✗ Cobrar inasistencia
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {editError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{editError}</p>}
+
+              {!esBloqueada(claseEditando) && !claseEditando.revision_pendiente && (
+                claseEditando.recurrente && claseEditando.patron_id && hayEdicionReal ? (
+                  <>
+                    <p style={{ fontSize: '13px', color: '#555', marginBottom: '8px', fontWeight: '500' }}>¿A qué clases aplica el cambio?</p>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                      <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{ flex: 1, padding: '10px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+                        {editGuardando ? '...' : 'Solo esta clase'}
+                      </button>
+                      <button onClick={() => guardarEdicion('futuras')} disabled={editGuardando} style={{ flex: 1, padding: '10px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+                        {editGuardando ? '...' : 'Esta y las siguientes'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{ width: '100%', padding: '11px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500', marginBottom: '10px' }}>
+                    {editGuardando ? 'Guardando...' : 'Guardar cambios'}
+                  </button>
+                )
+              )}
+
               {!confirmarBorrar ? (
-                <button onClick={() => setConfirmarBorrar(true)} style={{
-                  width: '100%', padding: '10px', background: 'white', color: '#dc2626',
-                  border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
-                  marginTop: esBloqueada(claseEditando) ? '0' : '0'
-                }}>Borrar clase</button>
+                <button onClick={() => setConfirmarBorrar(true)} style={{ width: '100%', padding: '10px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Borrar clase</button>
               ) : (
-                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '14px', marginTop: esBloqueada(claseEditando) ? '0' : '0' }}>
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '14px' }}>
                   <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#991b1b', fontWeight: '700' }}>¿Confirmar eliminación?</p>
                   <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#666' }}>
                     {claseEditando.estado === 'dada'
-                      ? `⚠️ Esta clase ya fue dada. Al borrarla, el contador del plan se ajustará de ${claseEditando.contratos?.clases_tomadas} a ${Math.max(0, (claseEditando.contratos?.clases_tomadas || 0) - 1)}.`
+                      ? `⚠️ Esta clase ya fue dada. El contador del plan se ajustará.`
                       : claseEditando.recurrente && claseEditando.patron_id
                         ? 'Esta clase es parte de una serie recurrente.'
                         : `${claseEditando.contratos?.clientes?.nombre} · ${claseEditando.fecha} · ${claseEditando.hora?.substring(0, 5)}`}
@@ -1712,12 +1594,8 @@ export default function Horarios() {
                 </div>
               )}
 
-              {/* Botón cerrar — solo para clases dadas cuando NO está en confirmación */}
               {esBloqueada(claseEditando) && !confirmarBorrar && (
-                <button onClick={() => setModalEditar(false)} style={{
-                  width: '100%', padding: '11px', background: '#f1f5f9', color: '#334155',
-                  border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', marginTop: '10px'
-                }}>Cerrar</button>
+                <button onClick={() => setModalEditar(false)} style={{ width: '100%', padding: '11px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', marginTop: '10px' }}>Cerrar</button>
               )}
             </div>
           </div>
