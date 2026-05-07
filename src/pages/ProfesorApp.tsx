@@ -71,7 +71,6 @@ function nombreCliente(c: any) {
   return cl.nombre || `${cl.nombres || ''} ${cl.apellidos || ''}`.trim() || '—'
 }
 
-// Calcula minutos que faltan para la clase
 function minutosParaClase(fecha: string, hora: string): number {
   const [h, m] = hora.substring(0,5).split(':').map(Number)
   const claseDate = new Date(fecha + 'T' + String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':00')
@@ -104,18 +103,14 @@ export default function ProfesorApp() {
     return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`
   })
 
-  // Modal clase
   const [claseActiva, setClaseActiva]     = useState<any>(null)
   const [resumen, setResumen]             = useState('')
   const [guardando, setGuardando]         = useState(false)
   const [exito, setExito]                 = useState('')
   const [resumenExpandido, setResumenExpandido] = useState<string | null>(null)
-
-  // Sub-pantallas del modal
   const [pantallaModal, setPantallaModal] = useState<'acciones' | 'inasistencia' | 'cancelar' | 'avisoTardia'>('acciones')
   const [avisoCancelacion, setAvisoCancelacion] = useState('')
 
-  // Modal taller
   const [tallerModal, setTallerModal]         = useState<any>(null)
   const [inscritosTaller, setInscritosTaller] = useState<any[]>([])
   const [sesionHoy, setSesionHoy]             = useState<any>(null)
@@ -205,7 +200,6 @@ export default function ProfesorApp() {
     return tarifa ? Number(tarifa.valor) : 0
   }
 
-  // ── Notificación ─────────────────────────────────────
   async function insertarNotificacion(tipo: string, mensaje: string, detalle: string, claseId?: string) {
     await supabase.from('notificaciones').insert({
       tipo, mensaje, detalle,
@@ -214,7 +208,6 @@ export default function ProfesorApp() {
     })
   }
 
-  // ── Cargar semana ─────────────────────────────────────
   async function cargarHoy() {
     if (!profesor) return
     setCargandoClases(true)
@@ -305,7 +298,6 @@ export default function ProfesorApp() {
     setCargandoClases(false)
   }
 
-  // ── MARCAR DADA ───────────────────────────────────────
   async function marcarDada() {
     if (!claseActiva) return
     setGuardando(true)
@@ -329,12 +321,9 @@ export default function ProfesorApp() {
     setGuardando(false)
   }
 
-  // ── INASISTENCIA con porcentaje de honorario ──────────
   async function marcarInasistencia(pct: number) {
     if (!claseActiva) return
     setGuardando(true)
-
-    // Suma la clase al plan del estudiante
     const { data: contrato } = await supabase.from('contratos').select('id, clases_tomadas, duracion_min')
       .eq('id', claseActiva.contrato_id).single()
     const durPlan  = Number(contrato?.duracion_min) || Number(claseActiva.contratos?.duracion_min) || Number(claseActiva.duracion_min) || 60
@@ -346,62 +335,44 @@ export default function ProfesorApp() {
         clases_tomadas: parseFloat((tomadas + fraccion).toFixed(4))
       }).eq('id', contrato.id)
     }
-
-    // Calcula honorario del profesor
     const modalidad = (claseActiva.modalidad || 'presencial').toLowerCase()
     const baseHon   = getValorTarifa(Number(claseActiva.duracion_min), modalidad)
     const honorario = Math.round(baseHon * pct / 100)
-
     await supabase.from('clases').update({
       revision_pendiente: true,
       honorario_valor: honorario,
       observaciones: resumen.trim() || claseActiva.observaciones || null
     }).eq('id', claseActiva.id)
-
-    // Notificación
-    const nombreEst = nombreCliente(claseActiva)
     await insertarNotificacion(
       'inasistencia',
-      `Inasistencia — ${nombreEst}`,
+      `Inasistencia — ${nombreCliente(claseActiva)}`,
       `Clase con ${profesor?.nombre} · ${formatHoraAmPm(claseActiva.hora)} · ${claseActiva.salones?.sedes?.nombre} · honorario ${pct}%`,
       claseActiva.id
     )
-
     setExito('Inasistencia registrada')
     cerrarModal()
     setGuardando(false)
   }
 
-  // ── CANCELAR CLASE ────────────────────────────────────
   async function cancelarClase() {
     if (!claseActiva) return
     setGuardando(true)
-
-    const minutos = minutosParaClase(claseActiva.fecha, claseActiva.hora)
-    const esTardia = minutos < 180 // menos de 3 horas
-
-    const motivo = esTardia
-      ? 'Cancelación tardía — posible clase de cortesía'
-      : 'Cancelación a tiempo'
-
+    const minutos  = minutosParaClase(claseActiva.fecha, claseActiva.hora)
+    const esTardia = minutos < 180
+    const motivo   = esTardia ? 'Cancelación tardía — posible clase de cortesía' : 'Cancelación a tiempo'
     await supabase.from('clases').update({
       estado: 'cancelada',
       motivo_cancelacion: motivo,
       observaciones: resumen.trim() || claseActiva.observaciones || null
     }).eq('id', claseActiva.id)
-
-    // Notificación para la asistente
-    const nombreEst = nombreCliente(claseActiva)
     await insertarNotificacion(
       esTardia ? 'cancelacion_tardia' : 'cancelacion_a_tiempo',
       `${motivo} — ${profesor?.nombre}`,
-      `Clase de ${nombreEst} · ${claseActiva.fecha} ${formatHoraAmPm(claseActiva.hora)} · ${claseActiva.salones?.sedes?.nombre}`,
+      `Clase de ${nombreCliente(claseActiva)} · ${claseActiva.fecha} ${formatHoraAmPm(claseActiva.hora)} · ${claseActiva.salones?.sedes?.nombre}`,
       claseActiva.id
     )
-
     if (esTardia) {
-      // Mostrar aviso al profesor antes de cerrar
-      setAvisoCancelacion(`La clase fue cancelada. Como faltaban menos de 3 horas, la asistente revisará si corresponde una clase de cortesía para ${nombreEst}.`)
+      setAvisoCancelacion(`La clase fue cancelada. Como faltaban menos de 3 horas, la asistente revisará si corresponde una clase de cortesía para ${nombreCliente(claseActiva)}.`)
       setPantallaModal('avisoTardia')
       setGuardando(false)
     } else {
@@ -411,7 +382,15 @@ export default function ProfesorApp() {
     }
   }
 
-  // ── Modal taller ──────────────────────────────────────
+  async function guardarResumen() {
+    if (!claseActiva) return
+    setGuardando(true)
+    await supabase.from('clases').update({ observaciones: resumen.trim() || null }).eq('id', claseActiva.id)
+    setExito('Resumen guardado')
+    cerrarModal()
+    setGuardando(false)
+  }
+
   async function abrirTaller(c: any) {
     setTallerModal(c)
     const hoy  = new Date()
@@ -466,9 +445,7 @@ export default function ProfesorApp() {
     const totalHon = clasesDadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
     const filas = clasesDadas.map(c => {
       const hon = getHonorario(c)
-      const honLabel = hon === 'pendiente'
-        ? '<span style="color:#c2410c;font-weight:700">Pendiente</span>'
-        : `$${Number(hon).toLocaleString('es-CO')}`
+      const honLabel = hon === 'pendiente' ? '<span style="color:#c2410c;font-weight:700">Pendiente</span>' : `$${Number(hon).toLocaleString('es-CO')}`
       const tipoLabel = c.revision_pendiente ? 'Inasistencia' : 'Dada'
       return `
         <tr>
@@ -483,8 +460,7 @@ export default function ProfesorApp() {
         ${c.observaciones ? `<tr class="rr"><td colspan="7"><div class="rb">📝 <em>${c.observaciones.replace(/\n/g,'<br>')}</em></div></td></tr>` : ''}
       `
     }).join('')
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Honorarios ${mesLabel} — ${profesor?.nombre}</title>
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Honorarios ${mesLabel} — ${profesor?.nombre}</title>
 <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;padding:40px;color:#1a1a1a;font-size:13px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;border-bottom:3px solid #1a8a8a;padding-bottom:20px}.logo-area h1{font-size:22px;color:#1a8a8a;font-weight:800}.logo-area p{color:#666;font-size:12px;margin-top:4px}.info-area{text-align:right}.info-area h2{font-size:16px;color:#1a1a1a;font-weight:700}.info-area p{color:#555;font-size:12px;margin-top:3px}table{width:100%;border-collapse:collapse;margin-top:20px}thead tr{background:#e8f5f5}th{padding:10px 12px;text-align:left;font-size:11px;color:#1a8a8a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top}.rr td{padding:0 12px 10px}.rb{background:#f8fafc;border-left:3px solid #b2d8d8;padding:8px 12px;font-size:12px;color:#555;line-height:1.6;border-radius:0 6px 6px 0}.total-row{background:#e8f5f5;font-weight:700}.total-row td{padding:14px 12px;font-size:15px;color:#1a8a8a;border-top:2px solid #1a8a8a}.footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:16px;font-size:11px;color:#aaa;display:flex;justify-content:space-between}.print-btn{margin-bottom:24px;padding:10px 24px;background:#1a8a8a;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}@media print{.print-btn{display:none}tr{page-break-inside:avoid}}</style>
 </head><body>
 <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
@@ -553,6 +529,9 @@ export default function ProfesorApp() {
   const dadas           = clases.filter(c => c.estado === 'dada')
   const pendientesCobro = clases.filter(c => c.revision_pendiente).length
   const totalHon        = dadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
+  // Clases atrasadas sin resolver (solo confirmadas, sin revision_pendiente)
+  const hayAtrasadas    = clases.some(c => c.esAtrasada && !c.revision_pendiente)
+  const claseAtrasada   = clases.find(c => c.esAtrasada && !c.revision_pendiente)
 
   return (
     <div style={{ position:'fixed', inset:0, background:'#f8fafc', display:'flex', justifyContent:'center' }}>
@@ -571,16 +550,17 @@ export default function ProfesorApp() {
         <div style={{ background:TEAL, padding:'18px 20px 0', flexShrink:0 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-              <img src="/apple-touch-icon.png" alt="Logo" style={{ width:'38px', height:'38px', borderRadius:'10px', objectFit:'contain', background:'white', padding:'3px', boxSizing:'border-box' }} />
-              <div>
-                <p style={{ margin:0, color:'rgba(255,255,255,0.55)', fontSize:'10px', fontWeight:'700', letterSpacing:'0.8px' }}>ACADEMIA RUBY</p>
-                <h2 style={{ margin:0, color:'white', fontSize:'20px', fontWeight:'800', letterSpacing:'-0.3px' }}>{profesor.nombre.split(' ')[0]}</h2>
-              </div>
+              {/* Punto 6: logo correcto */}
+              <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca"
+                style={{ height:'36px', objectFit:'contain', filter:'brightness(0) invert(1)', opacity:0.9 }} />
             </div>
-            <button onClick={() => supabase.auth.signOut()}
-              style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'rgba(255,255,255,0.85)', padding:'7px 13px', borderRadius:'20px', cursor:'pointer', fontSize:'12px', fontWeight:'700', fontFamily:'inherit' }}>
-              Salir
-            </button>
+            <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+              <span style={{ color:'rgba(255,255,255,0.8)', fontSize:'14px', fontWeight:'600' }}>{profesor.nombre.split(' ')[0]}</span>
+              <button onClick={() => supabase.auth.signOut()}
+                style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'rgba(255,255,255,0.85)', padding:'7px 13px', borderRadius:'20px', cursor:'pointer', fontSize:'12px', fontWeight:'700', fontFamily:'inherit' }}>
+                Salir
+              </button>
+            </div>
           </div>
           <div style={{ display:'flex', gap:'3px' }}>
             {([
@@ -755,7 +735,7 @@ export default function ProfesorApp() {
           <div style={{ width:'100%', maxWidth:'480px', background:'white', borderRadius:'28px 28px 0 0', padding:'20px 20px 36px', animation:'slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)', maxHeight:'92vh', overflow:'auto' }}>
             <div style={{ width:'44px', height:'5px', background:'#e5e7eb', borderRadius:'3px', margin:'0 auto 22px' }} />
 
-            {/* ── PANTALLA: AVISO CANCELACIÓN TARDÍA ── */}
+            {/* ── AVISO CANCELACIÓN TARDÍA ── */}
             {pantallaModal === 'avisoTardia' && (
               <div style={{ textAlign:'center', padding:'10px 0' }}>
                 <div style={{ fontSize:'52px', marginBottom:'16px' }}>⏰</div>
@@ -770,7 +750,7 @@ export default function ProfesorApp() {
               </div>
             )}
 
-            {/* ── PANTALLA: SELECTOR DE HONORARIO (INASISTENCIA) ── */}
+            {/* ── SELECTOR HONORARIO (INASISTENCIA) ── */}
             {pantallaModal === 'inasistencia' && (
               <div>
                 <div style={{ background:'#fff7ed', borderRadius:'16px', padding:'16px', marginBottom:'20px' }}>
@@ -780,14 +760,12 @@ export default function ProfesorApp() {
                 <p style={{ fontSize:'14px', fontWeight:'700', color:'#374151', margin:'0 0 12px' }}>¿Cuánto te corresponde de honorario?</p>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'16px' }}>
                   <button className="ba" onClick={() => marcarInasistencia(100)} disabled={guardando}
-                    style={{ padding:'20px 12px', background:'#dcfce7', color:'#166534', border:'2px solid #86efac', borderRadius:'16px', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
-                    <p style={{ margin:'0 0 6px', fontSize:'22px', fontWeight:'800' }}>100%</p>
-                    <p style={{ margin:0, fontSize:'12px', color:'#166534' }}>Fui solo por esta clase</p>
+                    style={{ padding:'24px 12px', background:'#dcfce7', color:'#166534', border:'2px solid #86efac', borderRadius:'16px', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
+                    <p style={{ margin:0, fontSize:'28px', fontWeight:'800' }}>100%</p>
                   </button>
                   <button className="ba" onClick={() => marcarInasistencia(50)} disabled={guardando}
-                    style={{ padding:'20px 12px', background:'#fefce8', color:'#854d0e', border:'2px solid #fde68a', borderRadius:'16px', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
-                    <p style={{ margin:'0 0 6px', fontSize:'22px', fontWeight:'800' }}>50%</p>
-                    <p style={{ margin:0, fontSize:'12px', color:'#854d0e' }}>Ya estaba en la sede</p>
+                    style={{ padding:'24px 12px', background:'#fefce8', color:'#854d0e', border:'2px solid #fde68a', borderRadius:'16px', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
+                    <p style={{ margin:0, fontSize:'28px', fontWeight:'800' }}>50%</p>
                   </button>
                 </div>
                 <button onClick={() => setPantallaModal('acciones')} disabled={guardando}
@@ -797,7 +775,7 @@ export default function ProfesorApp() {
               </div>
             )}
 
-            {/* ── PANTALLA: CONFIRMAR CANCELACIÓN ── */}
+            {/* ── CONFIRMAR CANCELACIÓN ── */}
             {pantallaModal === 'cancelar' && (
               <div>
                 <div style={{ background:'#fef2f2', borderRadius:'16px', padding:'16px', marginBottom:'20px' }}>
@@ -805,17 +783,17 @@ export default function ProfesorApp() {
                   <p style={{ margin:0, fontSize:'14px', color:'#991b1b' }}>{nombreCliente(claseActiva)} · {formatHoraAmPm(claseActiva.hora)}</p>
                 </div>
                 {(() => {
-                  const minutos = minutosParaClase(claseActiva.fecha, claseActiva.hora)
+                  const minutos  = minutosParaClase(claseActiva.fecha, claseActiva.hora)
                   const esTardia = minutos < 180
                   return (
-                    <div style={{ background: esTardia ? '#fff7ed' : '#f0fdf4', border: `1px solid ${esTardia ? '#fed7aa' : '#86efac'}`, borderRadius:'12px', padding:'14px', marginBottom:'20px' }}>
+                    <div style={{ background: esTardia ? '#fff7ed' : '#f0fdf4', border:`1px solid ${esTardia ? '#fed7aa' : '#86efac'}`, borderRadius:'12px', padding:'14px', marginBottom:'20px' }}>
                       <p style={{ margin:'0 0 4px', fontSize:'14px', fontWeight:'700', color: esTardia ? '#c2410c' : '#166534' }}>
                         {esTardia ? '⚠️ Cancelación tardía' : '✓ Cancelación a tiempo'}
                       </p>
-                      <p style={{ margin:0, fontSize:'13px', color: esTardia ? '#92400e' : '#166534' }}>
+                      <p style={{ margin:0, fontSize:'13px', color: esTardia ? '#92400e' : '#166634' }}>
                         {esTardia
-                          ? `Faltan menos de 3 horas. Quedará una nota de posible clase de cortesía para ${nombreCliente(claseActiva)}.`
-                          : 'Faltan más de 3 horas. No hay consecuencias.'}
+                          ? `Faltan menos de 3 horas. Quedará una nota de posible clase de cortesía.`
+                          : 'Faltan más de 3 horas. Sin consecuencias.'}
                       </p>
                     </div>
                   )
@@ -833,13 +811,17 @@ export default function ProfesorApp() {
               </div>
             )}
 
-            {/* ── PANTALLA PRINCIPAL DE ACCIONES ── */}
+            {/* ── PANTALLA PRINCIPAL ── */}
             {pantallaModal === 'acciones' && (
               <>
                 {/* Info clase */}
                 <div style={{ background:TEAL_LIGHT, borderRadius:'16px', padding:'16px', marginBottom:'20px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'10px' }}>
                     <div>
+                      {/* Punto 1: fecha + hora en el header */}
+                      <p style={{ margin:'0 0 2px', fontSize:'13px', fontWeight:'700', color: claseActiva.esAtrasada ? '#dc2626' : '#6b7280', textTransform:'capitalize' }}>
+                        📅 {labelDiaSemana(claseActiva.fecha).texto}
+                      </p>
                       <p style={{ margin:'0 0 3px', fontSize:'22px', fontWeight:'800', color:'#111', letterSpacing:'-0.5px', lineHeight:1 }}>
                         {formatHoraAmPm(claseActiva.hora)} <span style={{ fontSize:'14px', color:'#6b7280', fontWeight:'500' }}>· {claseActiva.duracion_min} min</span>
                       </p>
@@ -859,19 +841,13 @@ export default function ProfesorApp() {
                   </div>
                 </div>
 
-                {claseActiva.esAtrasada && (
-                  <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'11px 14px', marginBottom:'18px', fontSize:'13px', color:'#dc2626', fontWeight:'600' }}>
-                    ⚠️ Clase del {claseActiva.fecha} sin resultado — por favor marca dada o inasistencia
-                  </div>
-                )}
-
                 {claseActiva.revision_pendiente && (
                   <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:'12px', padding:'11px 14px', marginBottom:'18px', fontSize:'13px', color:'#c2410c', fontWeight:'600' }}>
                     ⚠️ Inasistencia registrada — pendiente de revisión por la asistente
                   </div>
                 )}
 
-                {/* Resumen — solo si no es programada */}
+                {/* Resumen — no en programada */}
                 {claseActiva.estado !== 'programada' && (
                   <div style={{ marginBottom:'20px' }}>
                     <label style={{ display:'block', fontSize:'11px', fontWeight:'800', color:'#6b7280', marginBottom:'8px', letterSpacing:'0.8px' }}>
@@ -884,48 +860,50 @@ export default function ProfesorApp() {
                   </div>
                 )}
 
-                {/* ── 3 BOTONES principales ── */}
-                {claseActiva.estado === 'confirmada' && !claseActiva.revision_pendiente && (
+                {/* ── 3 BOTONES: solo si está confirmada y sin inasistencia ── */}
+                {claseActiva.estado === 'confirmada' && !claseActiva.revision_pendiente && vista === 'hoy' && (
                   <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                    {/* Clase dada */}
-                    <button className="ba" onClick={marcarDada} disabled={guardando}
-                      style={{ padding:'18px', background:TEAL, color:'white', border:'none', borderRadius:'16px', fontSize:'17px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', opacity:guardando ? 0.7 : 1, fontFamily:'inherit', textAlign:'left', display:'flex', alignItems:'center', gap:'12px' }}>
-                      <span style={{ fontSize:'22px' }}>✓</span>
-                      <div>
-                        <p style={{ margin:0, fontSize:'16px', fontWeight:'800' }}>Clase dada</p>
-                        <p style={{ margin:0, fontSize:'12px', opacity:0.8, fontWeight:'400' }}>El estudiante asistió normalmente</p>
-                      </div>
+                    {/* Punto 2: dada arriba solo, los otros dos abajo mitad cada uno */}
+                    {/* Punto 7: bloqueado si hay atrasadas sin resolver */}
+                    <button className="ba" onClick={marcarDada}
+                      disabled={guardando || (hayAtrasadas && !!claseActiva.esAtrasada === false)}
+                      style={{ padding:'18px', background:TEAL, color:'white', border:'none', borderRadius:'16px', fontSize:'17px', fontWeight:'800', cursor: guardando || (hayAtrasadas && !claseActiva.esAtrasada) ? 'not-allowed' : 'pointer', opacity: guardando || (hayAtrasadas && !claseActiva.esAtrasada) ? 0.35 : 1, fontFamily:'inherit' }}>
+                      ✓ Clase dada
                     </button>
-                    {/* No asistió */}
-                    <button className="ba" onClick={() => setPantallaModal('inasistencia')} disabled={guardando}
-                      style={{ padding:'18px', background:'#fff7ed', color:'#c2410c', border:'2px solid #fed7aa', borderRadius:'16px', fontSize:'17px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit', textAlign:'left', display:'flex', alignItems:'center', gap:'12px' }}>
-                      <span style={{ fontSize:'22px' }}>✗</span>
-                      <div>
-                        <p style={{ margin:0, fontSize:'16px', fontWeight:'800' }}>Estudiante no asistió</p>
-                        <p style={{ margin:0, fontSize:'12px', opacity:0.8, fontWeight:'400' }}>Se descuenta del plan del estudiante</p>
-                      </div>
-                    </button>
-                    {/* Cancelar clase */}
-                    <button className="ba" onClick={() => setPantallaModal('cancelar')} disabled={guardando}
-                      style={{ padding:'18px', background:'#fef2f2', color:'#dc2626', border:'2px solid #fecaca', borderRadius:'16px', fontSize:'17px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit', textAlign:'left', display:'flex', alignItems:'center', gap:'12px' }}>
-                      <span style={{ fontSize:'22px' }}>✕</span>
-                      <div>
-                        <p style={{ margin:0, fontSize:'16px', fontWeight:'800' }}>Cancelar clase</p>
-                        <p style={{ margin:0, fontSize:'12px', opacity:0.8, fontWeight:'400' }}>El profesor no puede dar la clase</p>
-                      </div>
-                    </button>
+                    {hayAtrasadas && !claseActiva.esAtrasada && claseAtrasada && (
+                      <p style={{ margin:'-4px 0 0', fontSize:'12px', color:'#dc2626', fontWeight:'600', textAlign:'center' }}>
+                        Resuelve primero la clase del {claseAtrasada.fecha}
+                      </p>
+                    )}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                      <button className="ba" onClick={() => setPantallaModal('inasistencia')} disabled={guardando}
+                        style={{ padding:'16px', background:'#fff7ed', color:'#c2410c', border:'2px solid #fed7aa', borderRadius:'16px', fontSize:'15px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
+                        ✗ No asistió
+                      </button>
+                      <button className="ba" onClick={() => setPantallaModal('cancelar')} disabled={guardando}
+                        style={{ padding:'16px', background:'#fef2f2', color:'#dc2626', border:'2px solid #fecaca', borderRadius:'16px', fontSize:'15px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
+                        ✕ Cancelar
+                      </button>
+                    </div>
                   </div>
                 )}
 
-                {/* Clase ya procesada → solo resumen */}
+                {/* Clase ya con resultado → solo resumen */}
                 {(claseActiva.estado === 'dada' || claseActiva.revision_pendiente || claseActiva.estado === 'cancelada') && (
-                  <button className="ba" onClick={guardarResumen} disabled={guardando}
-                    style={{ width:'100%', padding:'16px', background:TEAL, color:'white', border:'none', borderRadius:'16px', fontSize:'16px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', opacity:guardando ? 0.7 : 1, fontFamily:'inherit' }}>
-                    {guardando ? 'Guardando...' : '💾 Guardar resumen'}
-                  </button>
+                  <>
+                    {!claseActiva.observaciones && (
+                      <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:'10px', padding:'10px 14px', marginBottom:'12px', fontSize:'13px', color:'#c2410c', fontWeight:'600' }}>
+                        📝 Esta clase no tiene resumen aún
+                      </div>
+                    )}
+                    <button className="ba" onClick={guardarResumen} disabled={guardando}
+                      style={{ width:'100%', padding:'16px', background:TEAL, color:'white', border:'none', borderRadius:'16px', fontSize:'16px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', opacity:guardando ? 0.7 : 1, fontFamily:'inherit' }}>
+                      {guardando ? 'Guardando...' : '💾 Guardar resumen'}
+                    </button>
+                  </>
                 )}
 
-                {/* Programada → solo resumen */}
+                {/* Programada sin acciones */}
                 {claseActiva.estado === 'programada' && (
                   <p style={{ textAlign:'center', color:'#9ca3af', fontSize:'13px', margin:0, fontStyle:'italic' }}>
                     Clase aún no confirmada — sin acciones disponibles
@@ -954,6 +932,7 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
   const confirmada = c.estado === 'confirmada' && !c.revision_pendiente && !c.esTaller
   const expandido  = resumenExpandido === c.id
   const esProg     = c.estado === 'programada' && !c.esTaller
+  const sinResumen = !c.esTaller && !c.observaciones && (c.estado === 'dada' || c.revision_pendiente)
 
   const borderColor = c.esTaller ? '#7c3aed'
     : c.esAtrasada ? '#dc2626'
@@ -1029,6 +1008,8 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
           )}
         </div>
       </div>
+
+      {/* Resumen colapsable */}
       {c.observaciones && (
         <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'8px' }}>
           <button onClick={e => { e.stopPropagation(); setResumenExpandido(expandido ? null : c.id) }}
@@ -1042,11 +1023,13 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
           )}
         </div>
       )}
-      {!c.esTaller && !c.observaciones && (c.estado === 'dada' || c.revision_pendiente) && (
+
+      {/* Punto: resaltar tarjetas sin resumen */}
+      {sinResumen && (
         <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'8px' }}>
           <button onClick={e => { e.stopPropagation(); onTap() }}
-            style={{ background:'none', border:'none', cursor:'pointer', fontSize:'12px', color:'#9ca3af', fontWeight:'600', padding:'2px 0', fontFamily:'inherit' }}>
-            + Agregar resumen
+            style={{ background:'none', border:'none', cursor:'pointer', fontSize:'12px', color:'#c2410c', fontWeight:'700', padding:'2px 0', fontFamily:'inherit' }}>
+            📝 Sin resumen — toca para agregar
           </button>
         </div>
       )}
