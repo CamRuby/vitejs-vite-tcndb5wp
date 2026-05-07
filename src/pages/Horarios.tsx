@@ -364,6 +364,24 @@ export default function Horarios() {
         return `Cliente ya tiene clase con ${prof} en ${salon} (${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}–${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')})`
       }
     }
+    // Verificar talleres del cliente
+    const diaSemanaCliente = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
+    const { data: inscripciones } = await supabase
+      .from('taller_inscripciones')
+      .select('taller_id, talleres(nombre, hora, duracion_min, dia_semana)')
+      .eq('cliente_id', ct.cliente_id)
+      .eq('estado', 'activo')
+    if (inscripciones) {
+      for (const ins of inscripciones) {
+        const t = (ins as any).talleres
+        if (!t || t.dia_semana !== diaSemanaCliente) continue
+        const tI = horaAMinutos((t.hora || '').substring(0, 5))
+        const tF = tI + (t.duracion_min || 60)
+        if (inicio < tF && fin > tI) {
+          return `Cliente tiene taller "${t.nombre}" ese día (${String(Math.floor(tI/60)).padStart(2,'0')}:${String(tI%60).padStart(2,'0')}–${String(Math.floor(tF/60)).padStart(2,'0')}:${String(tF%60).padStart(2,'0')})`
+        }
+      }
+    }
     return null
   }
 
