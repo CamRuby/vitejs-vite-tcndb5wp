@@ -36,10 +36,10 @@ function labelDiaSemana(fecha: string): { texto: string; esHoy: boolean; esAtras
   if (fecha === hoyStr)    return { texto: `Hoy ${diaNom}`,    esHoy: true,  esAtras: false }
   if (fecha === mananaStr) return { texto: `Mañana ${diaNom}`, esHoy: false, esAtras: false }
   if (diffDias === -1)     return { texto: `Ayer ${diaNom}`,   esHoy: false, esAtras: true  }
-  if (diffDias === -2)     return { texto: `Hace dos días`,    esHoy: false, esAtras: true  }
-  if (diffDias === -3)     return { texto: `Hace tres días`,   esHoy: false, esAtras: true  }
+  if (diffDias === -2)     return { texto: 'Hace dos días',    esHoy: false, esAtras: true  }
+  if (diffDias === -3)     return { texto: 'Hace tres días',   esHoy: false, esAtras: true  }
   if (diffDias < 0)        return { texto: `${fecha.substring(8,10)}/${fecha.substring(5,7)} ${diaNom}`, esHoy: false, esAtras: true }
-  if (diaNom === 'sábado') return { texto: `El sábado`,        esHoy: false, esAtras: false }
+  if (diaNom === 'sábado') return { texto: 'El sábado',        esHoy: false, esAtras: false }
   return { texto: `El ${diaNom}`, esHoy: false, esAtras: false }
 }
 
@@ -71,9 +71,16 @@ function nombreCliente(c: any) {
   return cl.nombre || `${cl.nombres || ''} ${cl.apellidos || ''}`.trim() || '—'
 }
 
+// Calcula minutos que faltan para la clase
+function minutosParaClase(fecha: string, hora: string): number {
+  const [h, m] = hora.substring(0,5).split(':').map(Number)
+  const claseDate = new Date(fecha + 'T' + String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':00')
+  return Math.floor((claseDate.getTime() - Date.now()) / 60000)
+}
+
 const SELECT_CLASES = [
   'id', 'fecha', 'hora', 'duracion_min', 'estado', 'modalidad',
-  'revision_pendiente', 'observaciones', 'contrato_id', 'honorario_valor',
+  'revision_pendiente', 'observaciones', 'contrato_id', 'honorario_valor', 'motivo_cancelacion',
   'contratos(clientes(nombre, nombres, apellidos), instrumentos(nombre), duracion_min, clases_tomadas)',
   'salones(nombre, sedes(nombre))'
 ].join(', ')
@@ -97,12 +104,18 @@ export default function ProfesorApp() {
     return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`
   })
 
+  // Modal clase
   const [claseActiva, setClaseActiva]     = useState<any>(null)
   const [resumen, setResumen]             = useState('')
   const [guardando, setGuardando]         = useState(false)
   const [exito, setExito]                 = useState('')
   const [resumenExpandido, setResumenExpandido] = useState<string | null>(null)
 
+  // Sub-pantallas del modal
+  const [pantallaModal, setPantallaModal] = useState<'acciones' | 'inasistencia' | 'cancelar' | 'avisoTardia'>('acciones')
+  const [avisoCancelacion, setAvisoCancelacion] = useState('')
+
+  // Modal taller
   const [tallerModal, setTallerModal]         = useState<any>(null)
   const [inscritosTaller, setInscritosTaller] = useState<any[]>([])
   const [sesionHoy, setSesionHoy]             = useState<any>(null)
@@ -117,7 +130,7 @@ export default function ProfesorApp() {
 
   useEffect(() => {
     if (!exito) return
-    const t = setTimeout(() => setExito(''), 3000)
+    const t = setTimeout(() => setExito(''), 4000)
     return () => clearTimeout(t)
   }, [exito])
 
@@ -167,9 +180,10 @@ export default function ProfesorApp() {
   }
 
   function getHonorario(c: any): number | 'pendiente' {
-    if (c.revision_pendiente) return 'pendiente'
-    if (c.estado !== 'dada') return 0
+    if (c.estado !== 'dada' && !c.revision_pendiente) return 0
+    if (c.revision_pendiente && c.honorario_valor === null) return 'pendiente'
     if (c.honorario_valor !== null && c.honorario_valor !== undefined) return Number(c.honorario_valor)
+    if (c.estado !== 'dada') return 0
     const modalidad = (c.modalidad || 'presencial').toLowerCase()
     const duracion  = Number(c.duracion_min)
     let tarifa = tarifas.find((t: any) => t.modalidad?.toLowerCase() === modalidad && Number(t.duracion_min) === duracion)
@@ -182,6 +196,25 @@ export default function ProfesorApp() {
     return tarifa ? Number(tarifa.valor) : 0
   }
 
+  function getValorTarifa(duracion: number, modalidad: string): number {
+    let tarifa = tarifas.find((t: any) => t.modalidad?.toLowerCase() === modalidad && Number(t.duracion_min) === duracion)
+    if (!tarifa) tarifa = tarifas.find((t: any) =>
+      (t.modalidad?.toLowerCase() === 'presencial' || t.modalidad?.toLowerCase() === 'virtual') &&
+      Number(t.duracion_min) === duracion
+    )
+    return tarifa ? Number(tarifa.valor) : 0
+  }
+
+  // ── Notificación ─────────────────────────────────────
+  async function insertarNotificacion(tipo: string, mensaje: string, detalle: string, claseId?: string) {
+    await supabase.from('notificaciones').insert({
+      tipo, mensaje, detalle,
+      profesor_id: profesor?.id || null,
+      clase_id: claseId || null,
+    })
+  }
+
+  // ── Cargar semana ─────────────────────────────────────
   async function cargarHoy() {
     if (!profesor) return
     setCargandoClases(true)
@@ -253,15 +286,26 @@ export default function ProfesorApp() {
     const [a, m] = mes.split('-')
     const ul = new Date(parseInt(a), parseInt(m), 0).getDate()
     const ff = `${mes}-${String(ul).padStart(2,'0')}`
-   const { data } = await supabase.from('clases').select(SELECT_CLASES)
+
+    const { data: dataResultado } = await supabase.from('clases').select(SELECT_CLASES)
       .eq('profesor_id', profesor.id)
       .gte('fecha', fi).lte('fecha', ff)
       .in('estado', ['dada', 'cancelada'])
       .order('fecha', { ascending: false })
-    
+
+    const { data: dataInasistencias } = await supabase.from('clases').select(SELECT_CLASES)
+      .eq('profesor_id', profesor.id)
+      .gte('fecha', fi).lte('fecha', ff)
+      .eq('revision_pendiente', true)
+      .order('fecha', { ascending: false })
+
+    const todas = [...(dataResultado || []), ...(dataInasistencias || [])]
+    todas.sort((a, b) => `${b.fecha}${b.hora}`.localeCompare(`${a.fecha}${a.hora}`))
+    setClases(todas)
     setCargandoClases(false)
   }
 
+  // ── MARCAR DADA ───────────────────────────────────────
   async function marcarDada() {
     if (!claseActiva) return
     setGuardando(true)
@@ -285,27 +329,89 @@ export default function ProfesorApp() {
     setGuardando(false)
   }
 
-  async function marcarInasistencia() {
+  // ── INASISTENCIA con porcentaje de honorario ──────────
+  async function marcarInasistencia(pct: number) {
     if (!claseActiva) return
     setGuardando(true)
+
+    // Suma la clase al plan del estudiante
+    const { data: contrato } = await supabase.from('contratos').select('id, clases_tomadas, duracion_min')
+      .eq('id', claseActiva.contrato_id).single()
+    const durPlan  = Number(contrato?.duracion_min) || Number(claseActiva.contratos?.duracion_min) || Number(claseActiva.duracion_min) || 60
+    const durClase = Number(claseActiva.duracion_min) || durPlan
+    const fraccion = parseFloat((durClase / durPlan).toFixed(4))
+    const tomadas  = parseFloat(Number(contrato?.clases_tomadas || 0).toFixed(4))
+    if (contrato) {
+      await supabase.from('contratos').update({
+        clases_tomadas: parseFloat((tomadas + fraccion).toFixed(4))
+      }).eq('id', contrato.id)
+    }
+
+    // Calcula honorario del profesor
+    const modalidad = (claseActiva.modalidad || 'presencial').toLowerCase()
+    const baseHon   = getValorTarifa(Number(claseActiva.duracion_min), modalidad)
+    const honorario = Math.round(baseHon * pct / 100)
+
     await supabase.from('clases').update({
       revision_pendiente: true,
+      honorario_valor: honorario,
       observaciones: resumen.trim() || claseActiva.observaciones || null
     }).eq('id', claseActiva.id)
-    setExito('Inasistencia registrada — pendiente de revisión')
+
+    // Notificación
+    const nombreEst = nombreCliente(claseActiva)
+    await insertarNotificacion(
+      'inasistencia',
+      `Inasistencia — ${nombreEst}`,
+      `Clase con ${profesor?.nombre} · ${formatHoraAmPm(claseActiva.hora)} · ${claseActiva.salones?.sedes?.nombre} · honorario ${pct}%`,
+      claseActiva.id
+    )
+
+    setExito('Inasistencia registrada')
     cerrarModal()
     setGuardando(false)
   }
 
-  async function guardarResumen() {
+  // ── CANCELAR CLASE ────────────────────────────────────
+  async function cancelarClase() {
     if (!claseActiva) return
     setGuardando(true)
-    await supabase.from('clases').update({ observaciones: resumen.trim() || null }).eq('id', claseActiva.id)
-    setExito('Resumen guardado')
-    cerrarModal()
-    setGuardando(false)
+
+    const minutos = minutosParaClase(claseActiva.fecha, claseActiva.hora)
+    const esTardia = minutos < 180 // menos de 3 horas
+
+    const motivo = esTardia
+      ? 'Cancelación tardía — posible clase de cortesía'
+      : 'Cancelación a tiempo'
+
+    await supabase.from('clases').update({
+      estado: 'cancelada',
+      motivo_cancelacion: motivo,
+      observaciones: resumen.trim() || claseActiva.observaciones || null
+    }).eq('id', claseActiva.id)
+
+    // Notificación para la asistente
+    const nombreEst = nombreCliente(claseActiva)
+    await insertarNotificacion(
+      esTardia ? 'cancelacion_tardia' : 'cancelacion_a_tiempo',
+      `${motivo} — ${profesor?.nombre}`,
+      `Clase de ${nombreEst} · ${claseActiva.fecha} ${formatHoraAmPm(claseActiva.hora)} · ${claseActiva.salones?.sedes?.nombre}`,
+      claseActiva.id
+    )
+
+    if (esTardia) {
+      // Mostrar aviso al profesor antes de cerrar
+      setAvisoCancelacion(`La clase fue cancelada. Como faltaban menos de 3 horas, la asistente revisará si corresponde una clase de cortesía para ${nombreEst}.`)
+      setPantallaModal('avisoTardia')
+      setGuardando(false)
+    } else {
+      setExito('Clase cancelada')
+      cerrarModal()
+      setGuardando(false)
+    }
   }
 
+  // ── Modal taller ──────────────────────────────────────
   async function abrirTaller(c: any) {
     setTallerModal(c)
     const hoy  = new Date()
@@ -343,11 +449,13 @@ export default function ProfesorApp() {
 
   function abrirModal(clase: any) {
     if (clase.esTaller) { abrirTaller(clase); return }
-    setClaseActiva(clase); setResumen(clase.observaciones || '')
+    setClaseActiva(clase)
+    setResumen(clase.observaciones || '')
+    setPantallaModal('acciones')
   }
 
   function cerrarModal() {
-    setClaseActiva(null); setResumen('')
+    setClaseActiva(null); setResumen(''); setPantallaModal('acciones'); setAvisoCancelacion('')
     if (vista === 'hoy') cargarHoy(); else cargarHistorial()
   }
 
@@ -359,8 +467,9 @@ export default function ProfesorApp() {
     const filas = clasesDadas.map(c => {
       const hon = getHonorario(c)
       const honLabel = hon === 'pendiente'
-        ? '<span style="color:#c2410c;font-weight:700">Pendiente revisión</span>'
+        ? '<span style="color:#c2410c;font-weight:700">Pendiente</span>'
         : `$${Number(hon).toLocaleString('es-CO')}`
+      const tipoLabel = c.revision_pendiente ? 'Inasistencia' : 'Dada'
       return `
         <tr>
           <td>${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}</td>
@@ -368,27 +477,28 @@ export default function ProfesorApp() {
           <td>${nombreCliente(c)}</td>
           <td>${c.contratos?.instrumentos?.nombre || '—'}</td>
           <td>${c.duracion_min} min</td>
+          <td>${tipoLabel}</td>
           <td style="font-weight:600">${honLabel}</td>
         </tr>
-        ${c.observaciones ? `<tr class="resumen-row"><td colspan="6"><div class="resumen-box">📝 <em>${c.observaciones.replace(/\n/g,'<br>')}</em></div></td></tr>` : ''}
+        ${c.observaciones ? `<tr class="rr"><td colspan="7"><div class="rb">📝 <em>${c.observaciones.replace(/\n/g,'<br>')}</em></div></td></tr>` : ''}
       `
     }).join('')
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Honorarios ${mesLabel} — ${profesor?.nombre}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;padding:40px;color:#1a1a1a;font-size:13px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;border-bottom:3px solid #1a8a8a;padding-bottom:20px}.logo-area h1{font-size:22px;color:#1a8a8a;font-weight:800}.logo-area p{color:#666;font-size:12px;margin-top:4px}.info-area{text-align:right}.info-area h2{font-size:16px;color:#1a1a1a;font-weight:700}.info-area p{color:#555;font-size:12px;margin-top:3px}table{width:100%;border-collapse:collapse;margin-top:20px}thead tr{background:#e8f5f5}th{padding:10px 12px;text-align:left;font-size:11px;color:#1a8a8a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top}.resumen-row td{padding:0 12px 10px}.resumen-box{background:#f8fafc;border-left:3px solid #b2d8d8;padding:8px 12px;font-size:12px;color:#555;line-height:1.6;border-radius:0 6px 6px 0}.total-row{background:#e8f5f5;font-weight:700}.total-row td{padding:14px 12px;font-size:15px;color:#1a8a8a;border-top:2px solid #1a8a8a}.footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:16px;font-size:11px;color:#aaa;display:flex;justify-content:space-between}.print-btn{margin-bottom:24px;padding:10px 24px;background:#1a8a8a;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}@media print{.print-btn{display:none}tr{page-break-inside:avoid}}</style>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;padding:40px;color:#1a1a1a;font-size:13px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;border-bottom:3px solid #1a8a8a;padding-bottom:20px}.logo-area h1{font-size:22px;color:#1a8a8a;font-weight:800}.logo-area p{color:#666;font-size:12px;margin-top:4px}.info-area{text-align:right}.info-area h2{font-size:16px;color:#1a1a1a;font-weight:700}.info-area p{color:#555;font-size:12px;margin-top:3px}table{width:100%;border-collapse:collapse;margin-top:20px}thead tr{background:#e8f5f5}th{padding:10px 12px;text-align:left;font-size:11px;color:#1a8a8a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top}.rr td{padding:0 12px 10px}.rb{background:#f8fafc;border-left:3px solid #b2d8d8;padding:8px 12px;font-size:12px;color:#555;line-height:1.6;border-radius:0 6px 6px 0}.total-row{background:#e8f5f5;font-weight:700}.total-row td{padding:14px 12px;font-size:15px;color:#1a8a8a;border-top:2px solid #1a8a8a}.footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:16px;font-size:11px;color:#aaa;display:flex;justify-content:space-between}.print-btn{margin-bottom:24px;padding:10px 24px;background:#1a8a8a;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}@media print{.print-btn{display:none}tr{page-break-inside:avoid}}</style>
 </head><body>
 <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 <div class="header"><div class="logo-area"><h1>Academia Ruby Salamanca</h1><p>Cuenta de cobro de honorarios</p></div><div class="info-area"><h2>${profesor?.nombre}</h2><p>${mesLabel.charAt(0).toUpperCase()+mesLabel.slice(1)}</p><p>Generado: ${new Date().toLocaleDateString('es-CO')}</p></div></div>
-<table><thead><tr><th>Fecha</th><th>Hora</th><th>Estudiante</th><th>Instrumento</th><th>Duración</th><th>Honorario</th></tr></thead>
-<tbody>${filas||'<tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px">Sin clases dadas este mes</td></tr>'}<tr class="total-row"><td colspan="5">TOTAL HONORARIOS ${mesLabel.toUpperCase()}</td><td>$${totalHon.toLocaleString('es-CO')}</td></tr></tbody></table>
-<div class="footer"><span>Academia Ruby Salamanca</span><span>Documento generado desde el portal del profesor</span></div>
+<table><thead><tr><th>Fecha</th><th>Hora</th><th>Estudiante</th><th>Instrumento</th><th>Duración</th><th>Tipo</th><th>Honorario</th></tr></thead>
+<tbody>${filas||'<tr><td colspan="7" style="text-align:center;color:#aaa;padding:24px">Sin clases este mes</td></tr>'}<tr class="total-row"><td colspan="6">TOTAL HONORARIOS ${mesLabel.toUpperCase()}</td><td>$${totalHon.toLocaleString('es-CO')}</td></tr></tbody></table>
+<div class="footer"><span>Academia Ruby Salamanca</span><span>Portal del profesor</span></div>
 </body></html>`
     const w = window.open('', '_blank')
     if (w) { w.document.write(html); w.document.close() }
   }
 
   // ════════════════════════════════════════════════════
-  //  PANTALLAS
+  //  PANTALLAS DE AUTENTICACIÓN
   // ════════════════════════════════════════════════════
 
   if (cargandoAuth) return (
@@ -513,7 +623,7 @@ export default function ProfesorApp() {
                   return (
                     <div key={c.id}>
                       {mostrarSep && (
-                        <div style={{ display:'flex', alignItems:'center', gap:'10px', margin: i === 0 ? '0 0 10px' : '20px 0 10px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'10px', margin: i===0 ? '0 0 10px' : '20px 0 10px' }}>
                           <span style={{ fontSize:'13px', fontWeight:'800', color: esHoy ? TEAL : esAtras ? '#dc2626' : '#374151', whiteSpace:'nowrap', textTransform:'capitalize' }}>
                             {texto}
                           </span>
@@ -548,7 +658,7 @@ export default function ProfesorApp() {
                   <div style={{ gridColumn:'1 / -1', background:TEAL_LIGHT, borderRadius:'14px', padding:'16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     <div>
                       <p style={{ margin:0, fontSize:'11px', fontWeight:'700', color:TEAL, letterSpacing:'0.5px' }}>HONORARIOS CONFIRMADOS</p>
-                      {pendientesCobro > 0 && <p style={{ margin:'3px 0 0', fontSize:'11px', color:'#c2410c', fontWeight:'600' }}>+ {pendientesCobro} clase(s) pendiente(s) de revisión</p>}
+                      {pendientesCobro > 0 && <p style={{ margin:'3px 0 0', fontSize:'11px', color:'#c2410c', fontWeight:'600' }}>+ {pendientesCobro} inasistencia(s)</p>}
                     </div>
                     <p style={{ margin:0, fontSize:'28px', fontWeight:'800', color:TEAL, letterSpacing:'-1px' }}>${totalHon.toLocaleString('es-CO')}</p>
                   </div>
@@ -644,71 +754,184 @@ export default function ProfesorApp() {
           style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:200, animation:'fadeIn 0.2s ease' }}>
           <div style={{ width:'100%', maxWidth:'480px', background:'white', borderRadius:'28px 28px 0 0', padding:'20px 20px 36px', animation:'slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)', maxHeight:'92vh', overflow:'auto' }}>
             <div style={{ width:'44px', height:'5px', background:'#e5e7eb', borderRadius:'3px', margin:'0 auto 22px' }} />
-            <div style={{ background:TEAL_LIGHT, borderRadius:'16px', padding:'16px', marginBottom:'20px' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'10px' }}>
-                <div>
-                  <p style={{ margin:'0 0 3px', fontSize:'22px', fontWeight:'800', color:'#111', letterSpacing:'-0.5px', lineHeight:1 }}>
-                    {formatHoraAmPm(claseActiva.hora)} <span style={{ fontSize:'14px', color:'#6b7280', fontWeight:'500' }}>· {claseActiva.duracion_min} min</span>
+
+            {/* ── PANTALLA: AVISO CANCELACIÓN TARDÍA ── */}
+            {pantallaModal === 'avisoTardia' && (
+              <div style={{ textAlign:'center', padding:'10px 0' }}>
+                <div style={{ fontSize:'52px', marginBottom:'16px' }}>⏰</div>
+                <p style={{ fontSize:'18px', fontWeight:'800', color:'#dc2626', margin:'0 0 12px' }}>Cancelación tardía</p>
+                <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'14px', padding:'16px', marginBottom:'24px', textAlign:'left' }}>
+                  <p style={{ fontSize:'14px', color:'#991b1b', margin:0, lineHeight:'1.6' }}>{avisoCancelacion}</p>
+                </div>
+                <button className="ba" onClick={cerrarModal}
+                  style={{ width:'100%', padding:'16px', background:TEAL, color:'white', border:'none', borderRadius:'16px', fontSize:'16px', fontWeight:'800', cursor:'pointer', fontFamily:'inherit' }}>
+                  Entendido
+                </button>
+              </div>
+            )}
+
+            {/* ── PANTALLA: SELECTOR DE HONORARIO (INASISTENCIA) ── */}
+            {pantallaModal === 'inasistencia' && (
+              <div>
+                <div style={{ background:'#fff7ed', borderRadius:'16px', padding:'16px', marginBottom:'20px' }}>
+                  <p style={{ margin:'0 0 4px', fontSize:'18px', fontWeight:'800', color:'#c2410c' }}>Estudiante no asistió</p>
+                  <p style={{ margin:0, fontSize:'14px', color:'#92400e' }}>{nombreCliente(claseActiva)} · {formatHoraAmPm(claseActiva.hora)}</p>
+                </div>
+                <p style={{ fontSize:'14px', fontWeight:'700', color:'#374151', margin:'0 0 12px' }}>¿Cuánto te corresponde de honorario?</p>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'16px' }}>
+                  <button className="ba" onClick={() => marcarInasistencia(100)} disabled={guardando}
+                    style={{ padding:'20px 12px', background:'#dcfce7', color:'#166534', border:'2px solid #86efac', borderRadius:'16px', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
+                    <p style={{ margin:'0 0 6px', fontSize:'22px', fontWeight:'800' }}>100%</p>
+                    <p style={{ margin:0, fontSize:'12px', color:'#166534' }}>Fui solo por esta clase</p>
+                  </button>
+                  <button className="ba" onClick={() => marcarInasistencia(50)} disabled={guardando}
+                    style={{ padding:'20px 12px', background:'#fefce8', color:'#854d0e', border:'2px solid #fde68a', borderRadius:'16px', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
+                    <p style={{ margin:'0 0 6px', fontSize:'22px', fontWeight:'800' }}>50%</p>
+                    <p style={{ margin:0, fontSize:'12px', color:'#854d0e' }}>Ya estaba en la sede</p>
+                  </button>
+                </div>
+                <button onClick={() => setPantallaModal('acciones')} disabled={guardando}
+                  style={{ width:'100%', padding:'13px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:'14px', fontSize:'14px', cursor:'pointer', fontFamily:'inherit' }}>
+                  ← Volver
+                </button>
+              </div>
+            )}
+
+            {/* ── PANTALLA: CONFIRMAR CANCELACIÓN ── */}
+            {pantallaModal === 'cancelar' && (
+              <div>
+                <div style={{ background:'#fef2f2', borderRadius:'16px', padding:'16px', marginBottom:'20px' }}>
+                  <p style={{ margin:'0 0 4px', fontSize:'18px', fontWeight:'800', color:'#dc2626' }}>Cancelar clase</p>
+                  <p style={{ margin:0, fontSize:'14px', color:'#991b1b' }}>{nombreCliente(claseActiva)} · {formatHoraAmPm(claseActiva.hora)}</p>
+                </div>
+                {(() => {
+                  const minutos = minutosParaClase(claseActiva.fecha, claseActiva.hora)
+                  const esTardia = minutos < 180
+                  return (
+                    <div style={{ background: esTardia ? '#fff7ed' : '#f0fdf4', border: `1px solid ${esTardia ? '#fed7aa' : '#86efac'}`, borderRadius:'12px', padding:'14px', marginBottom:'20px' }}>
+                      <p style={{ margin:'0 0 4px', fontSize:'14px', fontWeight:'700', color: esTardia ? '#c2410c' : '#166534' }}>
+                        {esTardia ? '⚠️ Cancelación tardía' : '✓ Cancelación a tiempo'}
+                      </p>
+                      <p style={{ margin:0, fontSize:'13px', color: esTardia ? '#92400e' : '#166534' }}>
+                        {esTardia
+                          ? `Faltan menos de 3 horas. Quedará una nota de posible clase de cortesía para ${nombreCliente(claseActiva)}.`
+                          : 'Faltan más de 3 horas. No hay consecuencias.'}
+                      </p>
+                    </div>
+                  )
+                })()}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                  <button className="ba" onClick={cancelarClase} disabled={guardando}
+                    style={{ padding:'16px', background:'#dc2626', color:'white', border:'none', borderRadius:'16px', fontSize:'15px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
+                    {guardando ? '...' : 'Confirmar'}
+                  </button>
+                  <button onClick={() => setPantallaModal('acciones')} disabled={guardando}
+                    style={{ padding:'16px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:'16px', fontSize:'15px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                    Volver
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── PANTALLA PRINCIPAL DE ACCIONES ── */}
+            {pantallaModal === 'acciones' && (
+              <>
+                {/* Info clase */}
+                <div style={{ background:TEAL_LIGHT, borderRadius:'16px', padding:'16px', marginBottom:'20px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'10px' }}>
+                    <div>
+                      <p style={{ margin:'0 0 3px', fontSize:'22px', fontWeight:'800', color:'#111', letterSpacing:'-0.5px', lineHeight:1 }}>
+                        {formatHoraAmPm(claseActiva.hora)} <span style={{ fontSize:'14px', color:'#6b7280', fontWeight:'500' }}>· {claseActiva.duracion_min} min</span>
+                      </p>
+                      <p style={{ margin:'3px 0 2px', fontSize:'16px', fontWeight:'700', color:'#1f2937' }}>{nombreCliente(claseActiva)}</p>
+                      <p style={{ margin:0, fontSize:'13px', color:'#4b5563' }}>🎵 {claseActiva.contratos?.instrumentos?.nombre || '—'}</p>
+                    </div>
+                    <button onClick={cerrarModal}
+                      style={{ width:'34px', height:'34px', border:'none', background:'rgba(0,0,0,0.08)', borderRadius:'50%', cursor:'pointer', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:'#374151', fontFamily:'inherit' }}>×</button>
+                  </div>
+                  <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                    <div style={{ background:TEAL, color:'white', padding:'5px 12px', borderRadius:'20px', fontSize:'13px', fontWeight:'700' }}>
+                      📍 {claseActiva.salones?.sedes?.nombre || '—'}
+                    </div>
+                    <div style={{ background:'rgba(0,0,0,0.08)', color:'#374151', padding:'5px 12px', borderRadius:'20px', fontSize:'13px', fontWeight:'600' }}>
+                      🏠 {claseActiva.salones?.nombre || '—'}
+                    </div>
+                  </div>
+                </div>
+
+                {claseActiva.esAtrasada && (
+                  <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'11px 14px', marginBottom:'18px', fontSize:'13px', color:'#dc2626', fontWeight:'600' }}>
+                    ⚠️ Clase del {claseActiva.fecha} sin resultado — por favor marca dada o inasistencia
+                  </div>
+                )}
+
+                {claseActiva.revision_pendiente && (
+                  <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:'12px', padding:'11px 14px', marginBottom:'18px', fontSize:'13px', color:'#c2410c', fontWeight:'600' }}>
+                    ⚠️ Inasistencia registrada — pendiente de revisión por la asistente
+                  </div>
+                )}
+
+                {/* Resumen — solo si no es programada */}
+                {claseActiva.estado !== 'programada' && (
+                  <div style={{ marginBottom:'20px' }}>
+                    <label style={{ display:'block', fontSize:'11px', fontWeight:'800', color:'#6b7280', marginBottom:'8px', letterSpacing:'0.8px' }}>
+                      RESUMEN DE LA CLASE <span style={{ fontWeight:'500', color:'#9ca3af' }}>— puedes completarlo después</span>
+                    </label>
+                    <textarea value={resumen} onChange={e => setResumen(e.target.value)}
+                      placeholder="Escribe aquí lo que se trabajó en la clase."
+                      rows={4}
+                      style={{ width:'100%', padding:'13px 14px', border:`2px solid ${TEAL_MID}`, borderRadius:'14px', fontSize:'14px', resize:'vertical', boxSizing:'border-box', fontFamily:'system-ui,-apple-system,sans-serif', lineHeight:'1.6', background:'white', color:'#1f2937', textAlign:'left', whiteSpace:'pre-wrap', transition:'border-color 0.2s' }} />
+                  </div>
+                )}
+
+                {/* ── 3 BOTONES principales ── */}
+                {claseActiva.estado === 'confirmada' && !claseActiva.revision_pendiente && (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                    {/* Clase dada */}
+                    <button className="ba" onClick={marcarDada} disabled={guardando}
+                      style={{ padding:'18px', background:TEAL, color:'white', border:'none', borderRadius:'16px', fontSize:'17px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', opacity:guardando ? 0.7 : 1, fontFamily:'inherit', textAlign:'left', display:'flex', alignItems:'center', gap:'12px' }}>
+                      <span style={{ fontSize:'22px' }}>✓</span>
+                      <div>
+                        <p style={{ margin:0, fontSize:'16px', fontWeight:'800' }}>Clase dada</p>
+                        <p style={{ margin:0, fontSize:'12px', opacity:0.8, fontWeight:'400' }}>El estudiante asistió normalmente</p>
+                      </div>
+                    </button>
+                    {/* No asistió */}
+                    <button className="ba" onClick={() => setPantallaModal('inasistencia')} disabled={guardando}
+                      style={{ padding:'18px', background:'#fff7ed', color:'#c2410c', border:'2px solid #fed7aa', borderRadius:'16px', fontSize:'17px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit', textAlign:'left', display:'flex', alignItems:'center', gap:'12px' }}>
+                      <span style={{ fontSize:'22px' }}>✗</span>
+                      <div>
+                        <p style={{ margin:0, fontSize:'16px', fontWeight:'800' }}>Estudiante no asistió</p>
+                        <p style={{ margin:0, fontSize:'12px', opacity:0.8, fontWeight:'400' }}>Se descuenta del plan del estudiante</p>
+                      </div>
+                    </button>
+                    {/* Cancelar clase */}
+                    <button className="ba" onClick={() => setPantallaModal('cancelar')} disabled={guardando}
+                      style={{ padding:'18px', background:'#fef2f2', color:'#dc2626', border:'2px solid #fecaca', borderRadius:'16px', fontSize:'17px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit', textAlign:'left', display:'flex', alignItems:'center', gap:'12px' }}>
+                      <span style={{ fontSize:'22px' }}>✕</span>
+                      <div>
+                        <p style={{ margin:0, fontSize:'16px', fontWeight:'800' }}>Cancelar clase</p>
+                        <p style={{ margin:0, fontSize:'12px', opacity:0.8, fontWeight:'400' }}>El profesor no puede dar la clase</p>
+                      </div>
+                    </button>
+                  </div>
+                )}
+
+                {/* Clase ya procesada → solo resumen */}
+                {(claseActiva.estado === 'dada' || claseActiva.revision_pendiente || claseActiva.estado === 'cancelada') && (
+                  <button className="ba" onClick={guardarResumen} disabled={guardando}
+                    style={{ width:'100%', padding:'16px', background:TEAL, color:'white', border:'none', borderRadius:'16px', fontSize:'16px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', opacity:guardando ? 0.7 : 1, fontFamily:'inherit' }}>
+                    {guardando ? 'Guardando...' : '💾 Guardar resumen'}
+                  </button>
+                )}
+
+                {/* Programada → solo resumen */}
+                {claseActiva.estado === 'programada' && (
+                  <p style={{ textAlign:'center', color:'#9ca3af', fontSize:'13px', margin:0, fontStyle:'italic' }}>
+                    Clase aún no confirmada — sin acciones disponibles
                   </p>
-                  <p style={{ margin:'3px 0 2px', fontSize:'16px', fontWeight:'700', color:'#1f2937' }}>{nombreCliente(claseActiva)}</p>
-                  <p style={{ margin:0, fontSize:'13px', color:'#4b5563' }}>🎵 {claseActiva.contratos?.instrumentos?.nombre || '—'}</p>
-                </div>
-                <button onClick={cerrarModal}
-                  style={{ width:'34px', height:'34px', border:'none', background:'rgba(0,0,0,0.08)', borderRadius:'50%', cursor:'pointer', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:'#374151', fontFamily:'inherit' }}>×</button>
-              </div>
-              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-                <div style={{ background:TEAL, color:'white', padding:'5px 12px', borderRadius:'20px', fontSize:'13px', fontWeight:'700' }}>
-                  📍 {claseActiva.salones?.sedes?.nombre || '—'}
-                </div>
-                <div style={{ background:'rgba(0,0,0,0.08)', color:'#374151', padding:'5px 12px', borderRadius:'20px', fontSize:'13px', fontWeight:'600' }}>
-                  🏠 {claseActiva.salones?.nombre || '—'}
-                </div>
-              </div>
-            </div>
-            {claseActiva.revision_pendiente && (
-              <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:'12px', padding:'11px 14px', marginBottom:'18px', fontSize:'13px', color:'#c2410c', fontWeight:'600' }}>
-                ⚠️ Inasistencia registrada — pendiente de revisión por la asistente
-              </div>
-            )}
-            {claseActiva.esAtrasada && (
-              <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'11px 14px', marginBottom:'18px', fontSize:'13px', color:'#dc2626', fontWeight:'600' }}>
-                ⚠️ Clase del {claseActiva.fecha} sin resultado — por favor marca dada o inasistencia
-              </div>
-            )}
-            {claseActiva.estado !== 'programada' && (
-              <div style={{ marginBottom:'20px' }}>
-                <label style={{ display:'block', fontSize:'11px', fontWeight:'800', color:'#6b7280', marginBottom:'8px', letterSpacing:'0.8px' }}>
-                  RESUMEN DE LA CLASE <span style={{ fontWeight:'500', color:'#9ca3af' }}>— puedes completarlo después</span>
-                </label>
-                <textarea value={resumen} onChange={e => setResumen(e.target.value)}
-                  placeholder="Escribe aquí lo que se trabajó en la clase."
-                  rows={5}
-                  style={{ width:'100%', padding:'13px 14px', border:`2px solid ${TEAL_MID}`, borderRadius:'14px', fontSize:'14px', resize:'vertical', boxSizing:'border-box', fontFamily:'system-ui,-apple-system,sans-serif', lineHeight:'1.6', background:'white', color:'#1f2937', textAlign:'left', whiteSpace:'pre-wrap', transition:'border-color 0.2s' }} />
-              </div>
-            )}
-            {claseActiva.estado === 'confirmada' && !claseActiva.revision_pendiente && (
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'12px' }}>
-                <button className="ba" onClick={marcarDada} disabled={guardando}
-                  style={{ padding:'18px 12px', background:TEAL, color:'white', border:'none', borderRadius:'16px', fontSize:'17px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', opacity:guardando ? 0.7 : 1, fontFamily:'inherit' }}>
-                  ✓ Clase dada
-                </button>
-                <button className="ba" onClick={marcarInasistencia} disabled={guardando}
-                  style={{ padding:'18px 12px', background:'#fff7ed', color:'#c2410c', border:'2px solid #fed7aa', borderRadius:'16px', fontSize:'17px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', opacity:guardando ? 0.7 : 1, fontFamily:'inherit' }}>
-                  ✗ No asistió
-                </button>
-              </div>
-            )}
-            {(claseActiva.estado === 'dada' || claseActiva.revision_pendiente) && (
-              <button className="ba" onClick={guardarResumen} disabled={guardando}
-                style={{ width:'100%', padding:'16px', background:TEAL, color:'white', border:'none', borderRadius:'16px', fontSize:'16px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', opacity:guardando ? 0.7 : 1, fontFamily:'inherit' }}>
-                {guardando ? 'Guardando...' : '💾 Guardar resumen'}
-              </button>
-            )}
-            {claseActiva.estado !== 'confirmada' && !claseActiva.revision_pendiente && claseActiva.estado !== 'dada' && (
-              <button className="ba" onClick={guardarResumen} disabled={guardando}
-                style={{ width:'100%', padding:'14px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:'14px', fontSize:'15px', fontWeight:'700', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
-                {guardando ? 'Guardando...' : '💾 Guardar resumen'}
-              </button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -749,41 +972,35 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
     }} onClick={onTap}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'12px', marginBottom:'8px' }}>
         <div style={{ flex:1, minWidth:0 }}>
-          {/* Hora */}
           <div style={{ display:'flex', alignItems:'baseline', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
             <span style={{ fontSize:'22px', fontWeight:'800', color: esProg ? '#94a3b8' : '#111', letterSpacing:'-1px', lineHeight:1 }}>
               {mostrarFecha
                 ? `${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}`
                 : formatHoraAmPm(c.hora)}
             </span>
-            {mostrarFecha && (
-              <span style={{ fontSize:'13px', color:'#9ca3af', fontWeight:'600' }}>{formatHoraAmPm(c.hora)}</span>
-            )}
+            {mostrarFecha && <span style={{ fontSize:'13px', color:'#9ca3af', fontWeight:'600' }}>{formatHoraAmPm(c.hora)}</span>}
             <span style={{ fontSize:'12px', color:'#9ca3af', fontWeight:'600' }}>{c.duracion_min} min</span>
           </div>
-
-          {/* Nombre */}
           <p style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'700', color: c.esTaller ? '#7c3aed' : esProg ? '#94a3b8' : '#1f2937', textAlign:'left' }}>
             {c.esTaller
               ? `🎸 ${c.nombreTaller}`
               : (c.contratos?.clientes?.nombre || `${c.contratos?.clientes?.nombres||''} ${c.contratos?.clientes?.apellidos||''}`.trim() || '—')}
           </p>
-
-          {/* Instrumento */}
           {!c.esTaller && (
             <p style={{ margin:'0 0 4px', fontSize:'13px', color: esProg ? '#94a3b8' : '#6b7280', textAlign:'left' }}>
               🎸 {c.contratos?.instrumentos?.nombre || '—'}
             </p>
           )}
-
-          {/* Aviso atrasada */}
           {c.esAtrasada && (
             <p style={{ margin:'0 0 4px', fontSize:'12px', color:'#dc2626', fontWeight:'700' }}>
-              ⚠️ Sin resultado — marca dada o inasistencia
+              ⚠️ Sin resultado — toca para resolver
             </p>
           )}
-
-          {/* Sede + salón */}
+          {c.motivo_cancelacion && (
+            <p style={{ margin:'0 0 4px', fontSize:'12px', color: c.motivo_cancelacion.includes('tardía') ? '#dc2626' : '#166534', fontWeight:'600' }}>
+              {c.motivo_cancelacion.includes('tardía') ? '⏰' : '✓'} {c.motivo_cancelacion}
+            </p>
+          )}
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
             <span style={{ background: c.esTaller ? '#7c3aed' : esProg ? '#cbd5e1' : TEAL, color:'white', padding:'2px 8px', borderRadius:'20px', fontSize:'11px', fontWeight:'700' }}>
               📍 {c.salones?.sedes?.nombre || '—'}
@@ -793,8 +1010,6 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
             </span>
           </div>
         </div>
-
-        {/* Badge + honorario + botón */}
         <div style={{ textAlign:'right', flexShrink:0, display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'6px' }}>
           <span style={{ padding:'4px 10px', borderRadius:'20px', fontSize:'11px', fontWeight:'700', background:badge.bg, color:badge.color, whiteSpace:'nowrap' }}>
             {badge.label}
@@ -804,7 +1019,7 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
               ? <span style={{ fontSize:'11px', fontWeight:'700', color:'#c2410c', background:'#fff7ed', padding:'3px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>⏳ Pendiente</span>
               : (honorario as number) > 0
                 ? <span style={{ fontSize:'14px', fontWeight:'800', color:TEAL }}>${Number(honorario).toLocaleString('es-CO')}</span>
-                : <span style={{ fontSize:'12px', color:'#d1d5db' }}>Sin tarifa</span>
+                : null
           )}
           {confirmada && !mostrarHonorario && (
             <button onClick={e => { e.stopPropagation(); onTap() }}
@@ -814,8 +1029,6 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
           )}
         </div>
       </div>
-
-      {/* Resumen colapsable */}
       {c.observaciones && (
         <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'8px' }}>
           <button onClick={e => { e.stopPropagation(); setResumenExpandido(expandido ? null : c.id) }}
@@ -829,7 +1042,6 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
           )}
         </div>
       )}
-
       {!c.esTaller && !c.observaciones && (c.estado === 'dada' || c.revision_pendiente) && (
         <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'8px' }}>
           <button onClick={e => { e.stopPropagation(); onTap() }}
