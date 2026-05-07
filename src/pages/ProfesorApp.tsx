@@ -10,38 +10,47 @@ const DIAS_SEMANA: Record<string, number> = {
   'jueves': 4, 'viernes': 5, 'sábado': 6
 }
 const DIAS_LARGO = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
-
 const MESES_NOMBRE = ['enero','febrero','marzo','abril','mayo','junio',
   'julio','agosto','septiembre','octubre','noviembre','diciembre']
+const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
-// ── Fecha local sin desfase de zona horaria ───────────
-function fechaHoyLocal(): string {
-  const d = new Date()
+function fechaLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
-
-function fechaMananaLocal(): string {
-  const d = new Date()
-  d.setDate(d.getDate() + 1)
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-}
+function fechaHoyLocal(): string  { return fechaLocal(new Date()) }
+function fechaMananaLocal(): string { const d = new Date(); d.setDate(d.getDate()+1); return fechaLocal(d) }
 
 function formatHoraAmPm(hora: string): string {
   if (!hora) return '—'
-  const [h, m] = hora.substring(0, 5).split(':').map(Number)
+  const [h, m] = hora.substring(0,5).split(':').map(Number)
   const ampm = h >= 12 ? 'p.m.' : 'a.m.'
   const h12  = h % 12 || 12
   return `${h12}:${String(m).padStart(2,'0')} ${ampm}`
 }
 
-function etiquetaFecha(fecha: string): { texto: string; esHoy: boolean } {
-  const hoy    = fechaHoyLocal()
-  const manana = fechaMananaLocal()
-  const diaNum = new Date(fecha + 'T12:00:00').getDay()
-  const diaNom = DIAS_LARGO[diaNum]
-  if (fecha === hoy)    return { texto: `Hoy ${diaNom}`,    esHoy: true }
-  if (fecha === manana) return { texto: `Mañana ${diaNom}`, esHoy: false }
-  return { texto: `${fecha.substring(8,10)}/${fecha.substring(5,7)} ${diaNom}`, esHoy: false }
+function labelDiaSemana(fecha: string): { texto: string; esHoy: boolean; esAtras: boolean } {
+  const hoyStr    = fechaHoyLocal()
+  const mananaStr = fechaMananaLocal()
+  const diffDias  = Math.round((new Date(fecha+'T12:00:00').getTime() - new Date(hoyStr+'T12:00:00').getTime()) / 86400000)
+  const diaNom    = DIAS_LARGO[new Date(fecha+'T12:00:00').getDay()]
+  if (fecha === hoyStr)    return { texto: `Hoy ${diaNom}`,    esHoy: true,  esAtras: false }
+  if (fecha === mananaStr) return { texto: `Mañana ${diaNom}`, esHoy: false, esAtras: false }
+  if (diffDias === -1)     return { texto: `Ayer ${diaNom}`,   esHoy: false, esAtras: true  }
+  if (diffDias === -2)     return { texto: `Hace dos días`,    esHoy: false, esAtras: true  }
+  if (diffDias === -3)     return { texto: `Hace tres días`,   esHoy: false, esAtras: true  }
+  if (diffDias < 0)        return { texto: `${fecha.substring(8,10)}/${fecha.substring(5,7)} ${diaNom}`, esHoy: false, esAtras: true }
+  if (diaNom === 'sábado') return { texto: `El sábado`,        esHoy: false, esAtras: false }
+  return { texto: `El ${diaNom}`, esHoy: false, esAtras: false }
+}
+
+function etiquetaSemana(): string {
+  const hoy = new Date()
+  const diaSemana = hoy.getDay()
+  const lunesDiff = diaSemana === 0 ? -6 : 1 - diaSemana
+  const lunes  = new Date(hoy); lunes.setDate(hoy.getDate() + lunesDiff)
+  const diasHastaSabado = diaSemana === 6 ? 7 : 6 - diaSemana
+  const sabado = new Date(hoy); sabado.setDate(hoy.getDate() + diasHastaSabado)
+  return `📅 ${MESES_CORTO[lunes.getMonth()]} ${lunes.getDate()} – ${MESES_CORTO[sabado.getMonth()]} ${sabado.getDate()}`
 }
 
 function badgeEstado(estado: string, revisionPendiente?: boolean, esTaller?: boolean) {
@@ -52,7 +61,7 @@ function badgeEstado(estado: string, revisionPendiente?: boolean, esTaller?: boo
     case 'confirmada': return { label: 'Confirmada', bg: '#dcfce7', color: '#166534' }
     case 'programada': return { label: 'Programada', bg: '#f1f5f9', color: '#94a3b8' }
     case 'cancelada':  return { label: 'Cancelada',  bg: '#fee2e2', color: '#991b1b' }
-    default:           return { label: estado,       bg: '#f1f5f9', color: '#475569' }
+    default:           return { label: estado,       bg: '#f1f5f9', color: '#94a3b8' }
   }
 }
 
@@ -85,7 +94,7 @@ export default function ProfesorApp() {
   const [tarifas, setTarifas]             = useState<any[]>([])
   const [mes, setMes]                     = useState(() => {
     const h = new Date()
-    return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`
+    return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`
   })
 
   const [claseActiva, setClaseActiva]     = useState<any>(null)
@@ -93,6 +102,11 @@ export default function ProfesorApp() {
   const [guardando, setGuardando]         = useState(false)
   const [exito, setExito]                 = useState('')
   const [resumenExpandido, setResumenExpandido] = useState<string | null>(null)
+
+  const [tallerModal, setTallerModal]         = useState<any>(null)
+  const [inscritosTaller, setInscritosTaller] = useState<any[]>([])
+  const [sesionHoy, setSesionHoy]             = useState<any>(null)
+  const [guardandoSesion, setGuardandoSesion] = useState(false)
 
   useEffect(() => {
     document.body.style.background = '#f8fafc'
@@ -128,8 +142,7 @@ export default function ProfesorApp() {
   }, [vista, mes, profesor])
 
   async function buscarProfesor(email: string) {
-    const { data } = await supabase
-      .from('profesores').select('id, nombre, ciudad, email')
+    const { data } = await supabase.from('profesores').select('id, nombre, ciudad, email')
       .ilike('email', email.trim()).single()
     setProfesor(data || null)
     setCargandoAuth(false)
@@ -169,34 +182,27 @@ export default function ProfesorApp() {
     return tarifa ? Number(tarifa.valor) : 0
   }
 
-  // ── Clases de la semana (hoy → sábado) + atrasadas sin resolver ──
   async function cargarHoy() {
     if (!profesor) return
     setCargandoClases(true)
-
     const hoy = new Date()
     const diaSemana = hoy.getDay()
     const diasHastaSabado = diaSemana === 6 ? 7 : 6 - diaSemana
-    const sabado = new Date(hoy)
-    sabado.setDate(hoy.getDate() + diasHastaSabado)
-
+    const sabado = new Date(hoy); sabado.setDate(hoy.getDate() + diasHastaSabado)
     const fi = fechaHoyLocal()
-    const ff = `${sabado.getFullYear()}-${String(sabado.getMonth()+1).padStart(2,'0')}-${String(sabado.getDate()).padStart(2,'0')}`
+    const ff = fechaLocal(sabado)
 
-    // Clases de la semana
     const { data } = await supabase.from('clases').select(SELECT_CLASES)
       .eq('profesor_id', profesor.id)
       .gte('fecha', fi).lte('fecha', ff)
       .order('fecha').order('hora')
 
-    // Clases confirmadas anteriores sin resolver (el profesor no las marcó)
     const { data: dataAtrasadas } = await supabase.from('clases').select(SELECT_CLASES)
       .eq('profesor_id', profesor.id)
       .eq('estado', 'confirmada')
       .lt('fecha', fi)
       .order('fecha').order('hora')
 
-    // Talleres confirmados mezclados
     const mesT = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`
     const { data: talleresData } = await supabase.from('talleres')
       .select('id, nombre, dia_semana, hora, duracion_min, salones(nombre, sedes(nombre))')
@@ -217,26 +223,19 @@ export default function ProfesorApp() {
     ]
 
     for (let offset = 0; offset <= diasHastaSabado; offset++) {
-      const dia = new Date(hoy)
-      dia.setDate(hoy.getDate() + offset)
-      const fechaStr = `${dia.getFullYear()}-${String(dia.getMonth()+1).padStart(2,'0')}-${String(dia.getDate()).padStart(2,'0')}`
+      const dia = new Date(hoy); dia.setDate(hoy.getDate() + offset)
+      const fechaStr = fechaLocal(dia)
       talleresConfirmados.forEach((t: any) => {
         if (DIAS_SEMANA[t.dia_semana] === dia.getDay()) {
           clasesFinales.push({
             id: `taller-${t.id}-${fechaStr}`,
-            fecha: fechaStr,
-            hora: t.hora,
+            fecha: fechaStr, hora: t.hora,
             duracion_min: t.duracion_min,
-            estado: 'confirmada',
-            esTaller: true,
-            tallerRealId: t.id,
-            nombreTaller: t.nombre,
-            salones: t.salones,
-            contratos: null,
-            revision_pendiente: false,
-            observaciones: null,
-            honorario_valor: null,
-            modalidad: null,
+            estado: 'confirmada', esTaller: true,
+            tallerRealId: t.id, nombreTaller: t.nombre,
+            salones: t.salones, contratos: null,
+            revision_pendiente: false, observaciones: null,
+            honorario_valor: null, modalidad: null,
           })
         }
       })
@@ -253,7 +252,7 @@ export default function ProfesorApp() {
     const fi = `${mes}-01`
     const [a, m] = mes.split('-')
     const ul = new Date(parseInt(a), parseInt(m), 0).getDate()
-    const ff = `${mes}-${String(ul).padStart(2, '0')}`
+    const ff = `${mes}-${String(ul).padStart(2,'0')}`
     const { data } = await supabase.from('clases').select(SELECT_CLASES)
       .eq('profesor_id', profesor.id)
       .gte('fecha', fi).lte('fecha', ff)
@@ -305,12 +304,6 @@ export default function ProfesorApp() {
     cerrarModal()
     setGuardando(false)
   }
-
-  // ── Modal taller ──────────────────────────────────────
-  const [tallerModal, setTallerModal]         = useState<any>(null)
-  const [inscritosTaller, setInscritosTaller] = useState<any[]>([])
-  const [sesionHoy, setSesionHoy]             = useState<any>(null)
-  const [guardandoSesion, setGuardandoSesion] = useState(false)
 
   async function abrirTaller(c: any) {
     setTallerModal(c)
@@ -381,32 +374,12 @@ export default function ProfesorApp() {
     }).join('')
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Honorarios ${mesLabel} — ${profesor?.nombre}</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;padding:40px;color:#1a1a1a;font-size:13px}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;border-bottom:3px solid #1a8a8a;padding-bottom:20px}
-  .logo-area h1{font-size:22px;color:#1a8a8a;font-weight:800}.logo-area p{color:#666;font-size:12px;margin-top:4px}
-  .info-area{text-align:right}.info-area h2{font-size:16px;color:#1a1a1a;font-weight:700}.info-area p{color:#555;font-size:12px;margin-top:3px}
-  table{width:100%;border-collapse:collapse;margin-top:20px}thead tr{background:#e8f5f5}
-  th{padding:10px 12px;text-align:left;font-size:11px;color:#1a8a8a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}
-  td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top}
-  .resumen-row td{padding:0 12px 10px}.resumen-box{background:#f8fafc;border-left:3px solid #b2d8d8;padding:8px 12px;font-size:12px;color:#555;line-height:1.6;border-radius:0 6px 6px 0}
-  .total-row{background:#e8f5f5;font-weight:700}.total-row td{padding:14px 12px;font-size:15px;color:#1a8a8a;border-top:2px solid #1a8a8a}
-  .footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:16px;font-size:11px;color:#aaa;display:flex;justify-content:space-between}
-  .print-btn{margin-bottom:24px;padding:10px 24px;background:#1a8a8a;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}
-  @media print{.print-btn{display:none}tr{page-break-inside:avoid}}
-</style></head><body>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;padding:40px;color:#1a1a1a;font-size:13px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;border-bottom:3px solid #1a8a8a;padding-bottom:20px}.logo-area h1{font-size:22px;color:#1a8a8a;font-weight:800}.logo-area p{color:#666;font-size:12px;margin-top:4px}.info-area{text-align:right}.info-area h2{font-size:16px;color:#1a1a1a;font-weight:700}.info-area p{color:#555;font-size:12px;margin-top:3px}table{width:100%;border-collapse:collapse;margin-top:20px}thead tr{background:#e8f5f5}th{padding:10px 12px;text-align:left;font-size:11px;color:#1a8a8a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top}.resumen-row td{padding:0 12px 10px}.resumen-box{background:#f8fafc;border-left:3px solid #b2d8d8;padding:8px 12px;font-size:12px;color:#555;line-height:1.6;border-radius:0 6px 6px 0}.total-row{background:#e8f5f5;font-weight:700}.total-row td{padding:14px 12px;font-size:15px;color:#1a8a8a;border-top:2px solid #1a8a8a}.footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:16px;font-size:11px;color:#aaa;display:flex;justify-content:space-between}.print-btn{margin-bottom:24px;padding:10px 24px;background:#1a8a8a;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}@media print{.print-btn{display:none}tr{page-break-inside:avoid}}</style>
+</head><body>
 <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
-<div class="header">
-  <div class="logo-area"><h1>Academia Ruby Salamanca</h1><p>Cuenta de cobro de honorarios</p></div>
-  <div class="info-area"><h2>${profesor?.nombre}</h2><p>${mesLabel.charAt(0).toUpperCase()+mesLabel.slice(1)}</p><p>Generado: ${new Date().toLocaleDateString('es-CO')}</p></div>
-</div>
-<table>
-  <thead><tr><th>Fecha</th><th>Hora</th><th>Estudiante</th><th>Instrumento</th><th>Duración</th><th>Honorario</th></tr></thead>
-  <tbody>
-    ${filas||'<tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px">Sin clases dadas este mes</td></tr>'}
-    <tr class="total-row"><td colspan="5">TOTAL HONORARIOS ${mesLabel.toUpperCase()}</td><td>$${totalHon.toLocaleString('es-CO')}</td></tr>
-  </tbody>
-</table>
+<div class="header"><div class="logo-area"><h1>Academia Ruby Salamanca</h1><p>Cuenta de cobro de honorarios</p></div><div class="info-area"><h2>${profesor?.nombre}</h2><p>${mesLabel.charAt(0).toUpperCase()+mesLabel.slice(1)}</p><p>Generado: ${new Date().toLocaleDateString('es-CO')}</p></div></div>
+<table><thead><tr><th>Fecha</th><th>Hora</th><th>Estudiante</th><th>Instrumento</th><th>Duración</th><th>Honorario</th></tr></thead>
+<tbody>${filas||'<tr><td colspan="6" style="text-align:center;color:#aaa;padding:24px">Sin clases dadas este mes</td></tr>'}<tr class="total-row"><td colspan="5">TOTAL HONORARIOS ${mesLabel.toUpperCase()}</td><td>$${totalHon.toLocaleString('es-CO')}</td></tr></tbody></table>
 <div class="footer"><span>Academia Ruby Salamanca</span><span>Documento generado desde el portal del profesor</span></div>
 </body></html>`
     const w = window.open('', '_blank')
@@ -466,9 +439,9 @@ export default function ProfesorApp() {
     </div>
   )
 
-  const dadas         = clases.filter(c => c.estado === 'dada')
+  const dadas           = clases.filter(c => c.estado === 'dada')
   const pendientesCobro = clases.filter(c => c.revision_pendiente).length
-  const totalHon      = dadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
+  const totalHon        = dadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
 
   return (
     <div style={{ position:'fixed', inset:0, background:'#f8fafc', display:'flex', justifyContent:'center' }}>
@@ -499,7 +472,10 @@ export default function ProfesorApp() {
             </button>
           </div>
           <div style={{ display:'flex', gap:'3px' }}>
-            {([{ key:'hoy', label:'📅 Esta semana' }, { key:'historial', label:'📋 Historial' }] as const).map(v => (
+            {([
+              { key:'hoy',       label: etiquetaSemana() },
+              { key:'historial', label: '📋 Historial' },
+            ] as const).map(v => (
               <button key={v.key} onClick={() => setVista(v.key)}
                 style={{ flex:1, padding:'11px 4px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'700', borderRadius:'12px 12px 0 0', background:vista===v.key ? 'white' : 'transparent', color:vista===v.key ? TEAL : 'rgba(255,255,255,0.65)', transition:'all 0.2s', fontFamily:'inherit' }}>
                 {v.label}
@@ -520,7 +496,6 @@ export default function ProfesorApp() {
           {/* ── ESTA SEMANA ── */}
           {vista === 'hoy' && (
             <div style={{ animation:'fadeUp 0.3s ease' }}>
-              <p style={{ margin:'0 0 14px', color:'#6b7280', fontSize:'13px', fontWeight:'600' }}>Desde hoy hasta el sábado</p>
               {cargandoClases && <p style={{ textAlign:'center', color:'#9ca3af', padding:'50px 0' }}>Cargando...</p>}
               {!cargandoClases && clases.length === 0 && (
                 <div style={{ textAlign:'center', padding:'70px 20px', color:'#9ca3af' }}>
@@ -528,11 +503,29 @@ export default function ProfesorApp() {
                   <p style={{ fontSize:'15px', fontWeight:'700', margin:'0 0 6px', color:'#6b7280' }}>Sin clases esta semana</p>
                 </div>
               )}
-              {clases.map((c, i) => (
-                <TarjetaClase key={c.id} c={c} i={i} onTap={() => abrirModal(c)}
-                  resumenExpandido={resumenExpandido} setResumenExpandido={setResumenExpandido}
-                  honorario={getHonorario(c)} mostrarHonorario={false} />
-              ))}
+              {(() => {
+                let fechaAnterior: string | null = null
+                return clases.map((c, i) => {
+                  const mostrarSep = c.fecha !== fechaAnterior
+                  fechaAnterior = c.fecha
+                  const { texto, esHoy, esAtras } = labelDiaSemana(c.fecha)
+                  return (
+                    <div key={c.id}>
+                      {mostrarSep && (
+                        <div style={{ display:'flex', alignItems:'center', gap:'10px', margin: i === 0 ? '0 0 10px' : '20px 0 10px' }}>
+                          <span style={{ fontSize:'13px', fontWeight:'800', color: esHoy ? TEAL : esAtras ? '#dc2626' : '#374151', whiteSpace:'nowrap', textTransform:'capitalize' }}>
+                            {texto}
+                          </span>
+                          <div style={{ flex:1, height:'1px', background:'#e5e7eb' }} />
+                        </div>
+                      )}
+                      <TarjetaClase c={c} i={i} onTap={() => abrirModal(c)}
+                        resumenExpandido={resumenExpandido} setResumenExpandido={setResumenExpandido}
+                        honorario={getHonorario(c)} mostrarHonorario={false} mostrarFecha={false} />
+                    </div>
+                  )
+                })
+              })()}
             </div>
           )}
 
@@ -571,7 +564,7 @@ export default function ProfesorApp() {
               {clases.map((c, i) => (
                 <TarjetaClase key={c.id} c={c} i={i} onTap={() => abrirModal(c)}
                   resumenExpandido={resumenExpandido} setResumenExpandido={setResumenExpandido}
-                  honorario={getHonorario(c)} mostrarHonorario={true} />
+                  honorario={getHonorario(c)} mostrarHonorario={true} mostrarFecha={true} />
               ))}
             </div>
           )}
@@ -594,16 +587,14 @@ export default function ProfesorApp() {
                   <p style={{ margin:0, fontSize:'13px', color:'#6b5b95' }}>
                     🏠 {tallerModal.salones?.nombre} · {formatHoraAmPm(tallerModal.hora)} · {tallerModal.duracion_min} min
                   </p>
-                  <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#6b5b95' }}>
-                    📅 {etiquetaFecha(tallerModal.fecha).texto}
+                  <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#6b5b95', textTransform:'capitalize' }}>
+                    📅 {labelDiaSemana(tallerModal.fecha).texto}
                   </p>
                 </div>
                 <button onClick={() => setTallerModal(null)}
                   style={{ width:'34px', height:'34px', border:'none', background:'rgba(124,58,237,0.15)', borderRadius:'50%', cursor:'pointer', fontSize:'18px', color:'#7c3aed', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit' }}>×</button>
               </div>
             </div>
-
-            {/* Estado sesión */}
             <div style={{ background:'#fafbfc', borderRadius:'14px', padding:'14px', marginBottom:'20px', border:'1px solid #f1f5f9' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
                 <p style={{ margin:0, fontSize:'13px', fontWeight:'700', color:'#555' }}>Sesión de hoy</p>
@@ -624,7 +615,6 @@ export default function ProfesorApp() {
                 </button>
               </div>
             </div>
-
             <p style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#374151' }}>
               Inscritos activos <span style={{ color:'#7c3aed' }}>({inscritosTaller.length})</span>
             </p>
@@ -684,15 +674,17 @@ export default function ProfesorApp() {
                 ⚠️ Clase del {claseActiva.fecha} sin resultado — por favor marca dada o inasistencia
               </div>
             )}
-            {claseActiva.estado !== 'programada' && <div style={{ marginBottom:'20px' }}>
-              <label style={{ display:'block', fontSize:'11px', fontWeight:'800', color:'#6b7280', marginBottom:'8px', letterSpacing:'0.8px' }}>
-                RESUMEN DE LA CLASE <span style={{ fontWeight:'500', color:'#9ca3af' }}>— puedes completarlo después</span>
-              </label>
-              <textarea value={resumen} onChange={e => setResumen(e.target.value)}
-                placeholder="Escribe aquí lo que se trabajó en la clase."
-                rows={5}
-                style={{ width:'100%', padding:'13px 14px', border:`2px solid ${TEAL_MID}`, borderRadius:'14px', fontSize:'14px', resize:'vertical', boxSizing:'border-box', fontFamily:'system-ui,-apple-system,sans-serif', lineHeight:'1.6', background:'white', color:'#1f2937', textAlign:'left', whiteSpace:'pre-wrap', transition:'border-color 0.2s' }} />
-            </div>}
+            {claseActiva.estado !== 'programada' && (
+              <div style={{ marginBottom:'20px' }}>
+                <label style={{ display:'block', fontSize:'11px', fontWeight:'800', color:'#6b7280', marginBottom:'8px', letterSpacing:'0.8px' }}>
+                  RESUMEN DE LA CLASE <span style={{ fontWeight:'500', color:'#9ca3af' }}>— puedes completarlo después</span>
+                </label>
+                <textarea value={resumen} onChange={e => setResumen(e.target.value)}
+                  placeholder="Escribe aquí lo que se trabajó en la clase."
+                  rows={5}
+                  style={{ width:'100%', padding:'13px 14px', border:`2px solid ${TEAL_MID}`, borderRadius:'14px', fontSize:'14px', resize:'vertical', boxSizing:'border-box', fontFamily:'system-ui,-apple-system,sans-serif', lineHeight:'1.6', background:'white', color:'#1f2937', textAlign:'left', whiteSpace:'pre-wrap', transition:'border-color 0.2s' }} />
+              </div>
+            )}
             {claseActiva.estado === 'confirmada' && !claseActiva.revision_pendiente && (
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'12px' }}>
                 <button className="ba" onClick={marcarDada} disabled={guardando}
@@ -725,46 +717,52 @@ export default function ProfesorApp() {
 }
 
 // ── Tarjeta de clase ────────────────────────────────────
-function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, honorario, mostrarHonorario }: {
+function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, honorario, mostrarHonorario, mostrarFecha }: {
   c: any, i: number, onTap: () => void,
   resumenExpandido: string | null,
   setResumenExpandido: (id: string | null) => void,
   honorario: number | 'pendiente',
-  mostrarHonorario: boolean
+  mostrarHonorario: boolean,
+  mostrarFecha: boolean
 }) {
+  const TEAL = '#1a8a8a'
   const badge      = badgeEstado(c.estado, c.revision_pendiente, c.esTaller)
   const confirmada = c.estado === 'confirmada' && !c.revision_pendiente && !c.esTaller
   const expandido  = resumenExpandido === c.id
-  const { texto: etiqueta, esHoy } = etiquetaFecha(c.fecha)
+  const esProg     = c.estado === 'programada' && !c.esTaller
 
   const borderColor = c.esTaller ? '#7c3aed'
     : c.esAtrasada ? '#dc2626'
-    : confirmada ? '#1a8a8a'
+    : confirmada ? TEAL
     : '#e5e7eb'
 
   return (
-    <div style={{ background: c.estado === 'programada' && !c.esTaller ? '#f8fafc' : 'white', borderRadius:'18px', padding:'16px', marginBottom:'12px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', borderLeft:`4px solid ${borderColor}`, animation:`fadeUp ${0.15+i*0.04}s ease`, cursor:'pointer', opacity: c.estado === 'programada' && !c.esTaller ? 0.65 : 1 }}
-      onClick={onTap}>
+    <div style={{
+      background: esProg ? '#f8fafc' : 'white',
+      borderRadius:'18px', padding:'16px', marginBottom:'12px',
+      boxShadow: esProg ? '0 1px 4px rgba(0,0,0,0.04)' : '0 2px 12px rgba(0,0,0,0.06)',
+      borderLeft:`4px solid ${borderColor}`,
+      animation:`fadeUp ${0.1+i*0.03}s ease`,
+      cursor:'pointer',
+      opacity: esProg ? 0.65 : 1
+    }} onClick={onTap}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'12px', marginBottom:'8px' }}>
         <div style={{ flex:1, minWidth:0 }}>
-          {/* Hora + etiqueta de fecha */}
+          {/* Hora */}
           <div style={{ display:'flex', alignItems:'baseline', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
-            <span style={{ fontSize:'22px', fontWeight:'800', color:'#111', letterSpacing:'-1px', lineHeight:1 }}>
-              {mostrarHonorario
+            <span style={{ fontSize:'22px', fontWeight:'800', color: esProg ? '#94a3b8' : '#111', letterSpacing:'-1px', lineHeight:1 }}>
+              {mostrarFecha
                 ? `${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}`
                 : formatHoraAmPm(c.hora)}
             </span>
-            {mostrarHonorario && <span style={{ fontSize:'13px', color:'#9ca3af', fontWeight:'600' }}>{formatHoraAmPm(c.hora)}</span>}
-            {!mostrarHonorario && (
-              <span style={{ fontSize:'13px', fontWeight:'700', color: esHoy ? TEAL : '#6b7280' }}>
-                {etiqueta}
-              </span>
+            {mostrarFecha && (
+              <span style={{ fontSize:'13px', color:'#9ca3af', fontWeight:'600' }}>{formatHoraAmPm(c.hora)}</span>
             )}
             <span style={{ fontSize:'12px', color:'#9ca3af', fontWeight:'600' }}>{c.duracion_min} min</span>
           </div>
 
           {/* Nombre */}
-          <p style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'700', color: c.esTaller ? '#7c3aed' : '#1f2937', textAlign:'left' }}>
+          <p style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'700', color: c.esTaller ? '#7c3aed' : esProg ? '#94a3b8' : '#1f2937', textAlign:'left' }}>
             {c.esTaller
               ? `🎸 ${c.nombreTaller}`
               : (c.contratos?.clientes?.nombre || `${c.contratos?.clientes?.nombres||''} ${c.contratos?.clientes?.apellidos||''}`.trim() || '—')}
@@ -772,7 +770,7 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
 
           {/* Instrumento */}
           {!c.esTaller && (
-            <p style={{ margin:'0 0 4px', fontSize:'13px', color:'#6b7280', textAlign:'left' }}>
+            <p style={{ margin:'0 0 4px', fontSize:'13px', color: esProg ? '#94a3b8' : '#6b7280', textAlign:'left' }}>
               🎸 {c.contratos?.instrumentos?.nombre || '—'}
             </p>
           )}
@@ -786,10 +784,10 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
 
           {/* Sede + salón */}
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-            <span style={{ background: c.esTaller ? '#7c3aed' : '#1a8a8a', color:'white', padding:'2px 8px', borderRadius:'20px', fontSize:'11px', fontWeight:'700' }}>
+            <span style={{ background: c.esTaller ? '#7c3aed' : esProg ? '#cbd5e1' : TEAL, color:'white', padding:'2px 8px', borderRadius:'20px', fontSize:'11px', fontWeight:'700' }}>
               📍 {c.salones?.sedes?.nombre || '—'}
             </span>
-            <span style={{ background:'#f1f5f9', color:'#374151', padding:'2px 8px', borderRadius:'20px', fontSize:'11px', fontWeight:'600' }}>
+            <span style={{ background:'#f1f5f9', color: esProg ? '#94a3b8' : '#374151', padding:'2px 8px', borderRadius:'20px', fontSize:'11px', fontWeight:'600' }}>
               🏠 {c.salones?.nombre || '—'}
             </span>
           </div>
@@ -804,12 +802,12 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
             honorario === 'pendiente'
               ? <span style={{ fontSize:'11px', fontWeight:'700', color:'#c2410c', background:'#fff7ed', padding:'3px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>⏳ Pendiente</span>
               : (honorario as number) > 0
-                ? <span style={{ fontSize:'14px', fontWeight:'800', color:'#1a8a8a' }}>${Number(honorario).toLocaleString('es-CO')}</span>
+                ? <span style={{ fontSize:'14px', fontWeight:'800', color:TEAL }}>${Number(honorario).toLocaleString('es-CO')}</span>
                 : <span style={{ fontSize:'12px', color:'#d1d5db' }}>Sin tarifa</span>
           )}
           {confirmada && !mostrarHonorario && (
             <button onClick={e => { e.stopPropagation(); onTap() }}
-              style={{ padding:'8px 14px', background:'#1a8a8a', color:'white', border:'none', borderRadius:'12px', fontSize:'13px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+              style={{ padding:'8px 14px', background:TEAL, color:'white', border:'none', borderRadius:'12px', fontSize:'13px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
               Marcar →
             </button>
           )}
@@ -820,7 +818,7 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
       {c.observaciones && (
         <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'8px' }}>
           <button onClick={e => { e.stopPropagation(); setResumenExpandido(expandido ? null : c.id) }}
-            style={{ background:'none', border:'none', cursor:'pointer', fontSize:'12px', color:'#1a8a8a', fontWeight:'700', padding:'2px 0', fontFamily:'inherit' }}>
+            style={{ background:'none', border:'none', cursor:'pointer', fontSize:'12px', color:TEAL, fontWeight:'700', padding:'2px 0', fontFamily:'inherit' }}>
             {expandido ? '▲ Ocultar resumen' : '▼ Ver resumen de la clase'}
           </button>
           {expandido && (
