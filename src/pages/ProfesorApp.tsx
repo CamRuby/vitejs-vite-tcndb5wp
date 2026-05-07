@@ -684,7 +684,7 @@ export default function ProfesorApp() {
                 ⚠️ Clase del {claseActiva.fecha} sin resultado — por favor marca dada o inasistencia
               </div>
             )}
-            <div style={{ marginBottom:'20px' }}>
+            {claseActiva.estado !== 'programada' && <div style={{ marginBottom:'20px' }}>
               <label style={{ display:'block', fontSize:'11px', fontWeight:'800', color:'#6b7280', marginBottom:'8px', letterSpacing:'0.8px' }}>
                 RESUMEN DE LA CLASE <span style={{ fontWeight:'500', color:'#9ca3af' }}>— puedes completarlo después</span>
               </label>
