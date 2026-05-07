@@ -174,6 +174,8 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar,
     fecha_inicio:   esRenovacion ? new Date().toISOString().split('T')[0] : (plan?.fecha_inicio || new Date().toISOString().split('T')[0]),
     estado:         esRenovacion ? 'activo' : (plan?.estado || 'activo'),
     clases_tomadas: esNuevo ? 0 : (plan?.clases_tomadas || 0),
+    // ── campo para migración: registrar si ya se usó el perdón de inasistencia ──
+    inasistencia_perdonada_usada: (esNuevo || esRenovacion) ? false : (plan?.inasistencia_perdonada_usada || false),
   })
   const [clasesManual, setClasesManual] = useState(!CLASES_PRESET.includes(plan?.total_clases || 4))
   const [guardando, setGuardando] = useState(false)
@@ -191,6 +193,7 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar,
       clases_tomadas: esNuevo ? 0 : parseFloat(String(fp.clases_tomadas)),
       valor_plan: fp.valor_plan !== '' ? Number(fp.valor_plan) : null,
       duracion_min: Number(fp.duracion_min), fecha_inicio: fp.fecha_inicio, estado: fp.estado,
+      inasistencia_perdonada_usada: fp.inasistencia_perdonada_usada,
     }, esRenovacion ? undefined : plan?.id)
     setGuardando(false)
   }
@@ -259,6 +262,18 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar,
               <div>
                 <label style={labelStyle}>Clases tomadas</label>
                 <input type="number" min={0} step={0.25} value={fp.clases_tomadas} onChange={e => setFp({ ...fp, clases_tomadas: e.target.value })} style={estiloInput} />
+              </div>
+            )}
+            {/* ── Campo de migración: perdón de inasistencia ── */}
+            {!esNuevo && (
+              <div style={{ gridColumn: '1 / -1', background: '#fefce8', borderRadius: '10px', padding: '12px 14px', border: '1px solid #fde68a' }}>
+                <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: '700', color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Migración de datos</p>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: '#333' }}>
+                  <input type="checkbox" checked={!!fp.inasistencia_perdonada_usada}
+                    onChange={e => setFp({ ...fp, inasistencia_perdonada_usada: e.target.checked })} />
+                  Ya se perdonó una inasistencia en este plan
+                </label>
+                <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#92400e' }}>Marca esto si históricamente el cliente ya usó su inasistencia perdonada.</p>
               </div>
             )}
           </div>
@@ -351,7 +366,6 @@ function TablaPlanesVista({ planes, onVerCliente }) {
   )
 }
 
-// ── NUEVO: Modal para registrar abonos ──
 function ModalAbono({ plan, pagos, onRegistrar, onAnular, onCerrar, guardando, error }) {
   const hoy = new Date().toISOString().split('T')[0]
   const [form, setForm] = useState({ monto: '', metodo: 'Efectivo', fecha: hoy, notas: '' })
@@ -375,9 +389,7 @@ function ModalAbono({ plan, pagos, onRegistrar, onAnular, onCerrar, guardando, e
           </div>
           <button onClick={onCerrar} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
         </div>
-
         <div style={{ overflowY: 'auto', flex: 1 }}>
-          {/* Resumen de pagos */}
           <div style={{ padding: '16px 24px', background: '#fafbfc', borderBottom: '1px solid #eef2f7' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
               {[
@@ -395,8 +407,6 @@ function ModalAbono({ plan, pagos, onRegistrar, onAnular, onCerrar, guardando, e
               <span style={{ padding: '4px 16px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: cPago.bg, color: cPago.color, border: `1px solid ${cPago.border}` }}>{estado}</span>
             </div>
           </div>
-
-          {/* Historial de abonos */}
           {pagos.length > 0 && (
             <div style={{ padding: '12px 24px', borderBottom: '1px solid #eef2f7' }}>
               <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: '600', color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Abonos registrados</p>
@@ -418,8 +428,6 @@ function ModalAbono({ plan, pagos, onRegistrar, onAnular, onCerrar, guardando, e
               ))}
             </div>
           )}
-
-          {/* Formulario nuevo abono */}
           <div style={{ padding: '16px 24px' }}>
             <p style={{ margin: '0 0 14px', fontSize: '13px', fontWeight: '600', color: '#555' }}>Nuevo abono</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
@@ -501,9 +509,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [filtroSede, setFiltroSede] = useState('')
   const [filtroProfesor, setFiltroProfesor] = useState('')
   const [profesoresFiltro, setProfesoresFiltro] = useState<any[]>([])
-  const [filtroClases, setFiltroClases] = useState<'realizadas' | 'programadas'>('realizadas')
+  // ── Historial por plan: qué planes están expandidos ──
+  const [planesExpandidos, setPlanesExpandidos] = useState<Set<string>>(new Set())
 
-  // ── NUEVO: estado de pagos ──
   const [pagosPlanes, setPagosPlanes] = useState<Record<string, any[]>>({})
   const [pagosActivosTotales, setPagosActivosTotales] = useState<Record<string, number>>({})
   const [modalAbono, setModalAbono] = useState<any>(null)
@@ -574,10 +582,11 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   async function cargarDatosCliente(c: any) {
     const { data: talleresData } = await supabase.from('taller_inscripciones').select('id, mes, valor_pagado, estado, taller_id, talleres(nombre, dia_semana, hora, duracion_min, salones(nombre, sedes(nombre)))').eq('cliente_id', c.id).order('mes', { ascending: false })
     setInscripcionesTalleres(talleresData || [])
-    const { data: planesData } = await supabase.from('contratos').select('id, total_clases, clases_tomadas, valor_plan, tipo_plan, estado, fecha_inicio, duracion_min, instrumento_id, profesor_id, sede_id, instrumentos(nombre), profesores(nombre), sedes(nombre)').eq('cliente_id', c.id).order('fecha_inicio', { ascending: false })
+
+    // ── Incluir inasistencia_perdonada_usada para el campo de migración ──
+    const { data: planesData } = await supabase.from('contratos').select('id, total_clases, clases_tomadas, valor_plan, tipo_plan, estado, fecha_inicio, duracion_min, instrumento_id, profesor_id, sede_id, inasistencia_perdonada_usada, instrumentos(nombre), profesores(nombre), sedes(nombre)').eq('cliente_id', c.id).order('fecha_inicio', { ascending: false })
     setPlanes(planesData || [])
 
-    // ── NUEVO: cargar pagos de todos los planes ──
     const planIds = (planesData || []).map((p: any) => p.id)
     if (planIds.length > 0) {
       const { data: pgData } = await supabase.from('pagos').select('*').in('contrato_id', planIds).order('fecha', { ascending: false })
@@ -594,7 +603,13 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     const { data: ctList } = await supabase.from('contratos').select('id').eq('cliente_id', c.id)
     const ids = (ctList || []).map((ct: any) => ct.id)
     if (ids.length > 0) {
-      const { data: clasesData } = await supabase.from('clases').select('id, fecha, hora, duracion_min, numero_en_plan, estado, profesores(nombre), salones(nombre), contratos(instrumentos(nombre))').in('contrato_id', ids).order('fecha', { ascending: false }).limit(50)
+      // ── Historial por plan: sin límite, orden ascendente, incluye inasistencia_perdonada y contrato_id ──
+      const { data: clasesData } = await supabase
+        .from('clases')
+        .select('id, fecha, hora, duracion_min, numero_en_plan, estado, inasistencia_perdonada, contrato_id, profesores(nombre), salones(sedes(nombre)), contratos(instrumentos(nombre))')
+        .in('contrato_id', ids)
+        .order('fecha', { ascending: true })
+        .order('hora', { ascending: true })
       setClases(clasesData || [])
     } else { setClases([]) }
   }
@@ -622,7 +637,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       condicion_aprendizaje: cliente.condicion_aprendizaje || ''
     })
     await cargarDatosCliente(cliente)
-    setConfirmarBorrar(false); setErrorBorrar(''); setExpandirFicha(false); setModo('ver')
+    setConfirmarBorrar(false); setErrorBorrar(''); setExpandirFicha(false)
+    setPlanesExpandidos(new Set())
+    setModo('ver')
   }
 
   function nuevoCliente() {
@@ -780,7 +797,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     cargarVista(vistaActual)
   }
 
-  // ── NUEVO: registrar abono ──
   async function registrarAbono(formAbono: { monto: string; metodo: string; fecha: string; notas: string }) {
     if (!formAbono.monto || Number(formAbono.monto) <= 0) { setAbonoError('Ingresa un monto válido'); return }
     if (!formAbono.fecha) { setAbonoError('Selecciona una fecha'); return }
@@ -801,12 +817,26 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   async function anularAbono(pagoId: string, contratoId: string) {
     const { error } = await supabase.from('pagos').delete().eq('id', pagoId)
     if (error) { alert('Error al anular: ' + error.message); return }
-    // Actualizar estado local inmediatamente
     setPagosPlanes(prev => ({
       ...prev,
       [contratoId]: (prev[contratoId] || []).filter((p: any) => p.id !== pagoId)
     }))
     if (vistaActual === 'activos') cargarVista('activos')
+  }
+
+  // ── Perdonar inasistencia: descuenta del conteo y marca la clase ──
+  async function perdonarInasistencia(claseId: string, contratoId: string) {
+    await supabase.from('clases').update({ inasistencia_perdonada: true }).eq('id', claseId)
+    const plan = planes.find((p: any) => p.id === contratoId)
+    if (plan) {
+      const nuevasCT = Math.max((plan.clases_tomadas || 0) - 1, 0)
+      await supabase.from('contratos').update({
+        clases_tomadas: nuevasCT,
+        inasistencia_perdonada_usada: true
+      }).eq('id', contratoId)
+    }
+    await cargarDatosCliente(clienteSeleccionado)
+    cargarVista(vistaActual)
   }
 
   function formatFechaCorta(iso: string) {
@@ -938,11 +968,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                             const tomadas = p.clases_tomadas || 0, total = p.total_clases || 0, restantes = total - tomadas
                             const nombreCliente = p.clientes?.nombres ? `${p.clientes.nombres} ${p.clientes.apellidos || ''}`.trim() : p.clientes?.nombre || '—'
                             const colorFila = restantes === 0 ? '#fefce8' : restantes <= 2 ? '#fff7ed' : i % 2 === 0 ? 'white' : '#fafbfc'
-                            // ── NUEVO: calcular estado de pago ──
                             const totalPagado = pagosActivosTotales[p.id] || 0
                             const valorPlan = p.valor_plan ? Number(p.valor_plan) : null
                             const saldoPlan = valorPlan !== null ? valorPlan - totalPagado : null
-                            const { estado: estPago } = calcularEstadoPago(valorPlan, [])
                             const estPagoReal = valorPlan === null ? 'Sin valor' : totalPagado === 0 ? 'Sin pagar' : totalPagado >= valorPlan ? 'Pagado' : 'Parcial'
                             const cPago = colorEstadoPago(estPagoReal)
                             return (
@@ -957,7 +985,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                                 <td style={{ ...tdStyle, textAlign: 'center' }}>{total}</td>
                                 <td style={{ ...tdStyle, textAlign: 'center' }}>{tomadas}</td>
                                 <td style={{ ...tdStyle, textAlign: 'center' }}><span style={{ fontWeight: '700', color: restantes === 0 ? '#854d0e' : restantes <= 2 ? '#c2410c' : '#166534' }}>{restantes === 0 ? '✓ Completo' : restantes}</span></td>
-                                {/* ── NUEVO: columnas de pago ── */}
                                 <td style={{ ...tdStyle, textAlign: 'center' }}>{valorPlan ? `$${valorPlan.toLocaleString()}` : '—'}</td>
                                 <td style={{ ...tdStyle, textAlign: 'center', color: '#166534', fontWeight: '500' }}>{totalPagado > 0 ? `$${totalPagado.toLocaleString()}` : '—'}</td>
                                 <td style={{ ...tdStyle, textAlign: 'center', color: saldoPlan && saldoPlan > 0 ? '#991b1b' : '#166534', fontWeight: '500' }}>{saldoPlan !== null ? (saldoPlan > 0 ? `$${saldoPlan.toLocaleString()}` : '✓') : '—'}</td>
@@ -976,14 +1003,12 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
 
               {!cargandoVista && vistaActual === 'talleres' && (() => {
                 const hoy = new Date().toISOString().split('T')[0].substring(0, 7) + '-01'
-                // Agrupar por taller
                 const grupos: Record<string, any[]> = {}
                 datosVista.forEach((ins: any) => {
                   const nombre = ins.talleres?.nombre || '—'
                   if (!grupos[nombre]) grupos[nombre] = []
                   grupos[nombre].push(ins)
                 })
-                // Ordenar grupos alfabéticamente
                 const gruposOrdenados = Object.keys(grupos).sort()
                 const thS: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }
                 const tdS: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }
@@ -1006,7 +1031,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                               ? `${ins.clientes.nombres} ${ins.clientes.apellidos || ''}`.trim()
                               : ins.clientes?.nombre || '—'
                             const fechaIni = ins.mes ? ins.mes.substring(0, 10) : '—'
-                            // Fecha fin: 1 mes después del mes de inicio (último día del mes de inicio)
                             const fechaFinLabel = ins.mes ? (() => {
                               const d = new Date(ins.mes + 'T12:00:00')
                               const fin = new Date(d.getFullYear(), d.getMonth() + 1, 0)
@@ -1042,8 +1066,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                   </div>
                 )
               })()}
-
-              {!cargandoVista && vistaActual !== 'activos' && vistaActual !== 'talleres' && vistaActual !== 'todos' && null}
             </div>
           )}
         </div>
@@ -1131,6 +1153,21 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             const pagosPlan = pagosPlanes[p.id] || []
             const { totalPagado, saldo, estado: estPago } = calcularEstadoPago(p.valor_plan ?? null, pagosPlan)
             const cPago = colorEstadoPago(estPago)
+
+            // ── Historial de clases de este plan ──
+            const clasesDelPlan = clases
+              .filter((c: any) => c.contrato_id === p.id)
+              .sort((a: any, b: any) => `${a.fecha}T${a.hora||'00:00'}`.localeCompare(`${b.fecha}T${b.hora||'00:00'}`))
+
+            let conteoClases = 0
+            const clasesConConteo = clasesDelPlan.map((c: any) => {
+              const cuentaEnPlan = c.estado === 'dada' || (c.estado === 'cancelada' && !c.inasistencia_perdonada)
+              if (cuentaEnPlan) conteoClases++
+              return { ...c, numeroConteo: cuentaEnPlan ? conteoClases : null }
+            })
+
+            const estaExpandido = planesExpandidos.has(p.id)
+
             return (
               <div key={p.id} style={{ background: 'white', borderRadius: '18px', padding: '20px 24px', border: `1px solid ${est.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', marginBottom: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -1138,6 +1175,10 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                       <p style={{ margin: 0, fontWeight: '600', fontSize: '16px', color: '#1a1a1a' }}>{p.instrumentos?.nombre || '—'}</p>
                       <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', background: est.bg, color: est.color, fontWeight: '600' }}>{p.estado || 'activo'}</span>
+                      {/* Badge si ya se usó perdón */}
+                      {p.inasistencia_perdonada_usada && (
+                        <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', background: '#f0fdf4', color: '#16a34a', fontWeight: '600', border: '1px solid #bbf7d0' }}>✓ Perdón usado</span>
+                      )}
                     </div>
                     <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>👤 {p.profesores?.nombre || '—'} · 🏫 {p.sedes?.nombre || '—'}</p>
                     <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>📅 {p.fecha_inicio || '—'} · {p.duracion_min} min/clase</p>
@@ -1155,7 +1196,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                   <span style={{ fontSize: '14px', color: '#555', fontWeight: '500' }}>{p.valor_plan ? `$${Number(p.valor_plan).toLocaleString()}` : '—'}</span>
                 </div>
 
-                {/* ── NUEVO: sección de pagos ── */}
+                {/* Sección de pagos */}
                 <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                   <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
                     <div>
@@ -1179,7 +1220,83 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                   </button>
                 </div>
 
-                <div style={{ paddingTop: '12px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {/* ── Historial de clases del plan ── */}
+                <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '10px', marginTop: '4px' }}>
+                  <button
+                    onClick={() => setPlanesExpandidos(prev => {
+                      const next = new Set(prev)
+                      next.has(p.id) ? next.delete(p.id) : next.add(p.id)
+                      return next
+                    })}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: TEAL, fontWeight: '500', padding: '0', marginBottom: estaExpandido ? '10px' : '0' }}>
+                    {estaExpandido ? '▲ Ocultar historial' : `▼ Ver historial del plan (${clasesDelPlan.length} clases)`}
+                  </button>
+
+                  {estaExpandido && (
+                    <div style={{ background: '#fafbfc', borderRadius: '10px', overflow: 'hidden', border: '1px solid #f1f5f9' }}>
+                      {clasesDelPlan.length === 0 ? (
+                        <p style={{ margin: 0, padding: '16px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin clases registradas en este plan aún</p>
+                      ) : (
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr style={{ background: TEAL_LIGHT }}>
+                              {['#', 'Fecha', 'Hora', 'Profesor', 'Sede', 'Estado', ''].map(h => (
+                                <th key={h} style={{ padding: '8px 12px', textAlign: h === '#' ? 'center' : 'left', fontSize: '11px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {clasesConConteo.map((c: any, i) => {
+                              const esPerdonada = c.estado === 'cancelada' && c.inasistencia_perdonada
+                              const estadoColor =
+                                c.estado === 'dada'      ? { bg: '#fefce8', color: '#854d0e' } :
+                                esPerdonada              ? { bg: '#f0fdf4', color: '#16a34a' } :
+                                c.estado === 'cancelada' ? { bg: '#fee2e2', color: '#991b1b' } :
+                                c.estado === 'confirmada'? { bg: '#dcfce7', color: '#166534' } :
+                                                           { bg: TEAL_LIGHT, color: TEAL }
+
+                              const [hh, mm] = (c.hora || '00:00').substring(0, 5).split(':').map(Number)
+                              const ampm = hh >= 12 ? 'pm' : 'am'
+                              const h12 = hh % 12 || 12
+                              const horaFmt = c.hora ? `${h12}:${String(mm).padStart(2, '0')} ${ampm}` : '—'
+
+                              // Sede: preferir la del salón de la clase, fallback a la del plan
+                              const sedeClase = c.salones?.sedes?.nombre || p.sedes?.nombre || '—'
+
+                              return (
+                                <tr key={c.id} style={{ borderTop: '1px solid #f1f5f9', background: i % 2 === 0 ? 'white' : '#fafbfc' }}>
+                                  <td style={{ padding: '8px 12px', fontSize: '13px', fontWeight: '700', color: c.numeroConteo ? TEAL : '#d1d5db', textAlign: 'center', minWidth: '32px' }}>
+                                    {c.numeroConteo || '—'}
+                                  </td>
+                                  <td style={{ padding: '8px 12px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }}>{c.fecha || '—'}</td>
+                                  <td style={{ padding: '8px 12px', fontSize: '13px', color: '#555', whiteSpace: 'nowrap' }}>{horaFmt}</td>
+                                  <td style={{ padding: '8px 12px', fontSize: '13px', color: '#333' }}>{c.profesores?.nombre || '—'}</td>
+                                  <td style={{ padding: '8px 12px', fontSize: '13px', color: '#555' }}>{sedeClase}</td>
+                                  <td style={{ padding: '8px 12px' }}>
+                                    <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '600', background: estadoColor.bg, color: estadoColor.color, whiteSpace: 'nowrap' }}>
+                                      {esPerdonada ? '✓ Perdonada' : c.estado}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '8px 12px' }}>
+                                    {c.estado === 'cancelada' && !c.inasistencia_perdonada && (
+                                      <button
+                                        onClick={() => perdonarInasistencia(c.id, p.id)}
+                                        style={{ padding: '3px 10px', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                                        Perdonar
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ paddingTop: '12px', borderTop: '1px solid #f1f5f9', marginTop: '10px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '12px', color: '#999' }}>Estado:</span>
                   {['activo', 'aplazado', 'completado'].map(est2 => {
                     const c2 = colorEstadoPlan(est2); const esActual = (p.estado || 'activo') === est2
@@ -1284,68 +1401,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
               </div>
             )
           })}
-
-          {/* Clases */}
-          {(() => {
-            const hoy = new Date().toISOString().split('T')[0]
-            const formatFecha = (fecha: string) => fecha === hoy ? 'Hoy' : fecha
-            const formatHora = (hora: string) => {
-              if (!hora) return '—'
-              const [h, m] = hora.substring(0, 5).split(':').map(Number)
-              const ampm = h >= 12 ? 'pm' : 'am'
-              const h12 = h % 12 || 12
-              return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
-            }
-            return (
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '32px 0 14px' }}>
-                  <h3 style={{ margin: 0, fontSize: '18px', color: '#1a1a1a' }}>Clases</h3>
-                  <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '3px' }}>
-                    {([{ key: 'realizadas', label: '✅ Dadas / Confirmadas' }, { key: 'programadas', label: '📅 Programadas' }] as const).map(op => (
-                      <button key={op.key} onClick={() => setFiltroClases(op.key)}
-                        style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: '500', background: filtroClases === op.key ? 'white' : 'transparent', color: filtroClases === op.key ? TEAL : '#666', boxShadow: filtroClases === op.key ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
-                        {op.label}
-                      </button>
-                    ))}
-                  </div>
-                  <span style={{ fontSize: '13px', color: '#aaa' }}>
-                    {(() => {
-                      const f = filtroClases === 'realizadas' ? clases.filter(c => c.estado === 'dada' || c.estado === 'confirmada' || c.estado === 'cancelada') : clases.filter(c => c.estado === 'programada')
-                      return `${f.length} clase${f.length !== 1 ? 's' : ''}`
-                    })()}
-                  </span>
-                </div>
-                <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: TEAL_LIGHT }}>{['#', 'Fecha', 'Hora', 'Profesor', 'Instrumento', 'Duración', 'Estado'].map(h => <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', color: TEAL, fontWeight: '600' }}>{h}</th>)}</tr>
-                    </thead>
-                    <tbody>
-                      {(() => {
-                        const filtradas = filtroClases === 'realizadas'
-                          ? clases.filter((c: any) => c.estado === 'dada' || c.estado === 'confirmada' || c.estado === 'cancelada')
-                          : clases.filter((c: any) => c.estado === 'programada').sort((a: any, b: any) => `${a.fecha}T${a.hora||'00:00'}`.localeCompare(`${b.fecha}T${b.hora||'00:00'}`))
-                        if (filtradas.length === 0) return <tr><td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#888' }}>{filtroClases === 'realizadas' ? 'Sin clases dadas o confirmadas' : 'Sin clases programadas'}</td></tr>
-                        return filtradas.map((c: any, i) => (
-                          <tr key={c.id} style={{ borderTop: '1px solid #f8fafc', background: c.fecha === hoy ? '#f0fdf4' : i % 2 === 0 ? 'white' : '#fafbfc' }}>
-                            <td style={{ padding: '12px 16px', fontSize: '14px', color: TEAL, fontWeight: '600' }}>{c.numero_en_plan || '—'}</td>
-                            <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: c.fecha === hoy ? '700' : '400', color: c.fecha === hoy ? '#166534' : '#333' }}>{formatFecha(c.fecha)}</td>
-                            <td style={{ padding: '12px 16px', fontSize: '14px', color: '#555' }}>{formatHora(c.hora)}</td>
-                            <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.profesores?.nombre || '—'}</td>
-                            <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.contratos?.instrumentos?.nombre || '—'}</td>
-                            <td style={{ padding: '12px 16px', fontSize: '14px' }}>{c.duracion_min} min</td>
-                            <td style={{ padding: '12px 16px', fontSize: '14px' }}>
-                              <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', background: c.estado === 'dada' ? '#fefce8' : c.estado === 'cancelada' ? '#fee2e2' : c.estado === 'confirmada' ? '#dcfce7' : TEAL_LIGHT, color: c.estado === 'dada' ? '#854d0e' : c.estado === 'cancelada' ? '#991b1b' : c.estado === 'confirmada' ? '#166534' : TEAL }}>{c.estado}</span>
-                            </td>
-                          </tr>
-                        ))
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )
-          })()}
         </div>
       )}
 
@@ -1429,7 +1484,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
 
       {modalHistorial && <ModalHistorialPlanes planes={planesArchivados} onCerrar={() => setModalHistorial(false)} />}
 
-      {/* ── NUEVO: Modal de abono ── */}
       {modalAbono && (
         <ModalAbono
           plan={modalAbono}
