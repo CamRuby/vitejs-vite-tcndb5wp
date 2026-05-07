@@ -50,7 +50,7 @@ function badgeEstado(estado: string, revisionPendiente?: boolean, esTaller?: boo
   switch (estado) {
     case 'dada':       return { label: 'Dada ✓',    bg: '#fefce8', color: '#854d0e' }
     case 'confirmada': return { label: 'Confirmada', bg: '#dcfce7', color: '#166534' }
-    case 'programada': return { label: 'Programada', bg: '#eff6ff', color: '#1d4ed8' }
+    case 'programada': return { label: 'Programada', bg: '#f1f5f9', color: '#94a3b8' }
     case 'cancelada':  return { label: 'Cancelada',  bg: '#fee2e2', color: '#991b1b' }
     default:           return { label: estado,       bg: '#f1f5f9', color: '#475569' }
   }
