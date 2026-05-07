@@ -343,6 +343,7 @@ export default function Horarios() {
   }
 
   async function verificarConflictoCliente(contratoId: string, fecha: string, hora: string, durMin: number, excluirId?: string): Promise<string | null> {
+    console.log('verificarCliente contratoId:', contratoId, 'fecha:', fecha)
     if (!contratoId) return null
     const inicio = horaAMinutos(hora)
     const fin = inicio + durMin
