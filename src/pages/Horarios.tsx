@@ -648,10 +648,10 @@ export default function Horarios() {
       hora: slotSeleccionado.hora + ':00', duracion_min: parseInt(tallerDuracion),
       valor_mensual: tallerValor !== '' ? Number(tallerValor) : null
     })
-    if (error) { setTallerError('Error: ' + error.message); setTallerGuardando(false); return }
+   if (error) { setTallerError('Error: ' + error.message); setTallerGuardando(false); return }
+    setTallerGuardando(false)
     setModalAbierto(false)
     await cargarTalleres()
-    setTallerGuardando(false)
   }
 
   async function guardarClase() {
