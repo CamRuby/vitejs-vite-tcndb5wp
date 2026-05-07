@@ -452,7 +452,7 @@ export default function Horarios() {
   function abrirSlot(salon: any, hora: string, fecha: string) {
     setSlotSeleccionado({ salon, hora, fecha })
     setTipoModal('clase')
-    setModalAbierto(true)
+    setModalAbierto(false)
     setBusquedaCliente('')
     setClienteSeleccionado(null)
     setClientesBuscados([])
@@ -465,12 +465,14 @@ export default function Horarios() {
     setError('')
     setAvisoCrear([])
     setConfirmarSedeDiferente(false)
-    setModalidadClase('presencial') // PATCH: reset modalidad
+    setModalidadClase('presencial')
     setTallerNombre('')
     setTallerProfesorId('')
     setTallerDuracion('60')
     setTallerValor('')
     setTallerError('')
+    setTallerGuardando(false)
+
   }
 
   function abrirClaseExistente(e: React.MouseEvent, clase: any) {
