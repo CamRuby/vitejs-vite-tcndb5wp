@@ -258,7 +258,7 @@ export default function ProfesorApp() {
       .gte('fecha', fi).lte('fecha', ff)
       .in('estado', ['dada', 'cancelada'])
       .order('fecha', { ascending: false })
-    setClases(data || [])
+    
     setCargandoClases(false)
   }
 
