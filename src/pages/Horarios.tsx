@@ -591,6 +591,55 @@ export default function Horarios() {
     if (!tallerProfesorId) { setTallerError('Selecciona un profesor'); return }
     setTallerGuardando(true); setTallerError('')
     const diaSemana = DIAS_LARGO[parseFechaLocal(slotSeleccionado.fecha).getDay()]
+
+    // Verificar conflicto de salón y profesor contra clases existentes ese día de semana
+    // Buscamos clases en fechas futuras que caigan en el mismo día de semana
+    const hoy = formatFecha(new Date())
+    const { data: clasesConflicto } = await supabase
+      .from('clases')
+      .select('id, hora, duracion_min, contratos(clientes(nombre))')
+      .eq('salon_id', slotSeleccionado.salon.id)
+      .gte('fecha', hoy)
+      .neq('estado', 'cancelada')
+    const inicioT = horaAMinutos(slotSeleccionado.hora)
+    const finT = inicioT + parseInt(tallerDuracion)
+    if (clasesConflicto) {
+      for (const c of clasesConflicto) {
+        const fechaDia = DIAS_LARGO[parseFechaLocal(c.fecha).getDay()]
+        if (fechaDia !== diaSemana) continue
+        const cI = horaAMinutos((c.hora || '').substring(0, 5))
+        const cF = cI + ((c as any).duracion_min || 60)
+        if (inicioT < cF && finT > cI) {
+          const nombre = (c as any).contratos?.clientes?.nombre || 'otro cliente'
+          setTallerError(`Conflicto de salón: hay una clase con ${nombre} los ${diaSemana} a esa hora`)
+          setTallerGuardando(false); return
+        }
+      }
+    }
+
+    // Verificar conflicto del profesor
+    if (tallerProfesorId) {
+      const { data: clasesProf } = await supabase
+        .from('clases')
+        .select('id, hora, duracion_min, contratos(clientes(nombre))')
+        .eq('profesor_id', tallerProfesorId)
+        .gte('fecha', hoy)
+        .neq('estado', 'cancelada')
+      if (clasesProf) {
+        for (const c of clasesProf) {
+          const fechaDia = DIAS_LARGO[parseFechaLocal(c.fecha).getDay()]
+          if (fechaDia !== diaSemana) continue
+          const cI = horaAMinutos((c.hora || '').substring(0, 5))
+          const cF = cI + ((c as any).duracion_min || 60)
+          if (inicioT < cF && finT > cI) {
+            const nombre = (c as any).contratos?.clientes?.nombre || 'otro cliente'
+            setTallerError(`Conflicto de profesor: ya tiene clase con ${nombre} los ${diaSemana} a esa hora`)
+            setTallerGuardando(false); return
+          }
+        }
+      }
+    }
+
     const { error } = await supabase.from('talleres').insert({
       nombre: tallerNombre.trim(), profesor_id: tallerProfesorId,
       salon_id: slotSeleccionado.salon.id, dia_semana: diaSemana,
