@@ -253,9 +253,10 @@ export default function ProfesorApp() {
     const [a, m] = mes.split('-')
     const ul = new Date(parseInt(a), parseInt(m), 0).getDate()
     const ff = `${mes}-${String(ul).padStart(2,'0')}`
-    const { data } = await supabase.from('clases').select(SELECT_CLASES)
+   const { data } = await supabase.from('clases').select(SELECT_CLASES)
       .eq('profesor_id', profesor.id)
       .gte('fecha', fi).lte('fecha', ff)
+      .in('estado', ['dada', 'cancelada'])
       .order('fecha', { ascending: false })
     setClases(data || [])
     setCargandoClases(false)
