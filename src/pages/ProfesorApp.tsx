@@ -743,7 +743,7 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
     : '#e5e7eb'
 
   return (
-    <div style={{ background:'white', borderRadius:'18px', padding:'16px', marginBottom:'12px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', borderLeft:`4px solid ${borderColor}`, animation:`fadeUp ${0.15+i*0.04}s ease`, cursor: c.esTaller ? 'pointer' : 'pointer' }}
+    <div style={{ background: c.estado === 'programada' && !c.esTaller ? '#f8fafc' : 'white', borderRadius:'18px', padding:'16px', marginBottom:'12px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', borderLeft:`4px solid ${borderColor}`, animation:`fadeUp ${0.15+i*0.04}s ease`, cursor:'pointer', opacity: c.estado === 'programada' && !c.esTaller ? 0.65 : 1 }}
       onClick={onTap}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'12px', marginBottom:'8px' }}>
         <div style={{ flex:1, minWidth:0 }}>
