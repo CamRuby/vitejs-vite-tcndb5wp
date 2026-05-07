@@ -825,7 +825,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     return TEAL
   }
 
-  const thStyle: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }
+  const thStyle: React.CSSProperties = { padding: '7px 9px', textAlign: 'left', fontSize: '11px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }
   const tdStyle: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }
   const planesActivos = planes.filter(p => (p.estado || 'activo') !== 'archivado')
   const planesArchivados = planes.filter(p => p.estado === 'archivado')
