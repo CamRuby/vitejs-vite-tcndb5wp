@@ -692,7 +692,7 @@ export default function ProfesorApp() {
                 placeholder="Escribe aquí lo que se trabajó en la clase."
                 rows={5}
                 style={{ width:'100%', padding:'13px 14px', border:`2px solid ${TEAL_MID}`, borderRadius:'14px', fontSize:'14px', resize:'vertical', boxSizing:'border-box', fontFamily:'system-ui,-apple-system,sans-serif', lineHeight:'1.6', background:'white', color:'#1f2937', textAlign:'left', whiteSpace:'pre-wrap', transition:'border-color 0.2s' }} />
-            </div>
+            </div>}
             {claseActiva.estado === 'confirmada' && !claseActiva.revision_pendiente && (
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'12px' }}>
                 <button className="ba" onClick={marcarDada} disabled={guardando}
