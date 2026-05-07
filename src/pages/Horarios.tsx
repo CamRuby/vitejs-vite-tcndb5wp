@@ -452,6 +452,7 @@ export default function Horarios() {
   function abrirSlot(salon: any, hora: string, fecha: string) {
     setSlotSeleccionado({ salon, hora, fecha })
     setTipoModal('clase')
+    setTallerGuardando(false)
     setModalAbierto(true)
     setBusquedaCliente('')
     setClienteSeleccionado(null)
