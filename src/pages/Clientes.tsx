@@ -1178,16 +1178,20 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             const cPago = colorEstadoPago(estPago)
 
             // ── Historial de clases de este plan ──
-            const clasesDelPlan = clases
+            // Calcular conteo en orden cronológico (ascendente)
+            const clasesDelPlanAsc = clases
               .filter((c: any) => c.contrato_id === p.id)
               .sort((a: any, b: any) => `${a.fecha}T${a.hora||'00:00'}`.localeCompare(`${b.fecha}T${b.hora||'00:00'}`))
 
             let conteoClases = 0
-            const clasesConConteo = clasesDelPlan.map((c: any) => {
+            const clasesConConteo = clasesDelPlanAsc.map((c: any) => {
               const cuentaEnPlan = c.estado === 'dada' || (c.estado === 'cancelada' && !c.inasistencia_perdonada)
               if (cuentaEnPlan) conteoClases++
               return { ...c, numeroConteo: cuentaEnPlan ? conteoClases : null }
             })
+
+            // Invertir para mostrar: lo más reciente arriba
+            const clasesDelPlan = clasesConConteo.slice().reverse()
 
             const estaExpandido = planesExpandidos.has(p.id)
 
@@ -1269,7 +1273,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                             </tr>
                           </thead>
                           <tbody>
-                            {clasesConConteo.map((c: any, i) => {
+                            {clasesDelPlan.map((c: any, i) => {
                               const esPerdonada = c.estado === 'cancelada' && c.inasistencia_perdonada
                               const estadoColor =
                                 c.estado === 'dada'      ? { bg: '#fefce8', color: '#854d0e' } :
