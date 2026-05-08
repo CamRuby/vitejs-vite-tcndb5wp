@@ -189,6 +189,12 @@ export default function Profesores() {
     setGuardandoH(false)
   }
 
+  async function toggleCanceladaTarde(claseId: string, valor: boolean) {
+    await supabase.from('clases').update({ cancelado_tarde: valor }).eq('id', claseId)
+    setClases(prev => prev.map(c => c.id === claseId ? { ...c, cancelado_tarde: valor } : c))
+    setClaseModal((prev: any) => prev ? { ...prev, cancelado_tarde: valor } : prev)
+  }
+
   // ── Punto 2: getHon corregido — sin filtro por ciudad, busca por duracion_min ──
   function getHon(c: any) {
     if (c.honorario_valor !== null && c.honorario_valor !== undefined) return Number(c.honorario_valor)
@@ -495,7 +501,7 @@ export default function Profesores() {
               <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead style={{ background: TEAL_LIGHT }}>
-                    <tr>{['Fecha', 'Hora', 'Cliente', 'Duración', 'Sede', 'Estado', 'Honorarios', ''].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
+                    <tr>{['Fecha', 'Hora', 'Cliente', 'Duración', 'Sede', 'Estado', 'Honorarios', 'Resumen', ''].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
                   </thead>
                   <tbody>
                     {clasesFiltradas.length === 0 && (
@@ -526,6 +532,23 @@ export default function Profesores() {
                           <td style={{ ...tdS, fontWeight: '600', color: pagarHon ? TEAL : '#aaa' }}>
                             {pagarHon ? `$${hon.toLocaleString()}` : '—'}
                             {c.honorario_valor !== null && c.honorario_valor !== undefined && <span style={{ fontSize: '10px', color: '#f59e0b', marginLeft: '4px' }}>editado</span>}
+                          </td>
+                          {/* Indicadores de resumen y obs admin */}
+                          <td style={{ ...tdS, textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', alignItems: 'center' }}>
+                              {c.estado === 'dada' && !c.observaciones && (
+                                <span title="Sin resumen — requerido para pago" style={{ fontSize: '14px', cursor: 'default' }}>⚠️</span>
+                              )}
+                              {c.observaciones && (
+                                <span title="Resumen registrado" style={{ fontSize: '14px', cursor: 'default' }}>📝</span>
+                              )}
+                              {c.observaciones_admin && (
+                                <span title="Tiene observaciones administrativas" style={{ fontSize: '14px', cursor: 'default' }}>🔔</span>
+                              )}
+                              {c.estado === 'dada' && c.observaciones && !c.observaciones_admin && (
+                                <span style={{ fontSize: '11px', color: '#166534' }}>✓</span>
+                              )}
+                            </div>
                           </td>
                           <td style={{ ...tdS, textAlign: 'center' }}>
                             <button onClick={() => { setClaseModal(c); setEditHon(String(getHon(c))); setEditObsAdmin(c.observaciones_admin || '') }}
@@ -560,9 +583,9 @@ export default function Profesores() {
               <button onClick={() => setClaseModal(null)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '5px 11px', cursor: 'pointer' }}>✕</button>
             </div>
 
-            <div style={{ overflowY: 'auto', flex: 1, padding: '20px 22px' }}>
+            <div style={{ overflowY: 'auto', flex: 1, padding: '20px 28px' }}>
               {/* Info de la clase */}
-              <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px', marginBottom: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
+              <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 16px', marginBottom: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
                 <div><span style={{ color: '#999' }}>Instrumento: </span><strong>{claseModal.contratos?.instrumentos?.nombre || '—'}</strong></div>
                 <div><span style={{ color: '#999' }}>Duración: </span><strong>{claseModal.duracion_min} min</strong></div>
                 <div><span style={{ color: '#999' }}>Sede: </span><strong>{claseModal.salones?.sedes?.nombre || '—'}</strong></div>
@@ -576,37 +599,59 @@ export default function Profesores() {
                 </div>
               </div>
 
+              {/* Toggle cancelada tarde — solo en clases canceladas */}
+              {claseModal.estado === 'cancelada' && (
+                <div style={{ marginBottom: '14px', background: claseModal.cancelado_tarde ? '#fef3c7' : '#f8fafc', border: `1px solid ${claseModal.cancelado_tarde ? '#fde68a' : '#e2e8f0'}`, borderRadius: '8px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: claseModal.cancelado_tarde ? '#92400e' : '#555' }}>
+                      {claseModal.cancelado_tarde ? '⚠️ Cancelada fuera de tiempo' : 'Cancelación a tiempo'}
+                    </p>
+                    <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#888' }}>Las cancelaciones fuera de tiempo generan honorario al profesor</p>
+                  </div>
+                  <button
+                    onClick={() => toggleCanceladaTarde(claseModal.id, !claseModal.cancelado_tarde)}
+                    style={{ padding: '5px 14px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
+                      background: claseModal.cancelado_tarde ? '#fde68a' : TEAL_LIGHT,
+                      color: claseModal.cancelado_tarde ? '#92400e' : TEAL }}>
+                    {claseModal.cancelado_tarde ? 'Quitar' : 'Marcar como tarde'}
+                  </button>
+                </div>
+              )}
+
               {claseModal.revision_pendiente && (
                 <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '10px 12px', marginBottom: '14px', fontSize: '13px', color: '#c2410c' }}>
                   El estudiante no asistió — pendiente de revisión
                 </div>
               )}
 
-              {/* Punto 5: "Resumen de la clase" con pre-wrap */}
+              {/* Resumen de la clase */}
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ ...lS, marginBottom: '6px' }}>Resumen de la clase</label>
+                <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: '700', color: '#333' }}>
+                  Resumen de la clase
+                  {claseModal.estado === 'dada' && !claseModal.observaciones && (
+                    <span style={{ marginLeft: '8px', fontSize: '11px', color: '#dc2626', background: '#fee2e2', padding: '1px 7px', borderRadius: '10px', fontWeight: '600' }}>⚠️ Requerido para pago</span>
+                  )}
+                </p>
                 {claseModal.observaciones
-                  ? <div style={{ background: '#fafbfc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#333', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
+                  ? <div style={{ background: '#fafbfc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 14px', fontSize: '13px', color: '#333', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
                       {claseModal.observaciones}
                     </div>
-                  : <p style={{ color: '#aaa', fontSize: '13px', margin: 0, fontStyle: 'italic' }}>Sin resumen registrado</p>
+                  : <p style={{ color: '#aaa', fontSize: '13px', margin: 0, fontStyle: 'italic', padding: '10px 14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>Sin resumen registrado</p>
                 }
               </div>
 
-              {/* Honorarios — visible para dadas y canceladas fuera de tiempo (punto 4) */}
+              {/* Honorarios */}
               {(claseModal.estado === 'dada' || claseModal.cancelado_tarde) && (
                 <div style={{ marginBottom: '16px' }}>
-                  <label style={lS}>Honorarios ($)</label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <input type="number" value={editHon} onChange={e => setEditHon(e.target.value)} style={{ ...fS, flex: 1 }} />
-                  </div>
+                  <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: '700', color: '#333' }}>Honorarios ($)</p>
+                  <input type="number" value={editHon} onChange={e => setEditHon(e.target.value)} style={fS} />
                   <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#aaa' }}>El valor editado reemplaza al calculado por tarifa</p>
                 </div>
               )}
 
-              {/* Punto 4: Observaciones administrativas */}
+              {/* Observaciones administrativas */}
               <div style={{ marginBottom: '20px' }}>
-                <label style={lS}>Observaciones administrativas</label>
+                <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: '700', color: '#333' }}>Observaciones administrativas</p>
                 <textarea
                   value={editObsAdmin}
                   onChange={e => setEditObsAdmin(e.target.value)}
@@ -617,7 +662,7 @@ export default function Profesores() {
               </div>
 
               <button onClick={guardarClaseModal} disabled={guardandoH}
-                style={{ width: '100%', padding: '11px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
+                style={{ width: '100%', padding: '11px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '600' }}>
                 {guardandoH ? 'Guardando...' : '✓ Guardar cambios'}
               </button>
             </div>
