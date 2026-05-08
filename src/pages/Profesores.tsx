@@ -94,14 +94,29 @@ export default function Profesores() {
     const [a, m] = mes.split('-')
     const ul = new Date(parseInt(a), parseInt(m), 0).getDate()
     const ff = `${mes}-${ul}`
-    const { data } = await supabase
-      .from('clases')
-      .select('id, fecha, hora, duracion_min, estado, revision_pendiente, observaciones, observaciones_admin, honorario_valor, cancelado_tarde, cancelado_por_academia, contratos(clientes(nombre), instrumentos(nombre)), salones(nombre, sedes(nombre))')
-      .eq('profesor_id', p.id)
-      .gte('fecha', fi)
-      .lte('fecha', ff)
-      .order('fecha', { ascending: false })
-    setClases(data || [])
+    let result: any[] = []
+    try {
+      const { data: d, error } = await supabase
+        .from('clases')
+        .select('id, fecha, hora, duracion_min, estado, revision_pendiente, observaciones, observaciones_admin, honorario_valor, cancelado_tarde, cancelado_por_academia, contratos(clientes(nombre), instrumentos(nombre)), salones(nombre, sedes(nombre))')
+        .eq('profesor_id', p.id)
+        .gte('fecha', fi)
+        .lte('fecha', ff)
+        .order('fecha', { ascending: false })
+      if (error) throw error
+      result = d || []
+    } catch {
+      // Fallback sin columnas nuevas (aún no migradas en Supabase)
+      const { data: d } = await supabase
+        .from('clases')
+        .select('id, fecha, hora, duracion_min, estado, revision_pendiente, observaciones, honorario_valor, contratos(clientes(nombre), instrumentos(nombre)), salones(nombre, sedes(nombre))')
+        .eq('profesor_id', p.id)
+        .gte('fecha', fi)
+        .lte('fecha', ff)
+        .order('fecha', { ascending: false })
+      result = (d || []).map((c: any) => ({ ...c, cancelado_tarde: false, cancelado_por_academia: false, observaciones_admin: null }))
+    }
+    setClases(result)
   }
 
   async function guardar() {
