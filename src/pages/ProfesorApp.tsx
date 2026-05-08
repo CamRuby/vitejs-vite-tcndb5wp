@@ -218,9 +218,11 @@ export default function ProfesorApp() {
     const fi = fechaHoyLocal()
     const ff = fechaLocal(sabado)
 
+    // ── FIX 1: solo traer programadas/confirmadas en la cola ──
     const { data } = await supabase.from('clases').select(SELECT_CLASES)
       .eq('profesor_id', profesor.id)
       .gte('fecha', fi).lte('fecha', ff)
+      .in('estado', ['programada', 'confirmada'])
       .order('fecha').order('hora')
 
     const { data: dataAtrasadas } = await supabase.from('clases').select(SELECT_CLASES)
@@ -280,21 +282,14 @@ export default function ProfesorApp() {
     const ul = new Date(parseInt(a), parseInt(m), 0).getDate()
     const ff = `${mes}-${String(ul).padStart(2,'0')}`
 
-    const { data: dataResultado } = await supabase.from('clases').select(SELECT_CLASES)
+    // Historial: dadas + canceladas (incluye inasistencias con revision_pendiente)
+    const { data } = await supabase.from('clases').select(SELECT_CLASES)
       .eq('profesor_id', profesor.id)
       .gte('fecha', fi).lte('fecha', ff)
       .in('estado', ['dada', 'cancelada'])
       .order('fecha', { ascending: false })
 
-    const { data: dataInasistencias } = await supabase.from('clases').select(SELECT_CLASES)
-      .eq('profesor_id', profesor.id)
-      .gte('fecha', fi).lte('fecha', ff)
-      .eq('revision_pendiente', true)
-      .order('fecha', { ascending: false })
-
-    const todas = [...(dataResultado || []), ...(dataInasistencias || [])]
-    todas.sort((a, b) => `${b.fecha}${b.hora}`.localeCompare(`${a.fecha}${a.hora}`))
-    setClases(todas)
+    setClases(data || [])
     setCargandoClases(false)
   }
 
@@ -315,6 +310,17 @@ export default function ProfesorApp() {
       await supabase.from('contratos').update({
         clases_tomadas: parseFloat((tomadas + fraccion).toFixed(4))
       }).eq('id', contrato.id)
+    }
+    // ── FIX 3: Recalcular numero_en_plan de clases futuras ──
+    const proximoNumero = Math.floor(tomadas + fraccion) + 1
+    const { data: clasesFuturas } = await supabase.from('clases')
+      .select('id')
+      .eq('contrato_id', claseActiva.contrato_id)
+      .in('estado', ['programada', 'confirmada'])
+      .order('fecha').order('hora')
+    if (clasesFuturas && clasesFuturas.length > 0) {
+      const futIds = clasesFuturas.map((c: any) => c.id)
+      await supabase.from('clases').update({ numero_en_plan: proximoNumero }).in('id', futIds)
     }
     setExito('¡Clase marcada como dada!')
     cerrarModal()
@@ -338,7 +344,9 @@ export default function ProfesorApp() {
     const modalidad = (claseActiva.modalidad || 'presencial').toLowerCase()
     const baseHon   = getValorTarifa(Number(claseActiva.duracion_min), modalidad)
     const honorario = Math.round(baseHon * pct / 100)
+    // ── FIX 2: estado → 'cancelada' + revision_pendiente como flag de inasistencia cliente ──
     await supabase.from('clases').update({
+      estado: 'cancelada',
       revision_pendiente: true,
       honorario_valor: honorario,
       observaciones: resumen.trim() || claseActiva.observaciones || null
@@ -363,6 +371,8 @@ export default function ProfesorApp() {
     await supabase.from('clases').update({
       estado: 'cancelada',
       motivo_cancelacion: motivo,
+      cancelado_por_academia: true,
+      cancelado_tarde: esTardia,
       observaciones: resumen.trim() || claseActiva.observaciones || null
     }).eq('id', claseActiva.id)
     await insertarNotificacion(
@@ -473,10 +483,6 @@ export default function ProfesorApp() {
     if (w) { w.document.write(html); w.document.close() }
   }
 
-  // ════════════════════════════════════════════════════
-  //  PANTALLAS DE AUTENTICACIÓN
-  // ════════════════════════════════════════════════════
-
   if (cargandoAuth) return (
     <div style={{ position:'fixed', inset:0, background:TEAL, display:'flex', alignItems:'center', justifyContent:'center' }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -529,7 +535,6 @@ export default function ProfesorApp() {
   const dadas           = clases.filter(c => c.estado === 'dada')
   const pendientesCobro = clases.filter(c => c.revision_pendiente).length
   const totalHon        = dadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
-  // Clases atrasadas sin resolver (solo confirmadas, sin revision_pendiente)
   const hayAtrasadas    = clases.some(c => c.esAtrasada && !c.revision_pendiente)
   const claseAtrasada   = clases.find(c => c.esAtrasada && !c.revision_pendiente)
 
@@ -546,11 +551,9 @@ export default function ProfesorApp() {
 
       <div style={{ width:'100%', maxWidth:'480px', height:'100%', display:'flex', flexDirection:'column', background:'#f8fafc' }}>
 
-        {/* Header */}
         <div style={{ background:TEAL, padding:'18px 20px 0', flexShrink:0 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
             <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-              {/* Punto 6: logo correcto */}
               <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca"
                 style={{ height:'36px', objectFit:'contain', filter:'brightness(0) invert(1)', opacity:0.9 }} />
             </div>
@@ -575,7 +578,6 @@ export default function ProfesorApp() {
           </div>
         </div>
 
-        {/* Contenido */}
         <div style={{ flex:1, overflow:'auto', padding:'16px' }}>
 
           {exito && (
@@ -584,7 +586,6 @@ export default function ProfesorApp() {
             </div>
           )}
 
-          {/* ── ESTA SEMANA ── */}
           {vista === 'hoy' && (
             <div style={{ animation:'fadeUp 0.3s ease' }}>
               {cargandoClases && <p style={{ textAlign:'center', color:'#9ca3af', padding:'50px 0' }}>Cargando...</p>}
@@ -620,7 +621,6 @@ export default function ProfesorApp() {
             </div>
           )}
 
-          {/* ── HISTORIAL ── */}
           {vista === 'historial' && (
             <div style={{ animation:'fadeUp 0.3s ease' }}>
               <input type="month" value={mes} onChange={e => setMes(e.target.value)}
@@ -662,7 +662,6 @@ export default function ProfesorApp() {
         </div>
       </div>
 
-      {/* ══ MODAL TALLER ══ */}
       {tallerModal && (
         <div onClick={e => e.target === e.currentTarget && setTallerModal(null)}
           style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:200, animation:'fadeIn 0.2s ease' }}>
@@ -728,14 +727,12 @@ export default function ProfesorApp() {
         </div>
       )}
 
-      {/* ══ MODAL CLASE ══ */}
       {claseActiva && (
         <div onClick={e => e.target === e.currentTarget && cerrarModal()}
           style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:200, animation:'fadeIn 0.2s ease' }}>
           <div style={{ width:'100%', maxWidth:'480px', background:'white', borderRadius:'28px 28px 0 0', padding:'20px 20px 36px', animation:'slideUp 0.3s cubic-bezier(0.34,1.56,0.64,1)', maxHeight:'92vh', overflow:'auto' }}>
             <div style={{ width:'44px', height:'5px', background:'#e5e7eb', borderRadius:'3px', margin:'0 auto 22px' }} />
 
-            {/* ── AVISO CANCELACIÓN TARDÍA ── */}
             {pantallaModal === 'avisoTardia' && (
               <div style={{ textAlign:'center', padding:'10px 0' }}>
                 <div style={{ fontSize:'52px', marginBottom:'16px' }}>⏰</div>
@@ -750,7 +747,6 @@ export default function ProfesorApp() {
               </div>
             )}
 
-            {/* ── SELECTOR HONORARIO (INASISTENCIA) ── */}
             {pantallaModal === 'inasistencia' && (
               <div>
                 <div style={{ background:'#fff7ed', borderRadius:'16px', padding:'16px', marginBottom:'20px' }}>
@@ -775,7 +771,6 @@ export default function ProfesorApp() {
               </div>
             )}
 
-            {/* ── CONFIRMAR CANCELACIÓN ── */}
             {pantallaModal === 'cancelar' && (
               <div>
                 <div style={{ background:'#fef2f2', borderRadius:'16px', padding:'16px', marginBottom:'20px' }}>
@@ -811,14 +806,11 @@ export default function ProfesorApp() {
               </div>
             )}
 
-            {/* ── PANTALLA PRINCIPAL ── */}
             {pantallaModal === 'acciones' && (
               <>
-                {/* Info clase */}
                 <div style={{ background:TEAL_LIGHT, borderRadius:'16px', padding:'16px', marginBottom:'20px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'10px' }}>
                     <div>
-                      {/* Punto 1: fecha + hora en el header */}
                       <p style={{ margin:'0 0 2px', fontSize:'13px', fontWeight:'700', color: claseActiva.esAtrasada ? '#dc2626' : '#6b7280', textTransform:'capitalize' }}>
                         📅 {labelDiaSemana(claseActiva.fecha).texto}
                       </p>
@@ -843,11 +835,10 @@ export default function ProfesorApp() {
 
                 {claseActiva.revision_pendiente && (
                   <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:'12px', padding:'11px 14px', marginBottom:'18px', fontSize:'13px', color:'#c2410c', fontWeight:'600' }}>
-                    ⚠️ Inasistencia registrada — pendiente de revisión por la asistente
+                    ⚠️ Inasistencia registrada
                   </div>
                 )}
 
-                {/* Resumen — no en programada */}
                 {claseActiva.estado !== 'programada' && (
                   <div style={{ marginBottom:'20px' }}>
                     <label style={{ display:'block', fontSize:'11px', fontWeight:'800', color:'#6b7280', marginBottom:'8px', letterSpacing:'0.8px' }}>
@@ -860,11 +851,8 @@ export default function ProfesorApp() {
                   </div>
                 )}
 
-                {/* ── 3 BOTONES: solo si está confirmada y sin inasistencia ── */}
                 {claseActiva.estado === 'confirmada' && !claseActiva.revision_pendiente && vista === 'hoy' && (
                   <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                    {/* Punto 2: dada arriba solo, los otros dos abajo mitad cada uno */}
-                    {/* Punto 7: bloqueado si hay atrasadas sin resolver */}
                     <button className="ba" onClick={marcarDada}
                       disabled={guardando || (hayAtrasadas && !!claseActiva.esAtrasada === false)}
                       style={{ padding:'18px', background:TEAL, color:'white', border:'none', borderRadius:'16px', fontSize:'17px', fontWeight:'800', cursor: guardando || (hayAtrasadas && !claseActiva.esAtrasada) ? 'not-allowed' : 'pointer', opacity: guardando || (hayAtrasadas && !claseActiva.esAtrasada) ? 0.35 : 1, fontFamily:'inherit' }}>
@@ -888,7 +876,6 @@ export default function ProfesorApp() {
                   </div>
                 )}
 
-                {/* Clase ya con resultado → solo resumen */}
                 {(claseActiva.estado === 'dada' || claseActiva.revision_pendiente || claseActiva.estado === 'cancelada') && (
                   <>
                     {!claseActiva.observaciones && (
@@ -903,7 +890,6 @@ export default function ProfesorApp() {
                   </>
                 )}
 
-                {/* Programada sin acciones */}
                 {claseActiva.estado === 'programada' && (
                   <p style={{ textAlign:'center', color:'#9ca3af', fontSize:'13px', margin:0, fontStyle:'italic' }}>
                     Clase aún no confirmada — sin acciones disponibles
@@ -918,7 +904,6 @@ export default function ProfesorApp() {
   )
 }
 
-// ── Tarjeta de clase ────────────────────────────────────
 function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, honorario, mostrarHonorario, mostrarFecha }: {
   c: any, i: number, onTap: () => void,
   resumenExpandido: string | null,
@@ -1009,7 +994,6 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
         </div>
       </div>
 
-      {/* Resumen colapsable */}
       {c.observaciones && (
         <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'8px' }}>
           <button onClick={e => { e.stopPropagation(); setResumenExpandido(expandido ? null : c.id) }}
@@ -1024,7 +1008,6 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
         </div>
       )}
 
-      {/* Punto: resaltar tarjetas sin resumen */}
       {sinResumen && (
         <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'8px' }}>
           <button onClick={e => { e.stopPropagation(); onTap() }}
