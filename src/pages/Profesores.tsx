@@ -533,26 +533,18 @@ export default function Profesores() {
                             {pagarHon ? `$${hon.toLocaleString()}` : '—'}
                             {c.honorario_valor !== null && c.honorario_valor !== undefined && <span style={{ fontSize: '10px', color: '#f59e0b', marginLeft: '4px' }}>editado</span>}
                           </td>
-                          {/* Indicadores de resumen y obs admin */}
+                          {/* Indicador de resumen */}
                           <td style={{ ...tdS, textAlign: 'center' }}>
-                            <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', alignItems: 'center' }}>
-                              {c.estado === 'dada' && !c.observaciones && (
-                                <span title="Sin resumen — requerido para pago" style={{ fontSize: '14px', cursor: 'default' }}>⚠️</span>
-                              )}
-                              {c.observaciones && (
-                                <span title="Resumen registrado" style={{ fontSize: '14px', cursor: 'default' }}>📝</span>
-                              )}
-                              {c.observaciones_admin && (
-                                <span title="Tiene observaciones administrativas" style={{ fontSize: '14px', cursor: 'default' }}>🔔</span>
-                              )}
-                              {c.estado === 'dada' && c.observaciones && !c.observaciones_admin && (
-                                <span style={{ fontSize: '11px', color: '#166534' }}>✓</span>
-                              )}
-                            </div>
+                            {c.observaciones
+                              ? <span title="Resumen registrado" style={{ fontSize: '14px', cursor: 'default' }}>📝</span>
+                              : null}
                           </td>
                           <td style={{ ...tdS, textAlign: 'center' }}>
                             <button onClick={() => { setClaseModal(c); setEditHon(String(getHon(c))); setEditObsAdmin(c.observaciones_admin || '') }}
-                              style={{ background: 'none', border: `1px solid ${TEAL_MID}`, borderRadius: '6px', padding: '3px 10px', cursor: 'pointer', fontSize: '11px', color: TEAL }}>
+                              style={{ background: 'none', borderRadius: '6px', padding: '3px 10px', cursor: 'pointer', fontSize: '11px',
+                                border: c.observaciones_admin ? '1.5px solid #dc2626' : `1px solid ${TEAL_MID}`,
+                                color: c.observaciones_admin ? '#dc2626' : TEAL,
+                                fontWeight: c.observaciones_admin ? '600' : '400' }}>
                               Ver
                             </button>
                           </td>
@@ -599,22 +591,11 @@ export default function Profesores() {
                 </div>
               </div>
 
-              {/* Toggle cancelada tarde — solo en clases canceladas */}
-              {claseModal.estado === 'cancelada' && (
-                <div style={{ marginBottom: '14px', background: claseModal.cancelado_tarde ? '#fef3c7' : '#f8fafc', border: `1px solid ${claseModal.cancelado_tarde ? '#fde68a' : '#e2e8f0'}`, borderRadius: '8px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: claseModal.cancelado_tarde ? '#92400e' : '#555' }}>
-                      {claseModal.cancelado_tarde ? '⚠️ Cancelada fuera de tiempo' : 'Cancelación a tiempo'}
-                    </p>
-                    <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#888' }}>Las cancelaciones fuera de tiempo generan honorario al profesor</p>
-                  </div>
-                  <button
-                    onClick={() => toggleCanceladaTarde(claseModal.id, !claseModal.cancelado_tarde)}
-                    style={{ padding: '5px 14px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
-                      background: claseModal.cancelado_tarde ? '#fde68a' : TEAL_LIGHT,
-                      color: claseModal.cancelado_tarde ? '#92400e' : TEAL }}>
-                    {claseModal.cancelado_tarde ? 'Quitar' : 'Marcar como tarde'}
-                  </button>
+              {/* Aviso cancelada tarde — automático, sin toggle manual */}
+              {claseModal.estado === 'cancelada' && claseModal.cancelado_tarde && (
+                <div style={{ marginBottom: '14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px 14px' }}>
+                  <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#92400e' }}>⚠️ Cancelada fuera de tiempo</p>
+                  <p style={{ margin: '3px 0 0', fontSize: '11px', color: '#92400e' }}>Cancelada con menos de 3 horas de anticipación — genera honorario al profesor</p>
                 </div>
               )}
 
