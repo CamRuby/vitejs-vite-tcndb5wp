@@ -619,7 +619,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       try {
         const { data: cd } = await supabase
           .from('clases')
-          .select('id, fecha, hora, duracion_min, numero_en_plan, estado, revision_pendiente, inasistencia_perdonada, es_cortesia, cancelado_por_academia, contrato_id, profesores(nombre), salones(sedes(nombre)), contratos(instrumentos(nombre))')
+          .select('id, fecha, hora, duracion_min, numero_en_plan, estado, revision_pendiente, inasistencia_perdonada, es_cortesia, cancelado_por_academia, observaciones, observaciones_admin, contrato_id, profesores(nombre), salones(sedes(nombre)), contratos(instrumentos(nombre))')
           .in('contrato_id', ids)
           .order('fecha', { ascending: true })
           .order('hora', { ascending: true })
@@ -631,7 +631,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
           .in('contrato_id', ids)
           .order('fecha', { ascending: true })
           .order('hora', { ascending: true })
-        clasesData = (cd || []).map((c: any) => ({ ...c, revision_pendiente: false, inasistencia_perdonada: false, es_cortesia: false, cancelado_por_academia: false }))
+        clasesData = (cd || []).map((c: any) => ({ ...c, revision_pendiente: false, inasistencia_perdonada: false, es_cortesia: false, cancelado_por_academia: false, observaciones: null, observaciones_admin: null }))
       }
       setClases(clasesData)
     } else { setClases([]) }
@@ -862,14 +862,25 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     cargarVista(vistaActual)
   }
 
-  // ── Marcar clase como cortesía: no suma al conteo, el plan lo otorga sin costo para el cliente ──
-  async function marcarCortesia(claseId: string, contratoId: string) {
-    await supabase.from('clases').update({ es_cortesia: true }).eq('id', claseId)
+  // ── Modal de cortesía ──
+  const [modalCortesia, setModalCortesia] = useState<{ claseId: string; contratoId: string; clase: any } | null>(null)
+  const [justificacionCortesia, setJustificacionCortesia] = useState('')
+  const [guardandoCortesia, setGuardandoCortesia] = useState(false)
+
+  // ── Marcar clase como cortesía: requiere justificación guardada en observaciones_admin ──
+  async function marcarCortesia(claseId: string, contratoId: string, justificacion: string) {
+    await supabase.from('clases').update({
+      es_cortesia: true,
+      observaciones_admin: justificacion.trim() || null
+    }).eq('id', claseId)
     const plan = planes.find((p: any) => p.id === contratoId)
     if (plan) {
       const nuevasCT = Math.max((plan.clases_tomadas || 0) - 1, 0)
       await supabase.from('contratos').update({ clases_tomadas: nuevasCT }).eq('id', contratoId)
     }
+    setModalCortesia(null)
+    setJustificacionCortesia('')
+    setGuardandoCortesia(false)
     await cargarDatosCliente(clienteSeleccionado)
     cargarVista(vistaActual)
   }
@@ -1325,15 +1336,27 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                                     </span>
                                   </td>
                                   <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                                    {/* Perdón vía cortesía: si el cliente no asistió, la asistente puede marcar la siguiente clase dada como cortesía */}
-                                    {/* Cortesía: solo en clases dadas que aún no son cortesía */}
-                                    {c.estado === 'dada' && !c.es_cortesia && (
-                                      <button
-                                        onClick={() => marcarCortesia(c.id, p.id)}
-                                        style={{ padding: '3px 10px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>
-                                        🎁 Dar cortesía
-                                      </button>
-                                    )}
+                                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', alignItems: 'center' }}>
+                                      {/* Ver: con borde rojo si hay observaciones_admin */}
+                                      {(c.observaciones || c.observaciones_admin) && (
+                                        <button
+                                          onClick={() => setModalCortesia({ claseId: c.id, contratoId: p.id, clase: c })}
+                                          style={{ padding: '3px 10px', background: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px',
+                                            border: c.observaciones_admin ? '1.5px solid #dc2626' : `1px solid ${TEAL_MID}`,
+                                            color: c.observaciones_admin ? '#dc2626' : TEAL,
+                                            fontWeight: c.observaciones_admin ? '600' : '400' }}>
+                                          Ver
+                                        </button>
+                                      )}
+                                      {/* Dar cortesía: abre modal de justificación */}
+                                      {c.estado === 'dada' && !c.es_cortesia && (
+                                        <button
+                                          onClick={() => { setModalCortesia({ claseId: c.id, contratoId: p.id, clase: c }); setJustificacionCortesia('') }}
+                                          style={{ padding: '3px 10px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                                          🎁 Dar cortesía
+                                        </button>
+                                      )}
+                                    </div>
                                   </td>
                                 </tr>
                               )
@@ -1532,6 +1555,94 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       )}
 
       {modalHistorial && <ModalHistorialPlanes planes={planesArchivados} onCerrar={() => setModalHistorial(false)} />}
+
+      {/* ── Modal de clase: ver resumen + observaciones + opción cortesía ── */}
+      {modalCortesia && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1300 }}>
+          <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+            <div style={{ background: TEAL, padding: '16px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div>
+                <h3 style={{ margin: 0, color: 'white', fontSize: '16px' }}>Detalle de la clase</h3>
+                <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
+                  {modalCortesia.clase.fecha} · {(() => { const [h,m] = (modalCortesia.clase.hora||'00:00').substring(0,5).split(':').map(Number); const ampm = h>=12?'pm':'am'; return `${h%12||12}:${String(m).padStart(2,'0')} ${ampm}` })()}
+                </p>
+              </div>
+              <button onClick={() => { setModalCortesia(null); setJustificacionCortesia('') }}
+                style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '5px 11px', cursor: 'pointer' }}>✕</button>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, padding: '18px 22px' }}>
+              {/* Info básica */}
+              <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#555', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <span>👤 {modalCortesia.clase.profesores?.nombre || '—'}</span>
+                <span>🏫 {modalCortesia.clase.salones?.sedes?.nombre || '—'}</span>
+                <span>⏱ {modalCortesia.clase.duracion_min} min</span>
+                {modalCortesia.clase.es_cortesia && <span style={{ color: '#0369a1', fontWeight: '700' }}>🎁 Cortesía</span>}
+              </div>
+
+              {/* Resumen del profesor */}
+              <div style={{ marginBottom: '16px' }}>
+                <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: '700', color: '#333' }}>Resumen de la clase</p>
+                {modalCortesia.clase.observaciones
+                  ? <div style={{ background: '#fafbfc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#333', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
+                      {modalCortesia.clase.observaciones}
+                    </div>
+                  : <p style={{ margin: 0, fontSize: '13px', color: '#aaa', fontStyle: 'italic', padding: '10px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>Sin resumen registrado</p>
+                }
+              </div>
+
+              {/* Observaciones administrativas / justificación cortesía */}
+              <div style={{ marginBottom: modalCortesia.clase.es_cortesia ? '0' : '16px' }}>
+                <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: '700', color: '#333' }}>
+                  Observaciones administrativas
+                  {modalCortesia.clase.observaciones_admin && <span style={{ marginLeft: '6px', fontSize: '11px', color: '#dc2626', background: '#fee2e2', padding: '1px 7px', borderRadius: '10px', fontWeight: '600' }}>🔔 Tiene nota</span>}
+                </p>
+                {modalCortesia.clase.observaciones_admin
+                  ? <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 12px', fontSize: '13px', color: '#333', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
+                      {modalCortesia.clase.observaciones_admin}
+                    </div>
+                  : <p style={{ margin: 0, fontSize: '13px', color: '#aaa', fontStyle: 'italic', padding: '10px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>Sin observaciones</p>
+                }
+              </div>
+
+              {/* Sección dar cortesía — solo si la clase es dada y aún no es cortesía */}
+              {modalCortesia.clase.estado === 'dada' && !modalCortesia.clase.es_cortesia && (
+                <div style={{ background: '#e0f2fe', borderRadius: '12px', padding: '14px 16px', marginTop: '16px', border: '1px solid #bae6fd' }}>
+                  <p style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: '700', color: '#0369a1' }}>🎁 Dar esta clase como cortesía</p>
+                  <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#0c4a6e' }}>
+                    La clase no sumará al plan del cliente. Justifica el motivo para tener registro histórico.
+                  </p>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#0369a1', marginBottom: '6px' }}>
+                    Motivo / justificación *
+                  </label>
+                  <textarea
+                    value={justificacionCortesia}
+                    onChange={e => setJustificacionCortesia(e.target.value)}
+                    placeholder="Ej: El cliente cumplió años y la academia le obsequió esta clase..."
+                    rows={3}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid #bae6fd', borderRadius: '8px', fontSize: '13px', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.5', boxSizing: 'border-box', background: 'white' }}
+                  />
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                    <button
+                      onClick={async () => {
+                        if (!justificacionCortesia.trim()) return
+                        setGuardandoCortesia(true)
+                        await marcarCortesia(modalCortesia.claseId, modalCortesia.contratoId, justificacionCortesia)
+                      }}
+                      disabled={!justificacionCortesia.trim() || guardandoCortesia}
+                      style={{ flex: 1, padding: '9px', background: justificacionCortesia.trim() ? '#0369a1' : '#cbd5e1', color: 'white', border: 'none', borderRadius: '8px', cursor: justificacionCortesia.trim() ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: '600' }}>
+                      {guardandoCortesia ? 'Guardando...' : '✓ Confirmar cortesía'}
+                    </button>
+                    <button onClick={() => { setModalCortesia(null); setJustificacionCortesia('') }}
+                      style={{ padding: '9px 16px', background: 'white', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {modalAbono && (
         <ModalAbono
