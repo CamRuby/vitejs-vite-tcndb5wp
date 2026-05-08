@@ -1197,8 +1197,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
 
             let conteoClases = 0
             const clasesConConteo = clasesDelPlanAsc.map((c: any) => {
-              // dada (no cortesía) + cancelada por inasistencia cliente (revision_pendiente) sin perdonar = suma al plan
-              const esInasistenciaCliente = c.estado === 'cancelada' && c.revision_pendiente
+              // dada (no cortesía) + inasistencia cliente (revision_pendiente, nuevo=cancelada, viejo=confirmada) sin perdonar = suma al plan
+              const esInasistenciaCliente = c.revision_pendiente && (c.estado === 'cancelada' || c.estado === 'confirmada')
               const cuentaEnPlan = (c.estado === 'dada' && !c.es_cortesia) || (esInasistenciaCliente && !c.inasistencia_perdonada)
               if (cuentaEnPlan) conteoClases++
               return { ...c, numeroConteo: cuentaEnPlan ? conteoClases : null }
@@ -1216,10 +1216,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                       <p style={{ margin: 0, fontWeight: '600', fontSize: '16px', color: '#1a1a1a' }}>{p.instrumentos?.nombre || '—'}</p>
                       <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', background: est.bg, color: est.color, fontWeight: '600' }}>{p.estado || 'activo'}</span>
-                      {/* Badge si ya se usó perdón */}
-                      {p.inasistencia_perdonada_usada && (
-                        <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', background: '#f0fdf4', color: '#16a34a', fontWeight: '600', border: '1px solid #bbf7d0' }}>✓ Perdón usado</span>
-                      )}
+                      {/* Perdón: ahora se gestiona dando cortesía en la siguiente clase */}
                     </div>
                     <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>👤 {p.profesores?.nombre || '—'} · 🏫 {p.sedes?.nombre || '—'}</p>
                     <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>📅 {p.fecha_inicio || '—'} · {p.duracion_min} min/clase</p>
@@ -1290,7 +1287,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                             {clasesDelPlan.map((c: any, i) => {
                               const esPerdonada = c.estado === 'cancelada' && c.inasistencia_perdonada
                               const esCanceladaAcademia = c.estado === 'cancelada' && c.cancelado_por_academia
-                              const esInasistencia = c.estado === 'cancelada' && c.revision_pendiente && !c.inasistencia_perdonada
+                              const esInasistencia = c.revision_pendiente && !c.inasistencia_perdonada && (c.estado === 'cancelada' || c.estado === 'confirmada')
                               const esCortesia = c.es_cortesia
                               const estadoColor =
                                 esCortesia        ? { bg: '#e0f2fe', color: '#0369a1' } :
@@ -1328,14 +1325,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                                     </span>
                                   </td>
                                   <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                                    {/* Perdonar: solo inasistencias del cliente (no academia) */}
-                                    {c.estado === 'cancelada' && c.revision_pendiente && !c.inasistencia_perdonada && (
-                                      <button
-                                        onClick={() => perdonarInasistencia(c.id, p.id)}
-                                        style={{ padding: '3px 10px', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>
-                                        Perdonar
-                                      </button>
-                                    )}
+                                    {/* Perdón vía cortesía: si el cliente no asistió, la asistente puede marcar la siguiente clase dada como cortesía */}
                                     {/* Cortesía: solo en clases dadas que aún no son cortesía */}
                                     {c.estado === 'dada' && !c.es_cortesia && (
                                       <button
