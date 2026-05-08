@@ -619,7 +619,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       try {
         const { data: cd } = await supabase
           .from('clases')
-          .select('id, fecha, hora, duracion_min, numero_en_plan, estado, inasistencia_perdonada, es_cortesia, cancelado_por_academia, contrato_id, profesores(nombre), salones(sedes(nombre)), contratos(instrumentos(nombre))')
+          .select('id, fecha, hora, duracion_min, numero_en_plan, estado, revision_pendiente, inasistencia_perdonada, es_cortesia, cancelado_por_academia, contrato_id, profesores(nombre), salones(sedes(nombre)), contratos(instrumentos(nombre))')
           .in('contrato_id', ids)
           .order('fecha', { ascending: true })
           .order('hora', { ascending: true })
@@ -631,7 +631,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
           .in('contrato_id', ids)
           .order('fecha', { ascending: true })
           .order('hora', { ascending: true })
-        clasesData = (cd || []).map((c: any) => ({ ...c, inasistencia_perdonada: false, es_cortesia: false, cancelado_por_academia: false }))
+        clasesData = (cd || []).map((c: any) => ({ ...c, revision_pendiente: false, inasistencia_perdonada: false, es_cortesia: false, cancelado_por_academia: false }))
       }
       setClases(clasesData)
     } else { setClases([]) }
@@ -1197,7 +1197,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
 
             let conteoClases = 0
             const clasesConConteo = clasesDelPlanAsc.map((c: any) => {
-              const cuentaEnPlan = (c.estado === 'dada' && !c.es_cortesia) || (c.estado === 'cancelada' && !c.inasistencia_perdonada && !c.cancelado_por_academia)
+              // dada (no cortesía) + cancelada por inasistencia cliente (revision_pendiente) sin perdonar = suma al plan
+              const esInasistenciaCliente = c.estado === 'cancelada' && c.revision_pendiente
+              const cuentaEnPlan = (c.estado === 'dada' && !c.es_cortesia) || (esInasistenciaCliente && !c.inasistencia_perdonada)
               if (cuentaEnPlan) conteoClases++
               return { ...c, numeroConteo: cuentaEnPlan ? conteoClases : null }
             })
@@ -1288,18 +1290,19 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                             {clasesDelPlan.map((c: any, i) => {
                               const esPerdonada = c.estado === 'cancelada' && c.inasistencia_perdonada
                               const esCanceladaAcademia = c.estado === 'cancelada' && c.cancelado_por_academia
+                              const esInasistencia = c.estado === 'cancelada' && c.revision_pendiente && !c.inasistencia_perdonada
                               const esCortesia = c.es_cortesia
                               const estadoColor =
-                                esCortesia                ? { bg: '#e0f2fe', color: '#0369a1' } :
-                                c.estado === 'dada'       ? { bg: '#fefce8', color: '#854d0e' } :
-                                esPerdonada               ? { bg: '#f0fdf4', color: '#16a34a' } :
-                                esCanceladaAcademia       ? { bg: '#f1f5f9', color: '#64748b' } :
-                                c.estado === 'cancelada'  ? { bg: '#fee2e2', color: '#991b1b' } :
+                                esCortesia        ? { bg: '#e0f2fe', color: '#0369a1' } :
+                                c.estado === 'dada' ? { bg: '#fefce8', color: '#854d0e' } :
+                                esInasistencia    ? { bg: '#fff7ed', color: '#c2410c' } :
+                                esCanceladaAcademia ? { bg: '#f1f5f9', color: '#64748b' } :
+                                c.estado === 'cancelada' ? { bg: '#fee2e2', color: '#991b1b' } :
                                 c.estado === 'confirmada' ? { bg: '#dcfce7', color: '#166534' } :
                                                             { bg: TEAL_LIGHT, color: TEAL }
                               const etiquetaEstado =
                                 esCortesia          ? '🎁 Cortesía' :
-                                esPerdonada         ? '✓ Perdonada' :
+                                esInasistencia      ? 'Inasistencia' :
                                 esCanceladaAcademia ? 'Cancelada (academia)' :
                                 c.estado
 
@@ -1326,7 +1329,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                                   </td>
                                   <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                                     {/* Perdonar: solo inasistencias del cliente (no academia) */}
-                                    {c.estado === 'cancelada' && !c.inasistencia_perdonada && !c.cancelado_por_academia && (
+                                    {c.estado === 'cancelada' && c.revision_pendiente && !c.inasistencia_perdonada && (
                                       <button
                                         onClick={() => perdonarInasistencia(c.id, p.id)}
                                         style={{ padding: '3px 10px', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>
