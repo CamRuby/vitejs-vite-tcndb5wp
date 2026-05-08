@@ -187,14 +187,16 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar,
     if (!fp.sede_id)        { setError('Selecciona una sede'); return }
     if (!fp.total_clases || Number(fp.total_clases) < 1) { setError('Ingresa el número de clases'); return }
     setGuardando(true); setError('')
-    await onGuardar({
+    const payload: any = {
       tipo_plan: 'regular', instrumento_id: fp.instrumento_id, profesor_id: fp.profesor_id,
       sede_id: fp.sede_id, total_clases: Number(fp.total_clases),
       clases_tomadas: esNuevo ? 0 : parseFloat(String(fp.clases_tomadas)),
       valor_plan: fp.valor_plan !== '' ? Number(fp.valor_plan) : null,
       duracion_min: Number(fp.duracion_min), fecha_inicio: fp.fecha_inicio, estado: fp.estado,
-      inasistencia_perdonada_usada: fp.inasistencia_perdonada_usada,
-    }, esRenovacion ? undefined : plan?.id)
+    }
+    // Solo incluir el campo de perdón al editar (no en planes nuevos)
+    if (!esNuevo) payload.inasistencia_perdonada_usada = fp.inasistencia_perdonada_usada
+    await onGuardar(payload, esRenovacion ? undefined : plan?.id)
     setGuardando(false)
   }
 
@@ -583,8 +585,17 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     const { data: talleresData } = await supabase.from('taller_inscripciones').select('id, mes, valor_pagado, estado, taller_id, talleres(nombre, dia_semana, hora, duracion_min, salones(nombre, sedes(nombre)))').eq('cliente_id', c.id).order('mes', { ascending: false })
     setInscripcionesTalleres(talleresData || [])
 
-    // ── Incluir inasistencia_perdonada_usada para el campo de migración ──
-    const { data: planesData } = await supabase.from('contratos').select('id, total_clases, clases_tomadas, valor_plan, tipo_plan, estado, fecha_inicio, duracion_min, instrumento_id, profesor_id, sede_id, inasistencia_perdonada_usada, instrumentos(nombre), profesores(nombre), sedes(nombre)').eq('cliente_id', c.id).order('fecha_inicio', { ascending: false })
+    const { data: planesData } = await supabase.from('contratos').select('id, total_clases, clases_tomadas, valor_plan, tipo_plan, estado, fecha_inicio, duracion_min, instrumento_id, profesor_id, sede_id, instrumento_id, instrumentos(nombre), profesores(nombre), sedes(nombre)').eq('cliente_id', c.id).order('fecha_inicio', { ascending: false })
+    // Cargar campo de migración por separado para que no rompa si aún no existe en el schema cache
+    if (planesData && planesData.length > 0) {
+      try {
+        const planIds2 = planesData.map((p: any) => p.id)
+        const { data: perdonData } = await supabase.from('contratos').select('id, inasistencia_perdonada_usada').in('id', planIds2)
+        const perdonMap: Record<string, boolean> = {}
+        ;(perdonData || []).forEach((r: any) => { perdonMap[r.id] = r.inasistencia_perdonada_usada || false })
+        planesData.forEach((p: any) => { p.inasistencia_perdonada_usada = perdonMap[p.id] || false })
+      } catch { planesData.forEach((p: any) => { p.inasistencia_perdonada_usada = false }) }
+    }
     setPlanes(planesData || [])
 
     const planIds = (planesData || []).map((p: any) => p.id)
@@ -603,14 +614,26 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     const { data: ctList } = await supabase.from('contratos').select('id').eq('cliente_id', c.id)
     const ids = (ctList || []).map((ct: any) => ct.id)
     if (ids.length > 0) {
-      // ── Historial por plan: sin límite, orden ascendente, incluye inasistencia_perdonada y contrato_id ──
-      const { data: clasesData } = await supabase
-        .from('clases')
-        .select('id, fecha, hora, duracion_min, numero_en_plan, estado, inasistencia_perdonada, contrato_id, profesores(nombre), salones(sedes(nombre)), contratos(instrumentos(nombre))')
-        .in('contrato_id', ids)
-        .order('fecha', { ascending: true })
-        .order('hora', { ascending: true })
-      setClases(clasesData || [])
+      // ── Historial por plan: orden ascendente, incluye contrato_id ──
+      let clasesData: any[] = []
+      try {
+        const { data: cd } = await supabase
+          .from('clases')
+          .select('id, fecha, hora, duracion_min, numero_en_plan, estado, inasistencia_perdonada, contrato_id, profesores(nombre), salones(sedes(nombre)), contratos(instrumentos(nombre))')
+          .in('contrato_id', ids)
+          .order('fecha', { ascending: true })
+          .order('hora', { ascending: true })
+        clasesData = cd || []
+      } catch {
+        const { data: cd } = await supabase
+          .from('clases')
+          .select('id, fecha, hora, duracion_min, numero_en_plan, estado, contrato_id, profesores(nombre), salones(sedes(nombre)), contratos(instrumentos(nombre))')
+          .in('contrato_id', ids)
+          .order('fecha', { ascending: true })
+          .order('hora', { ascending: true })
+        clasesData = (cd || []).map((c: any) => ({ ...c, inasistencia_perdonada: false }))
+      }
+      setClases(clasesData)
     } else { setClases([]) }
   }
 
