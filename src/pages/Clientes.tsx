@@ -1289,7 +1289,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr style={{ background: TEAL_LIGHT }}>
-                              {['#', 'Fecha', 'Hora', 'Profesor', 'Sede', 'Estado', 'Acción'].map(h => (
+                              {['#', 'Fecha', 'Hora', 'Profesor', 'Sede', 'Estado', 'Resumen'].map(h => (
                                 <th key={h} style={{ padding: '8px 12px', textAlign: 'center', fontSize: '11px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }}>{h}</th>
                               ))}
                             </tr>
@@ -1337,25 +1337,17 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                                   </td>
                                   <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                                     <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', alignItems: 'center' }}>
-                                      {/* Ver: con borde rojo si hay observaciones_admin */}
-                                      {(c.observaciones || c.observaciones_admin) && (
-                                        <button
-                                          onClick={() => setModalCortesia({ claseId: c.id, contratoId: p.id, clase: c })}
-                                          style={{ padding: '3px 10px', background: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px',
-                                            border: c.observaciones_admin ? '1.5px solid #dc2626' : `1px solid ${TEAL_MID}`,
-                                            color: c.observaciones_admin ? '#dc2626' : TEAL,
-                                            fontWeight: c.observaciones_admin ? '600' : '400' }}>
-                                          Ver
-                                        </button>
-                                      )}
-                                      {/* Dar cortesía: abre modal de justificación */}
-                                      {c.estado === 'dada' && !c.es_cortesia && (
-                                        <button
-                                          onClick={() => { setModalCortesia({ claseId: c.id, contratoId: p.id, clase: c }); setJustificacionCortesia('') }}
-                                          style={{ padding: '3px 10px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>
-                                          🎁 Dar cortesía
-                                        </button>
-                                      )}
+                                      {/* Ícono de resumen */}
+                                      {c.observaciones && <span title="Tiene resumen" style={{ fontSize: '14px' }}>📝</span>}
+                                      {/* Ver — siempre visible, rojo si hay obs admin */}
+                                      <button
+                                        onClick={() => { setModalCortesia({ claseId: c.id, contratoId: p.id, clase: c }); setJustificacionCortesia('') }}
+                                        style={{ padding: '3px 10px', background: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px',
+                                          border: c.observaciones_admin ? '1.5px solid #dc2626' : `1px solid ${TEAL_MID}`,
+                                          color: c.observaciones_admin ? '#dc2626' : TEAL,
+                                          fontWeight: c.observaciones_admin ? '600' : '400' }}>
+                                        Ver
+                                      </button>
                                     </div>
                                   </td>
                                 </tr>
