@@ -248,7 +248,7 @@ export default function Horarios() {
     const { data } = await supabase
       .from('clases_con_numero')
       .select(`
-        id, fecha, hora, duracion_min, estado, es_cortesia, patron_id, recurrente, revision_pendiente, numero_calculado, modalidad,
+        id, fecha, hora, duracion_min, estado, es_cortesia, patron_id, recurrente, cancelado_por_academia, numero_calculado, modalidad,
         contratos (id, clases_tomadas, total_clases, sede_id, duracion_min, clientes (id, nombre), instrumentos (nombre)),
         profesores (id, nombre),
         salones (id, nombre, sede_id)
@@ -942,7 +942,7 @@ export default function Horarios() {
                       )}
 
                       {mainClass && !taller && (() => {
-                        const col2 = getColorEstado(mainClass.es_cortesia ? 'dada' : mainClass.estado, mainClass.revision_pendiente)
+                        const col2 = getColorEstado(mainClass.es_cortesia ? 'dada' : mainClass.estado, mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia)
                         // número calculado en tiempo real desde la view de Supabase
                         const numPlan = mainClass.contratos?.total_clases && mainClass.numero_calculado
                           ? `${mainClass.numero_calculado}/${mainClass.contratos.total_clases}`
@@ -965,7 +965,7 @@ export default function Horarios() {
                                   <span style={{ fontSize: '12px', fontWeight: '700', opacity: 0.9, whiteSpace: 'nowrap' }}>{numPlan}</span>
                                 )}
                                 {mainClass.recurrente && <span style={{ fontSize: '9px' }}>🔁</span>}
-                                {mainClass.revision_pendiente && <span style={{ fontSize: '9px' }}>⚠️</span>}
+                                {mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && <span style={{ fontSize: '9px' }}>⚠️</span>}
                               </div>
                             </div>
                             {vista === 'dia' && mainClass.profesores?.nombre && (
@@ -1364,7 +1364,7 @@ export default function Horarios() {
             </div>
             <div style={{ padding: '20px 24px', maxHeight: '75vh', overflowY: 'auto' }}>
 
-              {claseEditando.revision_pendiente ? (
+              {claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia ? (
                 <div style={{ background: TEAL_LIGHT, borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', fontSize: '12px', color: '#555', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
                   <span>👤 {claseEditando.contratos?.clientes?.nombre}</span>
                   <span>🎵 {claseEditando.contratos?.instrumentos?.nombre}</span>
@@ -1389,7 +1389,7 @@ export default function Horarios() {
                 </div>
               )}
 
-              {!esBloqueada(claseEditando) && !claseEditando.revision_pendiente && (
+              {!esBloqueada(claseEditando) && !(claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia) && (
                 <>
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Estado</label>
@@ -1480,7 +1480,7 @@ export default function Horarios() {
               )}
 
               {/* ── FIX 3: Inasistencia — info solo, sin panel de resolución manual ── */}
-              {claseEditando.revision_pendiente && (
+              {claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia && (
                 <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
                   <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#c2410c' }}>
                     ⚠️ Inasistencia registrada — ya suma al plan del cliente
@@ -1493,7 +1493,7 @@ export default function Horarios() {
 
               {editError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{editError}</p>}
 
-              {!esBloqueada(claseEditando) && !claseEditando.revision_pendiente && (
+              {!esBloqueada(claseEditando) && !(claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia) && (
                 claseEditando.recurrente && claseEditando.patron_id && hayEdicionReal ? (
                   <>
                     <p style={{ fontSize: '13px', color: '#555', marginBottom: '8px', fontWeight: '500' }}>¿A qué clases aplica el cambio?</p>
@@ -1526,7 +1526,7 @@ export default function Horarios() {
                         : `${claseEditando.contratos?.clientes?.nombre} · ${claseEditando.fecha} · ${claseEditando.hora?.substring(0, 5)}`}
                   </p>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {!esBloqueada(claseEditando) && claseEditando.recurrente && claseEditando.patron_id ? (
+                    {!esBloqueada(claseEditando) && !(claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia) && claseEditando.recurrente && claseEditando.patron_id ? (
                       <>
                         <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Borrar solo esta</button>
                         <button onClick={() => borrarClase('futuras')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#991b1b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Borrar esta y siguientes</button>
