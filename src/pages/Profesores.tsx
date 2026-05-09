@@ -97,8 +97,8 @@ export default function Profesores() {
     let result: any[] = []
     try {
       const { data: d, error } = await supabase
-        .from('clases')
-        .select('id, fecha, hora, duracion_min, estado, revision_pendiente, observaciones, observaciones_admin, honorario_valor, cancelado_tarde, cancelado_por_academia, numero_en_plan, contratos(clientes(nombre), instrumentos(nombre), total_clases), salones(nombre, sedes(nombre))')
+        .from('clases_con_numero')
+        .select('id, fecha, hora, duracion_min, estado, es_cortesia, revision_pendiente, observaciones, observaciones_admin, honorario_valor, cancelado_tarde, cancelado_por_academia, numero_calculado, contratos(clientes(nombre), instrumentos(nombre), total_clases), salones(nombre, sedes(nombre))')
         .eq('profesor_id', p.id)
         .gte('fecha', fi)
         .lte('fecha', ff)
@@ -110,8 +110,8 @@ export default function Profesores() {
     } catch {
       // Fallback sin columnas nuevas (aún no migradas en Supabase)
       const { data: d } = await supabase
-        .from('clases')
-        .select('id, fecha, hora, duracion_min, estado, revision_pendiente, observaciones, honorario_valor, numero_en_plan, contratos(clientes(nombre), instrumentos(nombre), total_clases), salones(nombre, sedes(nombre))')
+        .from('clases_con_numero')
+        .select('id, fecha, hora, duracion_min, estado, es_cortesia, revision_pendiente, observaciones, honorario_valor, numero_calculado, contratos(clientes(nombre), instrumentos(nombre), total_clases), salones(nombre, sedes(nombre))')
         .eq('profesor_id', p.id)
         .gte('fecha', fi)
         .lte('fecha', ff)
@@ -527,9 +527,9 @@ export default function Profesores() {
                           <td style={tdS}>{c.hora?.substring(0, 5) || '—'}</td>
                           <td style={{ ...tdS, fontWeight: '500', textAlign: 'center' }}>
                             {c.contratos?.clientes?.nombre || '—'}
-                            {c.estado === 'dada' && c.numero_en_plan && c.contratos?.total_clases && (
+                            {!c.es_cortesia && c.numero_calculado && c.contratos?.total_clases && (
                               <span style={{ marginLeft: '6px', fontSize: '11px', color: TEAL, fontWeight: '700' }}>
-                                ({c.numero_en_plan}/{c.contratos.total_clases})
+                                ({c.numero_calculado}/{c.contratos.total_clases})
                               </span>
                             )}
                             {c.revision_pendiente && <span style={{ marginLeft: '6px', fontSize: '11px', background: '#fff7ed', color: '#c2410c', padding: '1px 6px', borderRadius: '10px' }}>Inasistencia</span>}
