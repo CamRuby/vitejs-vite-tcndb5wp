@@ -869,14 +869,27 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
 
   // ── Marcar clase como cortesía: requiere justificación guardada en observaciones_admin ──
   async function marcarCortesia(claseId: string, contratoId: string, justificacion: string) {
+    // Quitar numero_en_plan a la clase cortesía
     await supabase.from('clases').update({
       es_cortesia: true,
+      numero_en_plan: null,
       observaciones_admin: justificacion.trim() || null
     }).eq('id', claseId)
     const plan = planes.find((p: any) => p.id === contratoId)
     if (plan) {
       const nuevasCT = Math.max((plan.clases_tomadas || 0) - 1, 0)
       await supabase.from('contratos').update({ clases_tomadas: nuevasCT }).eq('id', contratoId)
+      // Recalcular numero_en_plan de todas las clases programadas/confirmadas del contrato
+      const proximoNumero = Math.floor(nuevasCT) + 1
+      const { data: clasesFuturas } = await supabase.from('clases')
+        .select('id')
+        .eq('contrato_id', contratoId)
+        .in('estado', ['programada', 'confirmada'])
+        .order('fecha').order('hora')
+      if (clasesFuturas && clasesFuturas.length > 0) {
+        const futIds = clasesFuturas.map((c: any) => c.id)
+        await supabase.from('clases').update({ numero_en_plan: proximoNumero }).in('id', futIds)
+      }
     }
     setModalCortesia(null)
     setJustificacionCortesia('')
