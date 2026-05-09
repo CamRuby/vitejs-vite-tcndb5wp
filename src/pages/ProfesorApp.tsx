@@ -79,7 +79,7 @@ function minutosParaClase(fecha: string, hora: string): number {
 
 const SELECT_CLASES = [
   'id', 'fecha', 'hora', 'duracion_min', 'estado', 'modalidad',
-  'revision_pendiente', 'observaciones', 'contrato_id', 'honorario_valor', 'motivo_cancelacion',
+  'observaciones', 'contrato_id', 'honorario_valor', 'motivo_cancelacion',
   'contratos(clientes(nombre, nombres, apellidos), instrumentos(nombre), duracion_min, clases_tomadas)',
   'salones(nombre, sedes(nombre))'
 ].join(', ')
@@ -175,8 +175,9 @@ export default function ProfesorApp() {
   }
 
   function getHonorario(c: any): number | 'pendiente' {
-    if (c.estado !== 'dada' && !c.revision_pendiente) return 0
-    if (c.revision_pendiente && c.honorario_valor === null) return 'pendiente'
+    const esInasistencia = c.estado === 'cancelada' && !c.cancelado_por_academia
+    if (c.estado !== 'dada' && !esInasistencia) return 0
+    if (esInasistencia && c.honorario_valor === null) return 'pendiente'
     if (c.honorario_valor !== null && c.honorario_valor !== undefined) return Number(c.honorario_valor)
     if (c.estado !== 'dada') return 0
     const modalidad = (c.modalidad || 'presencial').toLowerCase()
@@ -262,7 +263,7 @@ export default function ProfesorApp() {
             estado: 'confirmada', esTaller: true,
             tallerRealId: t.id, nombreTaller: t.nombre,
             salones: t.salones, contratos: null,
-            revision_pendiente: false, observaciones: null,
+            observaciones: null,
             honorario_valor: null, modalidad: null,
           })
         }
@@ -282,7 +283,7 @@ export default function ProfesorApp() {
     const ul = new Date(parseInt(a), parseInt(m), 0).getDate()
     const ff = `${mes}-${String(ul).padStart(2,'0')}`
 
-    // Historial: dadas + canceladas (incluye inasistencias con revision_pendiente)
+    // Historial: dadas + canceladas (inasistencias = cancelada + !cancelado_por_academia)
     const { data } = await supabase.from('clases').select(SELECT_CLASES)
       .eq('profesor_id', profesor.id)
       .gte('fecha', fi).lte('fecha', ff)
@@ -344,10 +345,10 @@ export default function ProfesorApp() {
     const modalidad = (claseActiva.modalidad || 'presencial').toLowerCase()
     const baseHon   = getValorTarifa(Number(claseActiva.duracion_min), modalidad)
     const honorario = Math.round(baseHon * pct / 100)
-    // ── FIX 2: estado → 'cancelada' + revision_pendiente como flag de inasistencia cliente ──
+    // Inasistencia: estado='cancelada' + cancelado_por_academia=false
     await supabase.from('clases').update({
       estado: 'cancelada',
-      revision_pendiente: true,
+      cancelado_por_academia: false,
       honorario_valor: honorario,
       observaciones: resumen.trim() || claseActiva.observaciones || null
     }).eq('id', claseActiva.id)
@@ -451,12 +452,12 @@ export default function ProfesorApp() {
   function exportarPDF() {
     const [anio, mesNum] = mes.split('-')
     const mesLabel = `${MESES_NOMBRE[parseInt(mesNum)-1]} ${anio}`
-    const clasesDadas = clases.filter(c => c.estado === 'dada' || c.revision_pendiente)
+    const clasesDadas = clases.filter(c => c.estado === 'dada' || (c.estado === 'cancelada' && !c.cancelado_por_academia))
     const totalHon = clasesDadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
     const filas = clasesDadas.map(c => {
       const hon = getHonorario(c)
       const honLabel = hon === 'pendiente' ? '<span style="color:#c2410c;font-weight:700">Pendiente</span>' : `$${Number(hon).toLocaleString('es-CO')}`
-      const tipoLabel = c.revision_pendiente ? 'Inasistencia' : 'Dada'
+      const tipoLabel = (c.estado === 'cancelada' && !c.cancelado_por_academia) ? 'Inasistencia' : 'Dada'
       return `
         <tr>
           <td>${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}</td>
@@ -533,10 +534,10 @@ export default function ProfesorApp() {
   )
 
   const dadas           = clases.filter(c => c.estado === 'dada')
-  const pendientesCobro = clases.filter(c => c.revision_pendiente).length
+  const pendientesCobro = clases.filter(c => c.estado === 'cancelada' && !c.cancelado_por_academia).length
   const totalHon        = dadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
-  const hayAtrasadas    = clases.some(c => c.esAtrasada && !c.revision_pendiente)
-  const claseAtrasada   = clases.find(c => c.esAtrasada && !c.revision_pendiente)
+  const hayAtrasadas    = clases.some(c => c.esAtrasada)
+  const claseAtrasada   = clases.find(c => c.esAtrasada)
 
   return (
     <div style={{ position:'fixed', inset:0, background:'#f8fafc', display:'flex', justifyContent:'center' }}>
@@ -833,7 +834,7 @@ export default function ProfesorApp() {
                   </div>
                 </div>
 
-                {claseActiva.revision_pendiente && (
+                {claseActiva.estado === 'cancelada' && !claseActiva.cancelado_por_academia && (
                   <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:'12px', padding:'11px 14px', marginBottom:'18px', fontSize:'13px', color:'#c2410c', fontWeight:'600' }}>
                     ⚠️ Inasistencia registrada
                   </div>
@@ -851,7 +852,7 @@ export default function ProfesorApp() {
                   </div>
                 )}
 
-                {claseActiva.estado === 'confirmada' && !claseActiva.revision_pendiente && vista === 'hoy' && (
+                {claseActiva.estado === 'confirmada' && vista === 'hoy' && (
                   <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
                     <button className="ba" onClick={marcarDada}
                       disabled={guardando || (hayAtrasadas && !!claseActiva.esAtrasada === false)}
@@ -876,7 +877,7 @@ export default function ProfesorApp() {
                   </div>
                 )}
 
-                {(claseActiva.estado === 'dada' || claseActiva.revision_pendiente || claseActiva.estado === 'cancelada') && (
+                {(claseActiva.estado === 'dada' || claseActiva.estado === 'cancelada') && (
                   <>
                     {!claseActiva.observaciones && (
                       <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:'10px', padding:'10px 14px', marginBottom:'12px', fontSize:'13px', color:'#c2410c', fontWeight:'600' }}>
@@ -913,11 +914,12 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
   mostrarFecha: boolean
 }) {
   const TEAL = '#1a8a8a'
-  const badge      = badgeEstado(c.estado, c.revision_pendiente, c.esTaller)
-  const confirmada = c.estado === 'confirmada' && !c.revision_pendiente && !c.esTaller
+  const esInasistencia = c.estado === 'cancelada' && !c.cancelado_por_academia
+  const badge      = badgeEstado(c.estado, esInasistencia, c.esTaller)
+  const confirmada = c.estado === 'confirmada' && !c.esTaller
   const expandido  = resumenExpandido === c.id
   const esProg     = c.estado === 'programada' && !c.esTaller
-  const sinResumen = !c.esTaller && !c.observaciones && (c.estado === 'dada' || c.revision_pendiente)
+  const sinResumen = !c.esTaller && !c.observaciones && (c.estado === 'dada' || (c.estado === 'cancelada' && !c.cancelado_por_academia))
 
   const borderColor = c.esTaller ? '#7c3aed'
     : c.esAtrasada ? '#dc2626'
