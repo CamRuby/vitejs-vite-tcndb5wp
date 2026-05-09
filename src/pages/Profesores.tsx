@@ -98,26 +98,26 @@ export default function Profesores() {
     try {
       const { data: d, error } = await supabase
         .from('clases_con_numero')
-        .select('id, fecha, hora, duracion_min, estado, es_cortesia, revision_pendiente, observaciones, observaciones_admin, honorario_valor, cancelado_tarde, cancelado_por_academia, numero_calculado, contratos(clientes(nombre), instrumentos(nombre), total_clases), salones(nombre, sedes(nombre))')
+        .select('id, fecha, hora, duracion_min, estado, es_cortesia, observaciones, observaciones_admin, honorario_valor, cancelado_tarde, cancelado_por_academia, numero_calculado, contratos(clientes(nombre), instrumentos(nombre), total_clases), salones(nombre, sedes(nombre))')
         .eq('profesor_id', p.id)
         .gte('fecha', fi)
         .lte('fecha', ff)
         .order('fecha', { ascending: false })
       if (error) throw error
       result = (d || []).filter((c: any) =>
-        c.estado === 'dada' || c.estado === 'cancelada' || (c.estado === 'confirmada' && c.revision_pendiente)
+        c.estado === 'dada' || c.estado === 'cancelada'
       )
     } catch {
       // Fallback sin columnas nuevas (aún no migradas en Supabase)
       const { data: d } = await supabase
         .from('clases_con_numero')
-        .select('id, fecha, hora, duracion_min, estado, es_cortesia, revision_pendiente, observaciones, honorario_valor, numero_calculado, contratos(clientes(nombre), instrumentos(nombre), total_clases), salones(nombre, sedes(nombre))')
+        .select('id, fecha, hora, duracion_min, estado, es_cortesia, observaciones, honorario_valor, numero_calculado, contratos(clientes(nombre), instrumentos(nombre), total_clases), salones(nombre, sedes(nombre))')
         .eq('profesor_id', p.id)
         .gte('fecha', fi)
         .lte('fecha', ff)
         .order('fecha', { ascending: false })
       const rawFb = (d || []).filter((c: any) =>
-        c.estado === 'dada' || c.estado === 'cancelada' || (c.estado === 'confirmada' && c.revision_pendiente)
+        c.estado === 'dada' || c.estado === 'cancelada'
       )
       result = rawFb.map((c: any) => ({ ...c, cancelado_tarde: false, cancelado_por_academia: false, observaciones_admin: null }))
     }
@@ -522,7 +522,7 @@ export default function Profesores() {
                       const hon = getHon(c)
                       const pagarHon = c.estado === 'dada' || esTarde
                       return (
-                        <tr key={c.id} style={{ borderTop: '1px solid #f8fafc', background: c.revision_pendiente ? '#fff7ed' : i % 2 === 0 ? 'white' : '#fafbfc' }}>
+                        <tr key={c.id} style={{ borderTop: '1px solid #f8fafc', background: (c.estado === 'cancelada' && !c.cancelado_por_academia) ? '#fff7ed' : i % 2 === 0 ? 'white' : '#fafbfc' }}>
                           <td style={tdS}>{c.fecha}</td>
                           <td style={tdS}>{c.hora?.substring(0, 5) || '—'}</td>
                           <td style={{ ...tdS, fontWeight: '500', textAlign: 'center' }}>
@@ -532,7 +532,7 @@ export default function Profesores() {
                                 ({c.numero_calculado}/{c.contratos.total_clases})
                               </span>
                             )}
-                            {c.revision_pendiente && <span style={{ marginLeft: '6px', fontSize: '11px', background: '#fff7ed', color: '#c2410c', padding: '1px 6px', borderRadius: '10px' }}>Inasistencia</span>}
+                            {(c.estado === 'cancelada' && !c.cancelado_por_academia) && <span style={{ marginLeft: '6px', fontSize: '11px', background: '#fff7ed', color: '#c2410c', padding: '1px 6px', borderRadius: '10px' }}>Inasistencia</span>}
                           </td>
                           <td style={{ ...tdS, textAlign: 'center' }}>{c.duracion_min} min</td>
                           <td style={tdS}>{c.salones?.sedes?.nombre || '—'}</td>
@@ -611,7 +611,7 @@ export default function Profesores() {
                 </div>
               )}
 
-              {claseModal.revision_pendiente && (
+              {claseModal.estado === 'cancelada' && !claseModal.cancelado_por_academia && (
                 <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '10px 12px', marginBottom: '14px', fontSize: '13px', color: '#c2410c' }}>
                   El estudiante no asistió — pendiente de revisión
                 </div>
