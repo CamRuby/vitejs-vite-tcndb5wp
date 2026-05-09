@@ -215,10 +215,10 @@ export default function Profesores() {
     ? clases.filter(c => c.estado === 'programada')
     : clases.filter(c => c.estado !== 'programada')
 
-  const dadas = clases.filter(c => c.estado === 'dada')
+  const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
   // Incluir canceladas tarde en honorarios
   const canceladasTarde = clases.filter(c => c.estado === 'cancelada' && c.cancelado_tarde)
-  const totalHon = [...dadas, ...canceladasTarde].reduce((s, c) => s + getHon(c), 0)
+  const totalHon = [...dadas, ...canceladasTarde].reduce((s, c) => s + getHon(c), 0)  // dadas ya excluye cortesías
   const cnt = {
     programada: clases.filter(c => c.estado === 'programada').length,
     confirmada: clases.filter(c => c.estado === 'confirmada').length,
