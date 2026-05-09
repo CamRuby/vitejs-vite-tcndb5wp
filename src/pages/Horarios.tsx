@@ -246,9 +246,9 @@ export default function Horarios() {
     const fechaInicio = vista === 'semana' ? formatFecha(fechasSemana[0]) : formatFecha(diaSeleccionado)
     const fechaFin = vista === 'semana' ? formatFecha(fechasSemana[5]) : formatFecha(diaSeleccionado)
     const { data } = await supabase
-      .from('clases')
+      .from('clases_con_numero')
       .select(`
-        id, fecha, hora, duracion_min, estado, patron_id, recurrente, revision_pendiente, numero_en_plan, modalidad,
+        id, fecha, hora, duracion_min, estado, es_cortesia, patron_id, recurrente, revision_pendiente, numero_calculado, modalidad,
         contratos (id, clases_tomadas, total_clases, sede_id, duracion_min, clientes (id, nombre), instrumentos (nombre)),
         profesores (id, nombre),
         salones (id, nombre, sede_id)
@@ -686,17 +686,7 @@ export default function Horarios() {
       const updateData: any = { clases_tomadas: clasesTomadas }
       if (totalClases > 0 && clasesTomadas >= totalClases) updateData.estado = 'completado'
       await supabase.from('contratos').update(updateData).eq('id', claseEditando.contratos.id)
-      // ── FIX 2: Recalcular numero_en_plan de clases futuras del mismo contrato ──
-      const proximoNumero = Math.floor(clasesTomadas) + 1
-      const { data: clasesFuturas } = await supabase.from('clases')
-        .select('id')
-        .eq('contrato_id', claseEditando.contratos.id)
-        .in('estado', ['programada', 'confirmada'])
-        .order('fecha').order('hora')
-      if (clasesFuturas && clasesFuturas.length > 0) {
-        const futIds = clasesFuturas.map((c: any) => c.id)
-        await supabase.from('clases').update({ numero_en_plan: proximoNumero }).in('id', futIds)
-      }
+      // numero_en_plan ya no se almacena — se calcula en tiempo real desde clases_con_numero
     }
 
     if (alcance === 'futuras' && claseEditando.patron_id) {
@@ -715,7 +705,7 @@ export default function Horarios() {
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
     } else {
       const { error } = await supabase.from('clases')
-        .update({ hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha, ...(numeroPlan !== undefined ? { numero_en_plan: numeroPlan } : {}) })
+        .update({ hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha })
         .eq('id', claseEditando.id)
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
     }
@@ -952,14 +942,10 @@ export default function Horarios() {
                       )}
 
                       {mainClass && !taller && (() => {
-                        const col2 = getColorEstado(mainClass.estado, mainClass.revision_pendiente)
-                        // ── FIX 1: numPlan — show clases_tomadas+1 for non-dada classes ──
-                        const numPlan = mainClass.contratos?.total_clases
-                          ? mainClass.estado === 'dada' && mainClass.numero_en_plan
-                            ? `${mainClass.numero_en_plan}/${mainClass.contratos.total_clases}`
-                            : mainClass.estado === 'dada'
-                              ? `${Math.round(mainClass.contratos.clases_tomadas ?? 0)}/${mainClass.contratos.total_clases}`
-                              : `${Math.floor(mainClass.contratos.clases_tomadas ?? 0) + 1}/${mainClass.contratos.total_clases}`
+                        const col2 = getColorEstado(mainClass.es_cortesia ? 'dada' : mainClass.estado, mainClass.revision_pendiente)
+                        // número calculado en tiempo real desde la view de Supabase
+                        const numPlan = mainClass.contratos?.total_clases && mainClass.numero_calculado
+                          ? `${mainClass.numero_calculado}/${mainClass.contratos.total_clases}`
                           : ''
                         return (
                           <div onClick={(e) => abrirClaseExistente(e, mainClass)} title="Clic para editar"
