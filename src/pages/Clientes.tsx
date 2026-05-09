@@ -619,7 +619,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       try {
         const { data: cd } = await supabase
           .from('clases')
-          .select('id, fecha, hora, duracion_min, numero_en_plan, estado, revision_pendiente, inasistencia_perdonada, es_cortesia, cancelado_por_academia, observaciones, observaciones_admin, contrato_id, profesores(nombre), salones(sedes(nombre)), contratos(instrumentos(nombre))')
+          .select('id, fecha, hora, duracion_min, estado, inasistencia_perdonada, es_cortesia, cancelado_por_academia, observaciones, observaciones_admin, contrato_id, profesores(nombre), salones(sedes(nombre)), contratos(instrumentos(nombre))')
           .in('contrato_id', ids)
           .order('fecha', { ascending: true })
           .order('hora', { ascending: true })
@@ -631,7 +631,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
           .in('contrato_id', ids)
           .order('fecha', { ascending: true })
           .order('hora', { ascending: true })
-        clasesData = (cd || []).map((c: any) => ({ ...c, revision_pendiente: false, inasistencia_perdonada: false, es_cortesia: false, cancelado_por_academia: false, observaciones: null, observaciones_admin: null }))
+        clasesData = (cd || []).map((c: any) => ({ ...c, inasistencia_perdonada: false, es_cortesia: false, cancelado_por_academia: false, observaciones: null, observaciones_admin: null }))
       }
       setClases(clasesData)
     } else { setClases([]) }
@@ -881,14 +881,14 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       await supabase.from('contratos').update({ clases_tomadas: nuevasCT }).eq('id', contratoId)
       // Recalcular numero_en_plan de TODAS las clases del contrato (dadas reales + pendientes)
       const { data: todasClases } = await supabase.from('clases')
-        .select('id, estado, es_cortesia, revision_pendiente, inasistencia_perdonada')
+        .select('id, estado, es_cortesia, cancelado_por_academia, inasistencia_perdonada')
         .eq('contrato_id', contratoId)
         .order('fecha').order('hora')
       if (todasClases && todasClases.length > 0) {
         let conteo = 0
         const updates: { id: string; numero: number | null }[] = todasClases.map((cl: any) => {
           const cuenta = (cl.estado === 'dada' && !cl.es_cortesia) ||
-                         (cl.estado === 'cancelada' && cl.revision_pendiente && !cl.inasistencia_perdonada)
+                         (cl.estado === 'cancelada' && !cl.cancelado_por_academia && !cl.inasistencia_perdonada)
           if (cuenta) conteo++
           const esFutura = cl.estado === 'programada' || cl.estado === 'confirmada'
           return { id: cl.id, numero: cuenta ? conteo : esFutura ? (conteo + 1) : null }
@@ -1232,8 +1232,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
 
             let conteoClases = 0
             const clasesConConteo = clasesDelPlanAsc.map((c: any) => {
-              // dada (no cortesía) + inasistencia cliente (revision_pendiente, nuevo=cancelada, viejo=confirmada) sin perdonar = suma al plan
-              const esInasistenciaCliente = c.revision_pendiente && (c.estado === 'cancelada' || c.estado === 'confirmada')
+              // dada (no cortesía) + cancelada por inasistencia cliente (no academia) sin perdonar = suma al plan
+              const esInasistenciaCliente = c.estado === 'cancelada' && !c.cancelado_por_academia
               const cuentaEnPlan = (c.estado === 'dada' && !c.es_cortesia) || (esInasistenciaCliente && !c.inasistencia_perdonada)
               if (cuentaEnPlan) conteoClases++
               return { ...c, numeroConteo: cuentaEnPlan ? conteoClases : null }
@@ -1322,7 +1322,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                             {clasesDelPlan.map((c: any, i) => {
                               const esPerdonada = c.estado === 'cancelada' && c.inasistencia_perdonada
                               const esCanceladaAcademia = c.estado === 'cancelada' && c.cancelado_por_academia
-                              const esInasistencia = c.revision_pendiente && !c.inasistencia_perdonada && (c.estado === 'cancelada' || c.estado === 'confirmada')
+                              const esInasistencia = c.estado === 'cancelada' && !c.cancelado_por_academia && !c.inasistencia_perdonada
                               const esCortesia = c.es_cortesia
                               const estadoColor =
                                 esCortesia        ? { bg: '#e0f2fe', color: '#0369a1' } :
