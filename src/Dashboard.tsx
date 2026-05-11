@@ -76,7 +76,7 @@ export default function Dashboard({ usuario }: { usuario: any }) {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'sans-serif', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100vh', width: '100vw', fontFamily: 'sans-serif', overflow: 'hidden', boxSizing: 'border-box' }}>
 
       {/* Menú lateral */}
       <div style={{ width: '220px', flexShrink: 0, background: '#1e293b', color: 'white', display: 'flex', flexDirection: 'column', padding: '24px 0' }}>
@@ -95,7 +95,6 @@ export default function Dashboard({ usuario }: { usuario: any }) {
 
         {/* Footer: avatar + campana */}
         <div style={{ padding: '16px 24px', borderTop: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {/* Avatar con menú de sesión */}
           <div style={{ position: 'relative' }}>
             <button onClick={() => setVerMenu(v => !v)}
               style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
@@ -132,8 +131,8 @@ export default function Dashboard({ usuario }: { usuario: any }) {
         </div>
       </div>
 
-      {/* Contenido principal */}
-      <div style={{ flex: 1, minWidth: 0, background: '#f8fafc', overflow: 'auto', position: 'relative' }}>
+      {/* Contenido principal — overflow-y auto, overflow-x hidden evita scroll horizontal de página */}
+      <div style={{ flex: 1, minWidth: 0, background: '#f8fafc', overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
         {seccion === 'inicio'     && <Inicio onNavegar={navegar} onNuevaNotificacion={cargarNoLeidas} />}
         {seccion === 'clientes'   && <Clientes key={clientesKey} />}
         {seccion === 'profesores' && <Profesores key={profesoresKey} />}
@@ -183,7 +182,6 @@ export default function Dashboard({ usuario }: { usuario: any }) {
         </div>
       )}
 
-      {/* Cerrar menú avatar al hacer clic fuera */}
       {verMenu && <div style={{ position: 'fixed', inset: 0, zIndex: 50 }} onClick={() => setVerMenu(false)} />}
     </div>
   )
