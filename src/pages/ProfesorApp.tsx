@@ -78,9 +78,17 @@ function minutosParaClase(fecha: string, hora: string): number {
 }
 
 const SELECT_CLASES = [
-  'id', 'fecha', 'hora', 'duracion_min', 'estado', 'modalidad',
+  'id', 'fecha', 'hora', 'duracion_min', 'estado', 'modalidad', 'cancelado_por_academia',
   'observaciones', 'contrato_id', 'honorario_valor', 'motivo_cancelacion',
-  'contratos(clientes(nombre, nombres, apellidos), instrumentos(nombre), duracion_min, clases_tomadas)',
+  'contratos(clientes(nombre, nombres, apellidos), instrumentos(nombre), duracion_min, clases_tomadas, total_clases)',
+  'salones(nombre, sedes(nombre))'
+].join(', ')
+
+// Para historial: usa la view que incluye numero_calculado
+const SELECT_HISTORIAL = [
+  'id', 'fecha', 'hora', 'duracion_min', 'estado', 'modalidad', 'cancelado_por_academia', 'es_cortesia',
+  'observaciones', 'contrato_id', 'honorario_valor', 'motivo_cancelacion', 'numero_calculado',
+  'contratos(clientes(nombre, nombres, apellidos), instrumentos(nombre), duracion_min, clases_tomadas, total_clases)',
   'salones(nombre, sedes(nombre))'
 ].join(', ')
 
@@ -283,8 +291,8 @@ export default function ProfesorApp() {
     const ul = new Date(parseInt(a), parseInt(m), 0).getDate()
     const ff = `${mes}-${String(ul).padStart(2,'0')}`
 
-    // Historial: dadas + canceladas (inasistencias = cancelada + !cancelado_por_academia)
-    const { data } = await supabase.from('clases').select(SELECT_CLASES)
+    // Historial: dadas + canceladas — usa clases_con_numero para obtener numero_calculado
+    const { data } = await supabase.from('clases_con_numero').select(SELECT_HISTORIAL)
       .eq('profesor_id', profesor.id)
       .gte('fecha', fi).lte('fecha', ff)
       .in('estado', ['dada', 'cancelada'])
@@ -449,39 +457,86 @@ export default function ProfesorApp() {
     if (vista === 'hoy') cargarHoy(); else cargarHistorial()
   }
 
-  function exportarPDF() {
+  function buildDocContent() {
     const [anio, mesNum] = mes.split('-')
     const mesLabel = `${MESES_NOMBRE[parseInt(mesNum)-1]} ${anio}`
-    const clasesDadas = clases.filter(c => c.estado === 'dada' || (c.estado === 'cancelada' && !c.cancelado_por_academia))
+    const clasesDadas = clases.filter(c => (c.estado === 'dada' && !c.es_cortesia) || (c.estado === 'cancelada' && !c.cancelado_por_academia))
     const totalHon = clasesDadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
     const filas = clasesDadas.map(c => {
       const hon = getHonorario(c)
-      const honLabel = hon === 'pendiente' ? '<span style="color:#c2410c;font-weight:700">Pendiente</span>' : `$${Number(hon).toLocaleString('es-CO')}`
+      const honLabel = hon === 'pendiente' ? 'Pendiente' : `$${Number(hon).toLocaleString('es-CO')}`
       const tipoLabel = (c.estado === 'cancelada' && !c.cancelado_por_academia) ? 'Inasistencia' : 'Dada'
+      const numLabel = c.numero_calculado && c.contratos?.total_clases ? ` (${c.numero_calculado}/${c.contratos.total_clases})` : ''
       return `
         <tr>
           <td>${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}</td>
           <td>${formatHoraAmPm(c.hora)}</td>
-          <td>${nombreCliente(c)}</td>
+          <td>${nombreCliente(c)}${numLabel}</td>
           <td>${c.contratos?.instrumentos?.nombre || '—'}</td>
           <td>${c.duracion_min} min</td>
           <td>${tipoLabel}</td>
           <td style="font-weight:600">${honLabel}</td>
         </tr>
-        ${c.observaciones ? `<tr class="rr"><td colspan="7"><div class="rb">📝 <em>${c.observaciones.replace(/\n/g,'<br>')}</em></div></td></tr>` : ''}
+        ${c.observaciones ? `<tr><td colspan="7" style="padding:0 12px 10px"><div style="background:#f8fafc;border-left:3px solid #b2d8d8;padding:8px 12px;font-size:12px;color:#555;line-height:1.6">📝 ${c.observaciones.replace(/\n/g,' | ')}</div></td></tr>` : ''}
       `
     }).join('')
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Honorarios ${mesLabel} — ${profesor?.nombre}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;padding:40px;color:#1a1a1a;font-size:13px}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;border-bottom:3px solid #1a8a8a;padding-bottom:20px}.logo-area h1{font-size:22px;color:#1a8a8a;font-weight:800}.logo-area p{color:#666;font-size:12px;margin-top:4px}.info-area{text-align:right}.info-area h2{font-size:16px;color:#1a1a1a;font-weight:700}.info-area p{color:#555;font-size:12px;margin-top:3px}table{width:100%;border-collapse:collapse;margin-top:20px}thead tr{background:#e8f5f5}th{padding:10px 12px;text-align:left;font-size:11px;color:#1a8a8a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top}.rr td{padding:0 12px 10px}.rb{background:#f8fafc;border-left:3px solid #b2d8d8;padding:8px 12px;font-size:12px;color:#555;line-height:1.6;border-radius:0 6px 6px 0}.total-row{background:#e8f5f5;font-weight:700}.total-row td{padding:14px 12px;font-size:15px;color:#1a8a8a;border-top:2px solid #1a8a8a}.footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:16px;font-size:11px;color:#aaa;display:flex;justify-content:space-between}.print-btn{margin-bottom:24px;padding:10px 24px;background:#1a8a8a;color:white;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600}@media print{.print-btn{display:none}tr{page-break-inside:avoid}}</style>
+    return { mesLabel, totalHon, filas, clasesDadas }
+  }
+
+  function descargarPDF() {
+    const { mesLabel, totalHon, filas } = buildDocContent()
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Honorarios ${mesLabel}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;padding:40px;color:#1a1a1a;font-size:13px}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;border-bottom:3px solid #1a8a8a;padding-bottom:20px}
+.logo h1{font-size:22px;color:#1a8a8a;font-weight:800}.logo p{color:#666;font-size:12px;margin-top:4px}
+.info{text-align:right}.info h2{font-size:16px;font-weight:700}.info p{color:#555;font-size:12px;margin-top:3px}
+table{width:100%;border-collapse:collapse;margin-top:20px}thead tr{background:#e8f5f5}
+th{padding:10px 12px;text-align:left;font-size:11px;color:#1a8a8a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}
+td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+.total{background:#e8f5f5;font-weight:700}.total td{padding:14px 12px;font-size:15px;color:#1a8a8a;border-top:2px solid #1a8a8a}
+.footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:16px;font-size:11px;color:#aaa;display:flex;justify-content:space-between}
+@media print{@page{margin:20mm}body{padding:0}}</style>
 </head><body>
-<button class="print-btn" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
-<div class="header"><div class="logo-area"><h1>Academia Ruby Salamanca</h1><p>Cuenta de cobro de honorarios</p></div><div class="info-area"><h2>${profesor?.nombre}</h2><p>${mesLabel.charAt(0).toUpperCase()+mesLabel.slice(1)}</p><p>Generado: ${new Date().toLocaleDateString('es-CO')}</p></div></div>
+<div class="header"><div class="logo"><h1>Academia Ruby Salamanca</h1><p>Cuenta de cobro de honorarios</p></div>
+<div class="info"><h2>${profesor?.nombre}</h2><p>${mesLabel.charAt(0).toUpperCase()+mesLabel.slice(1)}</p><p>Generado: ${new Date().toLocaleDateString('es-CO')}</p></div></div>
 <table><thead><tr><th>Fecha</th><th>Hora</th><th>Estudiante</th><th>Instrumento</th><th>Duración</th><th>Tipo</th><th>Honorario</th></tr></thead>
-<tbody>${filas||'<tr><td colspan="7" style="text-align:center;color:#aaa;padding:24px">Sin clases este mes</td></tr>'}<tr class="total-row"><td colspan="6">TOTAL HONORARIOS ${mesLabel.toUpperCase()}</td><td>$${totalHon.toLocaleString('es-CO')}</td></tr></tbody></table>
+<tbody>${filas||'<tr><td colspan="7" style="text-align:center;color:#aaa;padding:24px">Sin clases este mes</td></tr>'}
+<tr class="total"><td colspan="6">TOTAL HONORARIOS ${mesLabel.toUpperCase()}</td><td>$${totalHon.toLocaleString('es-CO')}</td></tr></tbody></table>
 <div class="footer"><span>Academia Ruby Salamanca</span><span>Portal del profesor</span></div>
 </body></html>`
-    const w = window.open('', '_blank')
-    if (w) { w.document.write(html); w.document.close() }
+    const blob = new Blob([html], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Honorarios_${profesor?.nombre?.replace(/ /g,'_')}_${mes}.html`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function descargarWord() {
+    const { mesLabel, totalHon, filas } = buildDocContent()
+    const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head><meta charset='UTF-8'><title>Honorarios ${mesLabel}</title>
+<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#1a1a1a}
+h1{font-size:18pt;color:#1a8a8a}h2{font-size:14pt}
+table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6pt 8pt;font-size:10pt}
+thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:uppercase;font-size:8pt}
+.total{background:#e8f5f5;font-weight:bold;color:#1a8a8a;font-size:12pt}</style></head>
+<body>
+<h1>Academia Ruby Salamanca</h1><p>Cuenta de cobro de honorarios</p><br>
+<h2>${profesor?.nombre}</h2>
+<p>${mesLabel.charAt(0).toUpperCase()+mesLabel.slice(1)} &nbsp;·&nbsp; Generado: ${new Date().toLocaleDateString('es-CO')}</p><br>
+<table><thead><tr><th>Fecha</th><th>Hora</th><th>Estudiante</th><th>Instrumento</th><th>Duración</th><th>Tipo</th><th>Honorario</th></tr></thead>
+<tbody>${filas||'<tr><td colspan="7">Sin clases este mes</td></tr>'}
+<tr class="total"><td colspan="6">TOTAL HONORARIOS ${mesLabel.toUpperCase()}</td><td>$${totalHon.toLocaleString('es-CO')}</td></tr></tbody></table>
+</body></html>`
+    const blob = new Blob(['﻿', html], { type: 'application/msword' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Honorarios_${profesor?.nombre?.replace(/ /g,'_')}_${mes}.doc`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   if (cargandoAuth) return (
@@ -646,10 +701,16 @@ export default function ProfesorApp() {
                 </div>
               )}
               {!cargandoClases && clases.length > 0 && (
-                <button onClick={exportarPDF}
-                  style={{ width:'100%', padding:'14px', background:TEAL, color:'white', border:'none', borderRadius:'14px', fontSize:'15px', fontWeight:'700', cursor:'pointer', marginBottom:'16px', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px' }}>
-                  🖨️ Exportar cuenta de cobro PDF
-                </button>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'16px' }}>
+                  <button onClick={descargarPDF}
+                    style={{ padding:'13px', background:TEAL, color:'white', border:'none', borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
+                    🖨️ Descargar PDF
+                  </button>
+                  <button onClick={descargarWord}
+                    style={{ padding:'13px', background:'#1d4ed8', color:'white', border:'none', borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
+                    📄 Descargar Word
+                  </button>
+                </div>
               )}
               {cargandoClases && <p style={{ textAlign:'center', color:'#9ca3af', padding:'50px 0' }}>Cargando...</p>}
               {!cargandoClases && clases.length === 0 && <p style={{ textAlign:'center', color:'#9ca3af', padding:'40px 0' }}>Sin clases este mes</p>}
@@ -980,6 +1041,12 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
           <span style={{ padding:'4px 10px', borderRadius:'20px', fontSize:'11px', fontWeight:'700', background:badge.bg, color:badge.color, whiteSpace:'nowrap' }}>
             {badge.label}
           </span>
+          {/* Conteo x/y — solo en historial (mostrarFecha=true) para clases dadas reales */}
+          {mostrarFecha && !c.esTaller && !c.es_cortesia && c.numero_calculado && c.contratos?.total_clases && (
+            <span style={{ fontSize:'12px', fontWeight:'800', color:TEAL, background:'#e8f5f5', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
+              {c.numero_calculado}/{c.contratos.total_clases}
+            </span>
+          )}
           {mostrarHonorario && !c.esTaller && (
             honorario === 'pendiente'
               ? <span style={{ fontSize:'11px', fontWeight:'700', color:'#c2410c', background:'#fff7ed', padding:'3px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>⏳ Pendiente</span>
