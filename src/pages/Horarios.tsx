@@ -704,10 +704,30 @@ export default function Horarios() {
         .in('id', ids)
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
     } else {
+      const updatePayload: any = { hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha }
+      // Cancelación desde admin = siempre por academia
+      if (editEstado === 'cancelada') {
+        updatePayload.cancelado_por_academia = true
+        updatePayload.cancelado_tarde = (() => {
+          const [hh, mm] = (editHora || '00:00').split(':').map(Number)
+          const claseDate = new Date(editFecha + 'T' + String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0') + ':00')
+          return Math.floor((claseDate.getTime() - Date.now()) / 60000) < 180
+        })()
+      }
       const { error } = await supabase.from('clases')
-        .update({ hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha })
+        .update(updatePayload)
         .eq('id', claseEditando.id)
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
+      // Notificación al cancelar desde admin
+      if (editEstado === 'cancelada') {
+        const esTardia = updatePayload.cancelado_tarde
+        await supabase.from('notificaciones').insert({
+          tipo: esTardia ? 'cancelacion_tardia' : 'cancelacion_a_tiempo',
+          mensaje: `${esTardia ? 'Cancelación tardía' : 'Cancelación a tiempo'} — ${claseEditando.contratos?.clientes?.nombre || '—'}`,
+          detalle: `${claseEditando.fecha} ${editHora} · ${claseEditando.salones?.nombre || '—'} · ${claseEditando.profesores?.nombre || '—'}`,
+          clase_id: claseEditando.id
+        })
+      }
     }
 
     setModalEditar(false)
@@ -1483,7 +1503,7 @@ export default function Horarios() {
               {claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia && (
                 <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
                   <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#c2410c' }}>
-                    ⚠️ Inasistencia registrada — ya suma al plan del cliente
+                    ⚠️ Inasistencia registrada — suma al plan del cliente
                   </p>
                   <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#92400e' }}>
                     Si se quiere perdonar: abrir la siguiente clase dada del cliente y marcarla como cortesía.
