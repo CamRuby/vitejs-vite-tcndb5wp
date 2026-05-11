@@ -891,7 +891,7 @@ export default function Horarios() {
                   <th key={`${col.salon.id}-${col.fecha}`} style={{
                     padding: '8px 10px', color: 'white', textAlign: 'center',
                     borderLeft: '1px solid rgba(255,255,255,0.2)',
-                    width: '160px', minWidth: '160px'
+                    width: '150px', minWidth: '140px'
                   }}>
                     <div style={{ fontWeight: '600', fontSize: '13px' }}>{col.header}</div>
                   </th>
