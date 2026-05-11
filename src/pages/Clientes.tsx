@@ -915,13 +915,13 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     return TEAL
   }
 
-  const thStyle: React.CSSProperties = { padding: '7px 9px', textAlign: 'left', fontSize: '11px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }
-  const tdStyle: React.CSSProperties = { padding: '7px 9px', fontSize: '12px', color: '#333', whiteSpace: 'nowrap' }
+  const thStyle: React.CSSProperties = { padding: '6px 7px', textAlign: 'left', fontSize: '11px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }
+  const tdStyle: React.CSSProperties = { padding: '6px 7px', fontSize: '12px', color: '#333', whiteSpace: 'nowrap' }
   const planesActivos = planes.filter(p => (p.estado || 'activo') !== 'archivado')
   const planesArchivados = planes.filter(p => p.estado === 'archivado')
 
   return (
-    <div style={{ padding: '16px 16px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ padding: '16px 12px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
         <div style={{ textAlign: 'left' }}>
           <h2 style={{ margin: 0, fontSize: '26px', color: '#1a1a1a' }}>Clientes</h2>
