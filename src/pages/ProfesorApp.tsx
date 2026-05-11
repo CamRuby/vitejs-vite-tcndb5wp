@@ -311,6 +311,13 @@ export default function ProfesorApp() {
     const durClase = Number(claseActiva.duracion_min) || durPlan
     const fraccion = parseFloat((durClase / durPlan).toFixed(4))
     const tomadas  = parseFloat(Number(contrato?.clases_tomadas || 0).toFixed(4))
+    // DEBUG: visible en consola del navegador durante pruebas
+    console.log('[marcarDada]', {
+      claseId: claseActiva.id, duracion_clase: claseActiva.duracion_min,
+      contrato_durMin: contrato?.duracion_min, contratos_durMin: claseActiva.contratos?.duracion_min,
+      durPlan, durClase, fraccion, tomadas_antes: tomadas,
+      tomadas_despues: parseFloat((tomadas + fraccion).toFixed(4))
+    })
     await supabase.from('clases').update({
       estado: 'dada',
       observaciones: resumen.trim() || claseActiva.observaciones || null
