@@ -180,7 +180,7 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
   }
 
   return (
-    <div style={{ padding: '28px 32px', width: '100%', boxSizing: 'border-box' as const, maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ padding: '28px 32px', width: '100%', boxSizing: 'border-box' as const, maxWidth: '1300px', margin: '0 auto' }}>
 
       <div style={{ marginBottom: '24px' }}>
         <h2 style={{ margin: 0, fontSize: '24px', color: '#1a1a1a', fontWeight: '700' }}>{tituloFecha}</h2>
