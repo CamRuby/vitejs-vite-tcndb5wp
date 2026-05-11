@@ -74,6 +74,7 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
       .select('id, total_clases, clases_tomadas, duracion_min, cliente_id, clientes(nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre)')
       .eq('estado', 'activo')
     if (!data) return
+    // ── FIX: usar restantes fraccionarios (clases_tomadas puede ser 2.25, etc.) ──
     const alertas = data.filter((p: any) => {
       const restantes = (p.total_clases || 0) - (p.clases_tomadas || 0)
       return restantes <= 2 && restantes > 0
@@ -162,14 +163,17 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
             <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
               <div style={{ padding: '16px 20px', borderBottom: '1px solid #eef2f7' }}>
                 <h3 style={{ margin: 0, fontSize: '15px', color: '#1a1a1a', fontWeight: '600' }}>Planes por completar</h3>
-                <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#666' }}>Clientes con 1 o 2 clases restantes</p>
+                <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#666' }}>Clientes con 2 o menos clases restantes</p>
               </div>
               {planesAlerta.length === 0 ? (
                 <p style={{ textAlign: 'center', color: '#aaa', padding: '32px 20px', fontSize: '13px' }}>Sin alertas por ahora</p>
               ) : (
                 planesAlerta.map((p: any) => {
-                  const restantes = (p.total_clases || 0) - Math.floor(p.clases_tomadas || 0)
+                  // ── FIX: restantes fraccionarios, redondeado a 2 decimales ──
+                  const restantesExacto = parseFloat(((p.total_clases || 0) - (p.clases_tomadas || 0)).toFixed(2))
                   const nombre = p.clientes?.nombre || `${p.clientes?.nombres || ''} ${p.clientes?.apellidos || ''}`.trim() || '—'
+                  // Color: rojo si queda menos de 1 clase, naranja si queda entre 1 y 2
+                  const esCritico = restantesExacto < 1
                   return (
                     <div key={p.id}
                       onClick={() => onNavegar('clientes')}
@@ -182,8 +186,11 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
                           {p.instrumentos?.nombre || '—'} · {p.profesores?.nombre || '—'}
                         </p>
                       </div>
-                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: restantes === 1 ? '#fee2e2' : '#fff7ed', color: restantes === 1 ? '#991b1b' : '#c2410c', flexShrink: 0 }}>
-                        {restantes} {restantes === 1 ? 'clase' : 'clases'}
+                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700',
+                        background: esCritico ? '#fee2e2' : '#fff7ed',
+                        color: esCritico ? '#991b1b' : '#c2410c',
+                        flexShrink: 0 }}>
+                        {restantesExacto} {restantesExacto === 1 ? 'clase' : 'clases'}
                       </span>
                     </div>
                   )
