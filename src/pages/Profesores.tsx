@@ -227,7 +227,7 @@ export default function Profesores() {
   }
 
   return (
-    <div style={{ padding: '20px 24px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ padding: '20px 24px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
 
       {/* Encabezado */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
@@ -247,7 +247,7 @@ export default function Profesores() {
       {modo === 'lista' && (
         <div style={{ flex: 1, overflow: 'auto' }}>
           {cargando && <p style={{ textAlign: 'center', color: '#666' }}>Cargando...</p>}
-          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
+          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead style={{ background: TEAL_LIGHT }}>
                 <tr>{['#', 'Nombre', 'Ciudad', 'Teléfono', 'Correo', 'Estado'].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
