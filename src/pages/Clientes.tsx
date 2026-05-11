@@ -143,6 +143,16 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
             <label style={labelStyle}>Condición especial de aprendizaje</label>
             <input value={form.condicion_aprendizaje || ''} onChange={e => setForm({ ...form, condicion_aprendizaje: e.target.value })} placeholder="Describir si aplica" style={estiloInput} />
           </div>
+          <div style={{ gridColumn: '1 / -1', marginTop: '4px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '14px' }}>
+              <input type="checkbox" checked={!!form.inasistencia_perdonada}
+                onChange={e => setForm({ ...form, inasistencia_perdonada: e.target.checked })} />
+              <span>
+                <strong>Inasistencia perdonada</strong>
+                <span style={{ marginLeft: '8px', fontSize: '12px', color: '#888' }}>El cliente ya usó su inasistencia perdonada</span>
+              </span>
+            </label>
+          </div>
           {form.menor_de_edad && (<>
             {sec('Datos del acudiente')}
             {inp('Nombres del acudiente', 'acudiente_nombres')}
@@ -175,7 +185,6 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar,
     estado:         esRenovacion ? 'activo' : (plan?.estado || 'activo'),
     clases_tomadas: esNuevo ? 0 : (plan?.clases_tomadas || 0),
     // ── campo para migración: registrar si ya se usó el perdón de inasistencia ──
-    inasistencia_perdonada_usada: (esNuevo || esRenovacion) ? false : (plan?.inasistencia_perdonada_usada || false),
   })
   const [clasesManual, setClasesManual] = useState(!CLASES_PRESET.includes(plan?.total_clases || 4))
   const [guardando, setGuardando] = useState(false)
@@ -195,7 +204,6 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar,
       duracion_min: Number(fp.duracion_min), fecha_inicio: fp.fecha_inicio, estado: fp.estado,
     }
     // Solo incluir el campo de perdón al editar (no en planes nuevos)
-    if (!esNuevo) payload.inasistencia_perdonada_usada = fp.inasistencia_perdonada_usada
     await onGuardar(payload, esRenovacion ? undefined : plan?.id)
     setGuardando(false)
   }
@@ -266,18 +274,7 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar,
                 <input type="number" min={0} step={0.25} value={fp.clases_tomadas} onChange={e => setFp({ ...fp, clases_tomadas: e.target.value })} style={estiloInput} />
               </div>
             )}
-            {/* ── Campo de migración: perdón de inasistencia ── */}
-            {!esNuevo && (
-              <div style={{ gridColumn: '1 / -1', background: '#fefce8', borderRadius: '10px', padding: '12px 14px', border: '1px solid #fde68a' }}>
-                <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: '700', color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Migración de datos</p>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: '#333' }}>
-                  <input type="checkbox" checked={!!fp.inasistencia_perdonada_usada}
-                    onChange={e => setFp({ ...fp, inasistencia_perdonada_usada: e.target.checked })} />
-                  Ya se perdonó una inasistencia en este plan
-                </label>
-                <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#92400e' }}>Marca esto si históricamente el cliente ya usó su inasistencia perdonada.</p>
-              </div>
-            )}
+
           </div>
           {error && <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '12px' }}>{error}</p>}
           <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
@@ -489,7 +486,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     nombres: '', apellidos: '', fecha_nacimiento: '', numero_identificacion: '', ocupacion: '',
     direccion: '', ciudad: '', contacto_emergencia_nombre: '', contacto_emergencia_telefono: '',
     menor_de_edad: false, acudiente_nombres: '', acudiente_apellidos: '',
-    acudiente_telefono: '', acudiente_documento: '', discapacidad_fisica: false, condicion_aprendizaje: ''
+    acudiente_telefono: '', acudiente_documento: '', discapacidad_fisica: false, condicion_aprendizaje: '',
+    inasistencia_perdonada: false
   })
   const [profesores, setProfesores] = useState<any[]>([])
   const [instrumentos, setInstrumentos] = useState<any[]>([])
@@ -586,16 +584,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     setInscripcionesTalleres(talleresData || [])
 
     const { data: planesData } = await supabase.from('contratos').select('id, total_clases, clases_tomadas, valor_plan, tipo_plan, estado, fecha_inicio, duracion_min, instrumento_id, profesor_id, sede_id, instrumento_id, instrumentos(nombre), profesores(nombre), sedes(nombre)').eq('cliente_id', c.id).order('fecha_inicio', { ascending: false })
-    // Cargar campo de migración por separado para que no rompa si aún no existe en el schema cache
-    if (planesData && planesData.length > 0) {
-      try {
-        const planIds2 = planesData.map((p: any) => p.id)
-        const { data: perdonData } = await supabase.from('contratos').select('id, inasistencia_perdonada_usada').in('id', planIds2)
-        const perdonMap: Record<string, boolean> = {}
-        ;(perdonData || []).forEach((r: any) => { perdonMap[r.id] = r.inasistencia_perdonada_usada || false })
-        planesData.forEach((p: any) => { p.inasistencia_perdonada_usada = perdonMap[p.id] || false })
-      } catch { planesData.forEach((p: any) => { p.inasistencia_perdonada_usada = false }) }
-    }
+
     setPlanes(planesData || [])
 
     const planIds = (planesData || []).map((p: any) => p.id)
@@ -657,7 +646,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       menor_de_edad: cliente.menor_de_edad || false, acudiente_nombres: cliente.acudiente_nombres || '',
       acudiente_apellidos: cliente.acudiente_apellidos || '', acudiente_telefono: cliente.acudiente_telefono || '',
       acudiente_documento: cliente.acudiente_documento || '', discapacidad_fisica: cliente.discapacidad_fisica || false,
-      condicion_aprendizaje: cliente.condicion_aprendizaje || ''
+      condicion_aprendizaje: cliente.condicion_aprendizaje || '',
+      inasistencia_perdonada: cliente.inasistencia_perdonada || false
     })
     await cargarDatosCliente(cliente)
     setConfirmarBorrar(false); setErrorBorrar(''); setExpandirFicha(false)
@@ -674,7 +664,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   async function guardar() {
     if (!form.nombres.trim()) return alert('El nombre es obligatorio')
     setCargando(true)
-    const payload = { ...form, nombre: `${form.nombres.trim()} ${form.apellidos.trim()}`.trim(), fecha_nacimiento: form.fecha_nacimiento && form.fecha_nacimiento.trim() !== '' ? form.fecha_nacimiento : null }
+    const payload = { ...form, nombre: `${form.nombres.trim()} ${form.apellidos.trim()}`.trim(), fecha_nacimiento: form.fecha_nacimiento && form.fecha_nacimiento.trim() !== '' ? form.fecha_nacimiento : null, inasistencia_perdonada: form.inasistencia_perdonada || false }
     if (modo === 'nuevo') {
       const { data, error } = await supabase.from('clientes').insert(payload).select().single()
       if (!error && data) { setClienteSeleccionado(data); await cargarDatosCliente(data); setModo('ver'); cargarVista(vistaActual) }
@@ -1251,7 +1241,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                       <p style={{ margin: 0, fontWeight: '600', fontSize: '16px', color: '#1a1a1a' }}>{p.instrumentos?.nombre || '—'}</p>
                       <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', background: est.bg, color: est.color, fontWeight: '600' }}>{p.estado || 'activo'}</span>
-                      {/* Perdón: ahora se gestiona dando cortesía en la siguiente clase */}
+
                     </div>
                     <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>👤 {p.profesores?.nombre || '—'} · 🏫 {p.sedes?.nombre || '—'}</p>
                     <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>📅 {p.fecha_inicio || '—'} · {p.duracion_min} min/clase</p>
