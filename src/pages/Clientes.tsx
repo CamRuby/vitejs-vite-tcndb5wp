@@ -1220,12 +1220,17 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
               .filter((c: any) => c.contrato_id === p.id)
               .sort((a: any, b: any) => `${a.fecha}T${a.hora||'00:00'}`.localeCompare(`${b.fecha}T${b.hora||'00:00'}`))
 
-            let conteoClases = 0
+            // Duración del plan para calcular fracciones
+            const durPlan = p.duracion_min || 60
+            let conteoClases = 0  // acumulado fraccionario
             const clasesConConteo = clasesDelPlanAsc.map((c: any) => {
               // dada (no cortesía) + cancelada por inasistencia cliente (no academia) sin perdonar = suma al plan
               const esInasistenciaCliente = c.estado === 'cancelada' && !c.cancelado_por_academia
               const cuentaEnPlan = (c.estado === 'dada' && !c.es_cortesia) || (esInasistenciaCliente && !c.inasistencia_perdonada)
-              if (cuentaEnPlan) conteoClases++
+              if (cuentaEnPlan) {
+                const fraccion = parseFloat(((c.duracion_min || durPlan) / durPlan).toFixed(4))
+                conteoClases = parseFloat((conteoClases + fraccion).toFixed(4))
+              }
               return { ...c, numeroConteo: cuentaEnPlan ? conteoClases : null }
             })
 
