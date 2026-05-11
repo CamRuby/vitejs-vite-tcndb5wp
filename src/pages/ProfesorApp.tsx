@@ -320,17 +320,6 @@ export default function ProfesorApp() {
         clases_tomadas: parseFloat((tomadas + fraccion).toFixed(4))
       }).eq('id', contrato.id)
     }
-    // ── FIX 3: Recalcular numero_en_plan de clases futuras ──
-    const proximoNumero = Math.floor(tomadas + fraccion) + 1
-    const { data: clasesFuturas } = await supabase.from('clases')
-      .select('id')
-      .eq('contrato_id', claseActiva.contrato_id)
-      .in('estado', ['programada', 'confirmada'])
-      .order('fecha').order('hora')
-    if (clasesFuturas && clasesFuturas.length > 0) {
-      const futIds = clasesFuturas.map((c: any) => c.id)
-      await supabase.from('clases').update({ numero_en_plan: proximoNumero }).in('id', futIds)
-    }
     setExito('¡Clase marcada como dada!')
     cerrarModal()
     setGuardando(false)
