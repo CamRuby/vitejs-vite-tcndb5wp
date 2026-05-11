@@ -36,6 +36,7 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
   const [metricas, setMetricas]         = useState({ total: 0, confirmadas: 0, dadas: 0, novedades: 0 })
   const [novedades, setNovedades]       = useState<any[]>([])
   const [planesAlerta, setPlanesAlerta] = useState<any[]>([])
+  const [planesCompletados, setPlanesCompletados] = useState<any[]>([])
 
   const hoy = new Date()
   const fechaHoy = fechaHoyLocal()
@@ -45,7 +46,7 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
 
   async function cargarTodo() {
     setCargando(true)
-    await Promise.all([cargarMetricas(), cargarNovedades(), cargarPlanesAlerta()])
+    await Promise.all([cargarMetricas(), cargarNovedades(), cargarPlanesAlerta(), cargarPlanesCompletados()])
     setCargando(false)
   }
 
@@ -82,6 +83,21 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
     setPlanesAlerta(alertas)
   }
 
+  async function cargarPlanesCompletados() {
+    // Planes que pasaron a completado en los últimos 7 días
+    const hace7 = new Date()
+    hace7.setDate(hace7.getDate() - 7)
+    const fecha7 = hace7.toISOString().split('T')[0]
+    const { data } = await supabase
+      .from('contratos')
+      .select('id, total_clases, clases_tomadas, duracion_min, fecha_inicio, cliente_id, clientes(nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre)')
+      .eq('estado', 'completado')
+      .gte('updated_at', fecha7)
+      .order('updated_at', { ascending: false })
+      .limit(5)
+    setPlanesCompletados(data || [])
+  }
+
   async function marcarLeida(id: string) {
     await supabase.from('notificaciones').update({ leida: true }).eq('id', id)
     setNovedades(prev => prev.map(n => n.id === id ? { ...n, leida: true } : n))
@@ -116,7 +132,7 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
             {tarjetaMetrica('Novedades', metricas.novedades, metricas.novedades > 0 ? '#dc2626' : '#aaa')}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
 
             {/* Novedades recientes */}
             <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
@@ -201,6 +217,46 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
                   <button onClick={() => onNavegar('clientes')}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: TEAL, fontWeight: '500' }}>
                     Ver todos los planes →
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Planes completados recientemente */}
+            <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid #eef2f7' }}>
+                <h3 style={{ margin: 0, fontSize: '15px', color: '#1a1a1a', fontWeight: '600' }}>Planes completados</h3>
+                <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#666' }}>Últimos 7 días</p>
+              </div>
+              {planesCompletados.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#aaa', padding: '32px 20px', fontSize: '13px' }}>Sin planes completados recientemente</p>
+              ) : (
+                planesCompletados.map((p: any) => {
+                  const nombre = p.clientes?.nombre || `${p.clientes?.nombres || ''} ${p.clientes?.apellidos || ''}`.trim() || '—'
+                  return (
+                    <div key={p.id}
+                      onClick={() => onNavegar('clientes')}
+                      style={{ padding: '12px 20px', borderBottom: '1px solid #f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
+                      <div>
+                        <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: '600', color: '#1a1a1a' }}>{nombre}</p>
+                        <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>
+                          {p.instrumentos?.nombre || '—'} · {p.profesores?.nombre || '—'}
+                        </p>
+                      </div>
+                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: '#dcfce7', color: '#166534', flexShrink: 0 }}>
+                        ✓ {p.total_clases} clases
+                      </span>
+                    </div>
+                  )
+                })
+              )}
+              {planesCompletados.length > 0 && (
+                <div style={{ padding: '12px 20px', textAlign: 'center' }}>
+                  <button onClick={() => onNavegar('clientes')}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: TEAL, fontWeight: '500' }}>
+                    Ver en clientes →
                   </button>
                 </div>
               )}
