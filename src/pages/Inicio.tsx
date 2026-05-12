@@ -43,7 +43,7 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
   const fechaHoy = fechaHoyLocal()
   const tituloFecha = `${DIAS_L[hoy.getDay()].charAt(0).toUpperCase() + DIAS_L[hoy.getDay()].slice(1)} ${hoy.getDate()} de ${MESES_L[hoy.getMonth()]}`
 
-  useEffect(() => { cargarTodo() }, [])
+  useEffect(() => { cargarTodo() }, [])  // recarga siempre que se monta (Dashboard hace key o navegar)
 
   async function cargarTodo() {
     setCargando(true)
@@ -99,7 +99,7 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
       .limit(50)
     // Filtrar activos donde clases_tomadas >= total_clases
     const activosCompletos = (activos || []).filter((p: any) =>
-      p.total_clases > 0 && (p.clases_tomadas || 0) >= p.total_clases
+      p.total_clases > 0 && parseFloat((p.clases_tomadas || 0).toFixed(4)) >= parseFloat(p.total_clases.toFixed(4))
     )
     const todos = [...(completados || []), ...activosCompletos]
     // Deduplicar por id
