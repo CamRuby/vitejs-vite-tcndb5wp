@@ -930,7 +930,7 @@ export default function Horarios() {
                         padding: 0, height: '1px', verticalAlign: 'top',
                         borderLeft: '1px solid #f1f5f9',
                         cursor: (mainClass || taller) ? 'default' : 'pointer',
-                        width: vista === 'semana' ? '80px' : '160px', minWidth: vista === 'semana' ? '80px' : '160px',
+                        width: vista === 'semana' ? '80px' : '150px', minWidth: vista === 'semana' ? '72px' : '140px',
                         background: esCeldaPasada && !mainClass && !taller ? '#f0f0f0' :
                         (!mainClass && !taller && (col.salon.nombre === 'Virtual' || col.salon.nombre === 'Domicilio')) ? '#f0f4f4' : undefined
                       }}
