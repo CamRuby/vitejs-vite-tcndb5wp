@@ -737,11 +737,13 @@ export default function Horarios() {
 
   async function borrarClase(alcance: 'esta' | 'futuras') {
     setEditGuardando(true)
-    if (claseEditando.estado === 'dada' && claseEditando.contratos?.id) {
-      const durPlan  = claseEditando.contratos?.duracion_min || claseEditando.duracion_min || 60
+    if (claseEditando.estado === 'dada' && !claseEditando.es_cortesia && claseEditando.contratos?.id) {
+      // Leer clases_tomadas fresco de BD para evitar valor desactualizado del objeto en memoria
+      const { data: ctFresh } = await supabase.from('contratos').select('clases_tomadas, duracion_min').eq('id', claseEditando.contratos.id).single()
+      const durPlan  = ctFresh?.duracion_min || claseEditando.contratos?.duracion_min || claseEditando.duracion_min || 60
       const durClase = claseEditando.duracion_min || durPlan
       const fraccion = parseFloat((durClase / durPlan).toFixed(4))
-      const clasesTomadas = Math.max(0, parseFloat(((claseEditando.contratos?.clases_tomadas || 0) - fraccion).toFixed(4)))
+      const clasesTomadas = Math.max(0, parseFloat(((ctFresh?.clases_tomadas || 0) - fraccion).toFixed(4)))
       await supabase.from('contratos').update({ clases_tomadas: clasesTomadas }).eq('id', claseEditando.contratos.id)
     }
     if (alcance === 'futuras' && claseEditando.patron_id) {
