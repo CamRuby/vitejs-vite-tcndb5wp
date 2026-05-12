@@ -79,9 +79,9 @@ export default function Dashboard({ usuario }: { usuario: any }) {
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'sans-serif', overflow: 'hidden' }}>
 
       {/* Menú lateral */}
-      <div style={{ width: '220px', flexShrink: 0, background: '#1e293b', color: 'white', display: 'flex', flexDirection: 'column', padding: '24px 0' }}>
+      <div style={{ width: '200px', flexShrink: 0, background: '#1e293b', color: 'white', display: 'flex', flexDirection: 'column', padding: '24px 0' }}>
         <div style={{ padding: '0 24px 24px', borderBottom: '1px solid #334155' }}>
-          <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca" style={{ width: '100%', maxWidth: '172px', display: 'block', marginBottom: '8px' }} />
+          <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca" style={{ width: '100%', maxWidth: '152px', display: 'block', marginBottom: '8px' }} />
         </div>
         <nav style={{ flex: 1, padding: '16px 0' }}>
           {MENU.map(item => (
