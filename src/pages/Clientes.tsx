@@ -1254,15 +1254,15 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                     <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>📅 {p.fecha_inicio || '—'} · {p.duracion_min} min/clase</p>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
-                    <p style={{ margin: 0, fontSize: '26px', fontWeight: '700', color: colorBarra(p) }}>{conteoClases}<span style={{ fontSize: '14px', color: '#aaa', fontWeight: '400' }}>/{p.total_clases}</span></p>
+                    <p style={{ margin: 0, fontSize: '26px', fontWeight: '700', color: colorBarra(p) }}>{Math.max(conteoClases, parseFloat((p.clases_tomadas||0).toString()))}<span style={{ fontSize: '14px', color: '#aaa', fontWeight: '400' }}>/{p.total_clases}</span></p>
                     <button onClick={() => { setEsRenovacion(false); setModalPlan(p) }} style={{ padding: '5px 14px', background: TEAL_LIGHT, color: TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Editar</button>
                   </div>
                 </div>
                 <div style={{ background: '#f1f5f9', borderRadius: '6px', height: '8px', overflow: 'hidden', marginBottom: '8px' }}>
-                  <div style={{ height: '8px', borderRadius: '6px', width: `${Math.min((conteoClases/p.total_clases)*100,100)}%`, background: colorBarra(p), transition: 'width 0.5s ease' }} />
+                  <div style={{ height: '8px', borderRadius: '6px', width: `${Math.min((Math.max(conteoClases, parseFloat((p.clases_tomadas||0).toString()))/p.total_clases)*100,100)}%`, background: colorBarra(p), transition: 'width 0.5s ease' }} />
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <span style={{ fontSize: '12px', color: '#999' }}>{p.total_clases - conteoClases} clases restantes</span>
+                  <span style={{ fontSize: '12px', color: '#999' }}>{parseFloat((p.total_clases - Math.max(conteoClases, parseFloat((p.clases_tomadas||0).toString()))).toFixed(2))} clases restantes</span>
                   <span style={{ fontSize: '14px', color: '#555', fontWeight: '500' }}>{p.valor_plan ? `$${Number(p.valor_plan).toLocaleString()}` : '—'}</span>
                 </div>
 
