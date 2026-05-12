@@ -705,14 +705,11 @@ export default function Horarios() {
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
     } else {
       const updatePayload: any = { hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha }
+
       // Cancelación desde admin = siempre por academia
       if (editEstado === 'cancelada') {
         updatePayload.cancelado_por_academia = true
-        updatePayload.cancelado_tarde = (() => {
-          const [hh, mm] = (editHora || '00:00').split(':').map(Number)
-          const claseDate = new Date(editFecha + 'T' + String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0') + ':00')
-          return Math.floor((claseDate.getTime() - Date.now()) / 60000) < 180
-        })()
+        updatePayload.cancelado_tarde = true
       }
       const { error } = await supabase.from('clases')
         .update(updatePayload)
@@ -1416,29 +1413,35 @@ export default function Horarios() {
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Estado</label>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      {['programada', 'confirmada', 'dada', 'cancelada'].map(est => {
-                        const col2 = getColorEstado(est)
-                        return (
-                          <button key={est} onClick={() => {
-                            if (est === 'confirmada' && editEstado !== 'confirmada') {
-                              const tomadas = claseEditando.contratos?.clases_tomadas ?? 0
-                              const total = claseEditando.contratos?.total_clases ?? 0
-                              if (total > 0 && tomadas >= total) { setPlanCompleto(true); setConfirmarDada(false) }
-                              else { setEditEstado('confirmada'); setPlanCompleto(false) }
-                            } else if (est === 'dada' && editEstado !== 'dada') {
-                              if (editEstado !== 'confirmada') { setEditError('La clase debe estar Confirmada antes de marcarla como Dada'); return }
-                              setConfirmarDada(true); setPlanCompleto(false)
-                            } else {
-                              setEditEstado(est); setConfirmarDada(false); setPlanCompleto(false)
-                            }
-                          }} style={{
-                            padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500',
-                            border: `1px solid ${editEstado === est ? col2.color : '#e2e8f0'}`,
-                            background: editEstado === est ? col2.bg : 'white',
-                            color: editEstado === est ? col2.color : '#666'
-                          }}>{est.charAt(0).toUpperCase() + est.slice(1)}</button>
-                        )
-                      })}
+                      {claseEditando.estado === 'cancelada' ? (
+                        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '10px 14px', fontSize: '13px', color: '#c2410c', fontWeight: '600' }}>
+                          ⚠️ Clase cancelada — solo puede borrarse
+                        </div>
+                      ) : (
+                        ['programada', 'confirmada', 'dada', 'cancelada'].map(est => {
+                          const col2 = getColorEstado(est)
+                          return (
+                            <button key={est} onClick={() => {
+                              if (est === 'confirmada' && editEstado !== 'confirmada') {
+                                const tomadas = claseEditando.contratos?.clases_tomadas ?? 0
+                                const total = claseEditando.contratos?.total_clases ?? 0
+                                if (total > 0 && tomadas >= total) { setPlanCompleto(true); setConfirmarDada(false) }
+                                else { setEditEstado('confirmada'); setPlanCompleto(false) }
+                              } else if (est === 'dada' && editEstado !== 'dada') {
+                                if (editEstado !== 'confirmada') { setEditError('La clase debe estar Confirmada antes de marcarla como Dada'); return }
+                                setConfirmarDada(true); setPlanCompleto(false)
+                              } else {
+                                setEditEstado(est); setConfirmarDada(false); setPlanCompleto(false)
+                              }
+                            }} style={{
+                              padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500',
+                              border: `1px solid ${editEstado === est ? col2.color : '#e2e8f0'}`,
+                              background: editEstado === est ? col2.bg : 'white',
+                              color: editEstado === est ? col2.color : '#666'
+                            }}>{est.charAt(0).toUpperCase() + est.slice(1)}</button>
+                          )
+                        })
+                      )}
                     </div>
 
                     {planCompleto && (
@@ -1515,7 +1518,7 @@ export default function Horarios() {
 
               {editError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{editError}</p>}
 
-              {!esBloqueada(claseEditando) && !(claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia) && (
+              {!esBloqueada(claseEditando) && claseEditando.estado !== 'cancelada' && (
                 claseEditando.recurrente && claseEditando.patron_id && hayEdicionReal ? (
                   <>
                     <p style={{ fontSize: '13px', color: '#555', marginBottom: '8px', fontWeight: '500' }}>¿A qué clases aplica el cambio?</p>
