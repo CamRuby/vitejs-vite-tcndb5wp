@@ -921,7 +921,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const planesArchivados = planes.filter(p => p.estado === 'archivado')
 
   return (
-    <div style={{ padding: '16px 12px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
+    <div style={{ padding: '16px 12px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
         <div style={{ textAlign: 'left' }}>
           <h2 style={{ margin: 0, fontSize: '26px', color: '#1a1a1a' }}>Clientes</h2>
@@ -1017,10 +1017,14 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                       </select>
                       <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#666' }}>{datos.length} planes</span>
                     </div>
-                    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', overflowX: 'auto' }}>
+                      <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
                         <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
-                          <tr>{['#', 'Cliente', 'Instrumento', 'Profesor', 'Sede', 'Min', 'Total', 'Tomadas', 'Restantes', 'Valor plan', 'Pagado', 'Saldo', 'Pago'].map(h => <th key={h} style={{ ...thStyle, textAlign: ['#','Min','Total','Tomadas','Restantes','Valor plan','Pagado','Saldo'].includes(h) ? 'center' : 'left' }}>{h}</th>)}</tr>
+                          <tr>
+                              <th style={{ ...thStyle, textAlign: 'center', position: 'sticky', left: 0, background: TEAL_LIGHT, zIndex: 2 }}>#</th>
+                              <th style={{ ...thStyle, position: 'sticky', left: '28px', background: TEAL_LIGHT, zIndex: 2, boxShadow: '2px 0 4px rgba(0,0,0,0.06)' }}>Cliente</th>
+                              {['Instrumento', 'Profesor', 'Sede', 'Min', 'Total', 'Tomadas', 'Rest.', 'Valor', 'Pagado', 'Saldo', 'Pago'].map(h => <th key={h} style={{ ...thStyle, textAlign: ['Min','Total','Tomadas','Rest.','Valor','Pagado','Saldo'].includes(h) ? 'center' : 'left' }}>{h}</th>)}
+                            </tr>
                         </thead>
                         <tbody>
                           {datos.length === 0 && <tr><td colSpan={13} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin planes activos</td></tr>}
@@ -1036,8 +1040,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                             return (
                               <tr key={p.id} onClick={() => seleccionarClientePorId(p.cliente_id)} style={{ borderTop: '1px solid #f8fafc', background: colorFila, cursor: 'pointer' }}
                                 onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)} onMouseLeave={e => (e.currentTarget.style.background = colorFila)}>
-                                <td style={{ ...tdStyle, textAlign: 'center', color: '#aaa' }}>{i + 1}</td>
-                                <td style={{ ...tdStyle, textAlign: 'left', fontWeight: '600', color: TEAL }}>{nombreCliente}</td>
+                                <td style={{ ...tdStyle, textAlign: 'center', color: '#aaa', position: 'sticky', left: 0, background: 'inherit', zIndex: 1 }}>{i + 1}</td>
+                                <td style={{ ...tdStyle, textAlign: 'left', fontWeight: '600', color: TEAL, position: 'sticky', left: '28px', background: 'inherit', zIndex: 1, boxShadow: '2px 0 4px rgba(0,0,0,0.06)' }}>{nombreCliente}</td>
                                 <td style={{ ...tdStyle, textAlign: 'left' }}>{p.instrumentos?.nombre || '—'}</td>
                                 <td style={{ ...tdStyle, textAlign: 'left' }}>{p.profesores?.nombre || '—'}</td>
                                 <td style={{ ...tdStyle, textAlign: 'left' }}>{p.sedes?.nombre || '—'}</td>
