@@ -16,6 +16,7 @@ const MENU = [
 
 export default function Dashboard({ usuario }: { usuario: any }) {
   const [seccion, setSeccion]           = useState(() => sessionStorage.getItem('seccion') || 'inicio')
+  const [inicioKey, setInicioKey]       = useState(0)
   const [clientesKey, setClientesKey]   = useState(0)
   const [profesoresKey, setProfesoresKey] = useState(0)
   const [noLeidas, setNoLeidas]         = useState(0)
@@ -55,6 +56,7 @@ export default function Dashboard({ usuario }: { usuario: any }) {
   function navegar(id: string) {
     setSeccion(id)
     sessionStorage.setItem('seccion', id)
+    if (id === 'inicio')     setInicioKey(k => k + 1)
     if (id === 'clientes')   setClientesKey(k => k + 1)
     if (id === 'profesores') setProfesoresKey(k => k + 1)
     setVerNotif(false)
@@ -133,7 +135,7 @@ export default function Dashboard({ usuario }: { usuario: any }) {
 
       {/* Contenido principal — overflow-y auto, overflow-x hidden evita scroll horizontal de página */}
       <div style={{ flex: 1, minWidth: 0, background: '#f8fafc', overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
-        {seccion === 'inicio'     && <Inicio onNavegar={navegar} onNuevaNotificacion={cargarNoLeidas} />}
+        {seccion === 'inicio'     && <Inicio key={inicioKey} onNavegar={navegar} onNuevaNotificacion={cargarNoLeidas} />}
         {seccion === 'clientes'   && <Clientes key={clientesKey} />}
         {seccion === 'profesores' && <Profesores key={profesoresKey} />}
         {seccion === 'horarios'   && <Horarios />}
