@@ -48,11 +48,48 @@ function colorEstadoPago(estado: string) {
   return { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' }
 }
 
+function proximaSesionTaller(diaSemana: string, desde: Date = new Date()): string {
+  const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
+  const diaTarget = dias.indexOf(diaSemana.toLowerCase())
+  if (diaTarget === -1) { const d = new Date(desde); return d.toISOString().split('T')[0] }
+  const hoy = new Date(desde); hoy.setHours(0,0,0,0)
+  const diff = (diaTarget - hoy.getDay() + 7) % 7
+  const proxima = new Date(hoy); proxima.setDate(hoy.getDate() + diff)
+  return proxima.toISOString().split('T')[0]
+}
+
+function calcularFechaFin(fechaInicio: string, diaSemana?: string): string {
+  // fecha_fin = fecha de la 4ta sesión del taller desde fecha_inicio (inclusive)
+  if (!diaSemana) {
+    // fallback: un mes menos un día
+    const d = new Date(fechaInicio + 'T12:00:00')
+    d.setMonth(d.getMonth() + 1); d.setDate(d.getDate() - 1)
+    return d.toISOString().split('T')[0]
+  }
+  const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
+  const diaTarget = dias.indexOf(diaSemana.toLowerCase())
+  // Generar las próximas 4 sesiones desde fecha_inicio
+  let fecha = new Date(fechaInicio + 'T12:00:00')
+  let sesiones = 0
+  // fecha_inicio ya ES la primera sesión, so count it
+  for (let i = 0; i < 28; i++) { // max 28 days = 4 weeks
+    if (fecha.getDay() === diaTarget) {
+      sesiones++
+      if (sesiones === 4) return fecha.toISOString().split('T')[0]
+    }
+    fecha.setDate(fecha.getDate() + 1)
+  }
+  // fallback
+  const d2 = new Date(fechaInicio + 'T12:00:00')
+  d2.setDate(d2.getDate() + 27)
+  return d2.toISOString().split('T')[0]
+}
+
 function estaVencida(inscripcion: any): boolean {
-  if (!inscripcion?.mes || inscripcion.estado !== 'activo') return false
-  const hoy = new Date()
-  const mesActual = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
-  return inscripcion.mes < mesActual
+  if (inscripcion.estado !== 'activo') return false
+  const hoy = new Date().toISOString().split('T')[0]
+  const fechaFin = inscripcion.fecha_fin || inscripcion.mes
+  return !!fechaFin && fechaFin < hoy
 }
 
 function opcionesMesTaller(): { valor: string; etiqueta: string }[] {
@@ -580,7 +617,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   }
 
   async function cargarDatosCliente(c: any) {
-    const { data: talleresData } = await supabase.from('taller_inscripciones').select('id, mes, valor_pagado, estado, taller_id, talleres(nombre, dia_semana, hora, duracion_min, salones(nombre, sedes(nombre)))').eq('cliente_id', c.id).order('mes', { ascending: false })
+    const { data: talleresData } = await supabase.from('taller_inscripciones').select('id, mes, fecha_inicio, fecha_fin, valor_pagado, estado, taller_id, talleres(nombre, dia_semana, hora, duracion_min, salones(nombre, sedes(nombre)))').eq('cliente_id', c.id).order('fecha_inicio', { ascending: false })
     setInscripcionesTalleres(talleresData || [])
 
     const { data: planesData } = await supabase.from('contratos').select('id, total_clases, clases_tomadas, valor_plan, tipo_plan, estado, fecha_inicio, duracion_min, instrumento_id, profesor_id, sede_id, instrumento_id, instrumentos(nombre), profesores(nombre), sedes(nombre)').eq('cliente_id', c.id).order('fecha_inicio', { ascending: false })
@@ -714,7 +751,14 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
 
   async function cargarSesionesInscripcion(inscripcionId: string, tallerId: string) {
     if (sesionesPorInscripcion[inscripcionId]) { setInscripcionExpandida(prev => prev === inscripcionId ? null : inscripcionId); return }
-    const { data: sesiones } = await supabase.from('taller_sesiones').select('id, fecha, estado').eq('taller_id', tallerId).eq('estado', 'dada').order('fecha', { ascending: false })
+    // Only show sessions from the inscription's start month onwards
+    const inscripcion = inscripcionesTalleres.find((ins: any) => ins.id === inscripcionId)
+    const fechaDesde = inscripcion?.fecha_inicio || inscripcion?.mes || '2000-01-01'
+    const fechaHasta = inscripcion?.fecha_fin || '2099-12-31'
+    const { data: sesiones } = await supabase.from('taller_sesiones').select('id, fecha, estado')
+      .eq('taller_id', tallerId).eq('estado', 'dada')
+      .gte('fecha', fechaDesde).lte('fecha', fechaHasta)
+      .order('fecha', { ascending: false })
     if (!sesiones || sesiones.length === 0) { setSesionesPorInscripcion(prev => ({ ...prev, [inscripcionId]: [] })); setInscripcionExpandida(inscripcionId); return }
     const sesionIds = sesiones.map((s: any) => s.id)
     const { data: asistencias } = await supabase.from('taller_asistencias').select('id, sesion_id, asistio').eq('inscripcion_id', inscripcionId).in('sesion_id', sesionIds)
@@ -737,11 +781,17 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   }
 
   async function renovarInscripcionTaller(inscripcion: any) {
-    const hoy = new Date()
-    const mesDefault = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+    const taller = inscripcion.talleres
+    const desde = inscripcion.fecha_fin
+      ? new Date(new Date(inscripcion.fecha_fin + 'T12:00:00').getTime() + 86400000)
+      : new Date()
+    const fechaInicio = proximaSesionTaller(taller?.dia_semana || 'lunes', desde)
+    const fechaFin = calcularFechaFin(fechaInicio, taller?.dia_semana)
+    const mes = fechaInicio.substring(0, 7) + '-01'
     const { error } = await supabase.from('taller_inscripciones').insert({
       taller_id: inscripcion.taller_id, cliente_id: clienteSeleccionado.id,
-      mes: mesDefault, valor_pagado: inscripcion.valor_pagado, estado: 'activo'
+      mes, fecha_inicio: fechaInicio, fecha_fin: fechaFin,
+      valor_pagado: inscripcion.valor_pagado, estado: 'activo'
     })
     if (error) { alert('Error al renovar: ' + error.message); return }
     await supabase.from('taller_inscripciones').update({ estado: 'archivado' }).eq('id', inscripcion.id)
@@ -754,33 +804,35 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       .select('id, nombre, dia_semana, hora, duracion_min, valor_mensual, profesores(nombre), salones(nombre, sedes(nombre))')
       .neq('estado', 'archivado')
       .order('nombre')
-    const hoy = new Date()
-    const mesDefault = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
     setTalleres(data || [])
     setTallerSeleccionado('')
     setTallerValorPagado('')
     setTallerError('')
-    setMesTaller(mesDefault)
     setModalTaller(true)
   }
 
   async function inscribirEnTaller() {
     if (!tallerSeleccionado) { setTallerError('Selecciona un taller'); return }
-    if (!mesTaller) { setTallerError('Selecciona el mes'); return }
     setTallerGuardando(true); setTallerError('')
+    const taller = talleres.find((t: any) => t.id === tallerSeleccionado)
+    const fechaInicio = proximaSesionTaller(taller?.dia_semana || 'lunes')
+    const fechaFin = calcularFechaFin(fechaInicio, taller?.dia_semana)
+    const mes = fechaInicio.substring(0, 7) + '-01'
+    // Verificar solapamiento
     const { data: yaInscrito } = await supabase
       .from('taller_inscripciones').select('id')
       .eq('taller_id', tallerSeleccionado)
       .eq('cliente_id', clienteSeleccionado.id)
       .eq('estado', 'activo')
-      .eq('mes', mesTaller)
+      .lte('fecha_inicio', fechaFin)
+      .gte('fecha_fin', fechaInicio)
     if (yaInscrito && yaInscrito.length > 0) {
-      setTallerError('Este cliente ya está inscrito en ese taller ese mes.')
+      setTallerError('Este cliente ya tiene una inscripción activa que se solapa con ese período.')
       setTallerGuardando(false); return
     }
-    const taller = talleres.find((t: any) => t.id === tallerSeleccionado)
     const { error } = await supabase.from('taller_inscripciones').insert({
-      taller_id: tallerSeleccionado, cliente_id: clienteSeleccionado.id, mes: mesTaller,
+      taller_id: tallerSeleccionado, cliente_id: clienteSeleccionado.id,
+      mes, fecha_inicio: fechaInicio, fecha_fin: fechaFin,
       valor_pagado: tallerValorPagado !== '' ? Number(tallerValorPagado) : (taller?.valor_mensual || null),
       estado: 'activo'
     })
@@ -1430,7 +1482,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                       </span>
                     </div>
                     <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>🏫 {ins.talleres?.salones?.nombre} — {ins.talleres?.salones?.sedes?.nombre}</p>
-                    <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>📅 Desde: {mesLabel} · {ins.talleres?.dia_semana} {ins.talleres?.hora?.substring(0,5)} · {ins.talleres?.duracion_min} min</p>
+                    <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>
+                      📅 {ins.fecha_inicio || mesLabel} → {ins.fecha_fin || '—'} · {ins.talleres?.dia_semana} {ins.talleres?.hora?.substring(0,5)} · {ins.talleres?.duracion_min} min
+                    </p>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: esVencida ? '#c2410c' : '#7c3aed' }}>${ins.valor_pagado ? Number(ins.valor_pagado).toLocaleString() : '—'}</p>
@@ -1536,18 +1590,23 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             </div>
             <div style={{ padding: '24px' }}>
               <div style={{ marginBottom: '16px' }}>
-                <label style={labelStyle}>Mes de inscripción *</label>
-                <select value={mesTaller} onChange={e => setMesTaller(e.target.value)} style={estiloInput}>
-                  {opcionesMesTaller().map(op => <option key={op.valor} value={op.valor}>{op.etiqueta}</option>)}
-                </select>
-              </div>
-              <div style={{ marginBottom: '16px' }}>
                 <label style={labelStyle}>Taller *</label>
                 <select value={tallerSeleccionado} onChange={e => { setTallerSeleccionado(e.target.value); const t = talleres.find((x: any) => x.id === e.target.value); if (t?.valor_mensual) setTallerValorPagado(String(t.valor_mensual)); else setTallerValorPagado('') }} style={estiloInput}>
                   <option value="">— Seleccionar taller —</option>
                   {talleres.map((t: any) => <option key={t.id} value={t.id}>{t.nombre} · {t.salones?.nombre} ({t.salones?.sedes?.nombre}) · {t.dia_semana} {t.hora?.substring(0,5)}</option>)}
                 </select>
               </div>
+              {tallerSeleccionado && (() => {
+                const t = talleres.find((x: any) => x.id === tallerSeleccionado)
+                const fi = t ? proximaSesionTaller(t.dia_semana) : ''
+                const ff = fi ? calcularFechaFin(fi, t?.dia_semana) : ''
+                return fi ? (
+                  <div style={{ background: '#f3e8ff', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#7c3aed' }}>
+                    📅 4 sesiones: <strong>{fi}</strong> → <strong>{ff}</strong>
+                    <span style={{ marginLeft: '8px', color: '#888', fontSize: '12px' }}>{t?.dia_semana}s</span>
+                  </div>
+                ) : null
+              })()}
               <div style={{ marginBottom: '20px' }}>
                 <label style={labelStyle}>Valor pagado ($)</label>
                 <input type="number" min={0} value={tallerValorPagado} onChange={e => setTallerValorPagado(e.target.value)} placeholder="Se toma del taller si se deja vacío" style={estiloInput} />
