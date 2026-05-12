@@ -1021,8 +1021,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                       <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
                         <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
                           <tr>
-                              <th style={{ ...thStyle, textAlign: 'center', position: 'sticky', left: 0, background: TEAL_LIGHT, zIndex: 2 }}>#</th>
-                              <th style={{ ...thStyle, position: 'sticky', left: '28px', background: TEAL_LIGHT, zIndex: 2, boxShadow: '2px 0 4px rgba(0,0,0,0.06)' }}>Cliente</th>
+                              <th style={{ ...thStyle, textAlign: 'center' }}>#</th>
+                              <th style={{ ...thStyle }}>Cliente</th>
                               {['Instrumento', 'Profesor', 'Sede', 'Min', 'Total', 'Tomadas', 'Rest.', 'Valor', 'Pagado', 'Saldo'].map(h => <th key={h} style={{ ...thStyle, textAlign: ['Min','Total','Tomadas','Rest.','Valor','Pagado','Saldo'].includes(h) ? 'center' : 'left' }}>{h}</th>)}
                             </tr>
                         </thead>
@@ -1039,16 +1039,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                             const cPago = colorEstadoPago(estPagoReal)
                             return (
                               <tr key={p.id} onClick={() => seleccionarClientePorId(p.cliente_id)} style={{ borderTop: '1px solid #f8fafc', background: colorFila, cursor: 'pointer' }}
-                                onMouseEnter={e => {
-                                  e.currentTarget.style.background = TEAL_LIGHT
-                                  Array.from(e.currentTarget.querySelectorAll('td[data-sticky]')).forEach((td: any) => td.style.background = TEAL_LIGHT)
-                                }}
-                                onMouseLeave={e => {
-                                  e.currentTarget.style.background = colorFila
-                                  Array.from(e.currentTarget.querySelectorAll('td[data-sticky]')).forEach((td: any) => td.style.background = colorFila)
-                                }}>
-                                <td data-sticky="1" style={{ ...tdStyle, textAlign: 'center', color: '#aaa', position: 'sticky', left: 0, background: colorFila, zIndex: 1 }}>{i + 1}</td>
-                                <td data-sticky="1" style={{ ...tdStyle, textAlign: 'left', fontWeight: '600', color: TEAL, position: 'sticky', left: '28px', background: colorFila, zIndex: 1, boxShadow: '2px 0 4px rgba(0,0,0,0.06)', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nombreCliente}</td>
+                                onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)} onMouseLeave={e => (e.currentTarget.style.background = colorFila)}>
+                                <td style={{ ...tdStyle, textAlign: 'center', color: '#aaa' }}>{i + 1}</td>
+                                <td style={{ ...tdStyle, textAlign: 'left', fontWeight: '600', color: TEAL, maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nombreCliente}</td>
                                 <td style={{ ...tdStyle, textAlign: 'left', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.instrumentos?.nombre || '—'}</td>
                                 <td style={{ ...tdStyle, textAlign: 'left', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.profesores?.nombre || '—'}</td>
                                 <td style={{ ...tdStyle, textAlign: 'left' }}>{p.sedes?.nombre || '—'}</td>
