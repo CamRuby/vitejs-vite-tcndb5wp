@@ -1291,6 +1291,7 @@ export default function Horarios() {
                     <div style={{ display: 'flex', gap: '8px' }}>
                       {[
                         { est: 'programada', label: 'Programada', bg: '#eff6ff', color: '#1d4ed8' },
+                        { est: 'confirmada', label: 'Confirmada', bg: '#dcfce7', color: '#166534' },
                         { est: 'dada', label: 'Dada', bg: '#fefce8', color: '#854d0e' },
                         { est: 'cancelada', label: 'Cancelada', bg: '#fee2e2', color: '#991b1b' },
                       ].map(op => {
@@ -1309,7 +1310,7 @@ export default function Horarios() {
                     <p style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
                       Inscritos esta sesión <span style={{ color: TALLER_COLOR }}>({inscritosDelTaller.length})</span>
                     </p>
-                    {tallerViendo.valor_mensual && <span style={{ fontSize: '14px', color: '#555' }}>${Number(tallerViendo.valor_mensual).toLocaleString()}/mes</span>}
+
                   </div>
                   {sesionActual && (sesionActual.estado === 'dada' || sesionActual.estado === 'confirmada') && (
                     <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#888', fontStyle: 'italic' }}>
