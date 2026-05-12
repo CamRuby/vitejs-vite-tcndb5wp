@@ -51,13 +51,25 @@ function normalizar(s: string) {
 
 function excelDateToISO(val: any): string | null {
   if (!val) return null
+  // JS Date from SheetJS cellDates:true — use UTC to avoid timezone offset
+  if (val instanceof Date) {
+    const y = val.getUTCFullYear()
+    const m = String(val.getUTCMonth() + 1).padStart(2, '0')
+    const d = String(val.getUTCDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+  // ISO string
   if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) return val.substring(0, 10)
-  if (val instanceof Date) return val.toISOString().substring(0, 10)
+  // Excel serial number (e.g. 46036)
   if (typeof val === 'number') {
-    const d = new Date(Math.round((val - 25569) * 86400 * 1000))
+    // Excel epoch: Dec 30, 1899 (accounting for Lotus 1-2-3 bug)
+    const d = new Date(Date.UTC(1899, 11, 30) + val * 86400000)
     return d.toISOString().substring(0, 10)
   }
-  return String(val).substring(0, 10)
+  // String formats: MM/DD/YYYY or DD/MM/YYYY
+  const mdy = String(val).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (mdy) return `${mdy[3]}-${mdy[1].padStart(2,'0')}-${mdy[2].padStart(2,'0')}`
+  return null
 }
 
 function esInasistencia(obs: string | null) {
@@ -92,7 +104,7 @@ export default function Importar() {
     setCargando(true)
     try {
       const ab = await file.arrayBuffer()
-      const wb = XLSX.read(ab, { type: 'array', cellDates: true })
+      const wb = XLSX.read(ab, { type: 'array', cellDates: true, UTC: true })
       const ws = wb.Sheets[wb.SheetNames[0]]
       const raw: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: null })
 
