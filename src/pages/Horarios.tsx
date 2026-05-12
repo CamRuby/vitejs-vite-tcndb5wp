@@ -497,14 +497,25 @@ export default function Horarios() {
     setTeValor(taller.valor_mensual !== null && taller.valor_mensual !== undefined ? String(taller.valor_mensual) : '')
     setTeError('')
     // Inscritos cuyo período cubre la fecha de esta sesión
-    const { data } = await supabase
-      .from('taller_inscripciones')
-      .select('id, mes, fecha_inicio, fecha_fin, valor_pagado, estado, clientes(nombre, telefono)')
-      .eq('taller_id', taller.id)
-      .eq('estado', 'activo')
-      .lte('fecha_inicio', fechaCol)
-      .gte('fecha_fin', fechaCol)
-    setInscritosDelTaller(data || [])
+    // Try with fecha_inicio/fecha_fin first; fallback to mes if columns don't exist
+    let inscData: any[] = []
+    try {
+      const { data, error } = await supabase
+        .from('taller_inscripciones')
+        .select('id, mes, fecha_inicio, fecha_fin, valor_pagado, estado, clientes(nombre, telefono)')
+        .eq('taller_id', taller.id)
+        .eq('estado', 'activo')
+      // Filter client-side to handle nulls gracefully
+      const mesCol = fechaCol.substring(0, 7) + '-01'
+      inscData = (data || []).filter((ins: any) => {
+        if (ins.fecha_inicio && ins.fecha_fin) {
+          return ins.fecha_inicio <= fechaCol && ins.fecha_fin >= fechaCol
+        }
+        // fallback: same month
+        return ins.mes && ins.mes.substring(0, 7) === fechaCol.substring(0, 7)
+      })
+    } catch { inscData = [] }
+    setInscritosDelTaller(inscData)
     const { data: sesion } = await supabase
       .from('taller_sesiones')
       .select('id, fecha, estado')
