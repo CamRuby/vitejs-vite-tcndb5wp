@@ -972,7 +972,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
           )}
 
           {busqueda.length < 2 && (
-            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+            <div style={{ flex: 1, overflow: 'auto' }}>
               {cargandoVista && <div style={{ textAlign: 'center', padding: '32px', color: '#666' }}>Cargando...</div>}
 
               {!cargandoVista && vistaActual === 'todos' && (
@@ -1017,7 +1017,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                       </select>
                       <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#666' }}>{datos.length} planes</span>
                     </div>
-                    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', overflowX: 'auto' }}>
+                    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
                       <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
                         <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
                           <tr>
@@ -1041,9 +1041,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                               <tr key={p.id} onClick={() => seleccionarClientePorId(p.cliente_id)} style={{ borderTop: '1px solid #f8fafc', background: colorFila, cursor: 'pointer' }}
                                 onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)} onMouseLeave={e => (e.currentTarget.style.background = colorFila)}>
                                 <td style={{ ...tdStyle, textAlign: 'center', color: '#aaa', position: 'sticky', left: 0, background: 'inherit', zIndex: 1 }}>{i + 1}</td>
-                                <td style={{ ...tdStyle, textAlign: 'left', fontWeight: '600', color: TEAL, position: 'sticky', left: '28px', background: 'inherit', zIndex: 1, boxShadow: '2px 0 4px rgba(0,0,0,0.06)' }}>{nombreCliente}</td>
-                                <td style={{ ...tdStyle, textAlign: 'left' }}>{p.instrumentos?.nombre || '—'}</td>
-                                <td style={{ ...tdStyle, textAlign: 'left' }}>{p.profesores?.nombre || '—'}</td>
+                                <td style={{ ...tdStyle, textAlign: 'left', fontWeight: '600', color: TEAL, position: 'sticky', left: '28px', background: 'inherit', zIndex: 1, boxShadow: '2px 0 4px rgba(0,0,0,0.06)', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nombreCliente}</td>
+                                <td style={{ ...tdStyle, textAlign: 'left', maxWidth: '110px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.instrumentos?.nombre || '—'}</td>
+                                <td style={{ ...tdStyle, textAlign: 'left', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.profesores?.nombre || '—'}</td>
                                 <td style={{ ...tdStyle, textAlign: 'left' }}>{p.sedes?.nombre || '—'}</td>
                                 <td style={{ ...tdStyle, textAlign: 'center' }}>{p.duracion_min || '—'}</td>
                                 <td style={{ ...tdStyle, textAlign: 'center' }}>{total}</td>
