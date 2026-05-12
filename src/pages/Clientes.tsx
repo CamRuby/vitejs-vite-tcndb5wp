@@ -972,7 +972,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
           )}
 
           {busqueda.length < 2 && (
-            <div style={{ flex: 1, overflowY: 'auto' }}>
+            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
               {cargandoVista && <div style={{ textAlign: 'center', padding: '32px', color: '#666' }}>Cargando...</div>}
 
               {!cargandoVista && vistaActual === 'todos' && (
@@ -1017,17 +1017,17 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                       </select>
                       <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#666' }}>{datos.length} planes</span>
                     </div>
-                    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', overflowX: 'auto' }}>
+                    <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', overflowX: 'auto' }}>
                       <table style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
                         <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
                           <tr>
                               <th style={{ ...thStyle, textAlign: 'center', position: 'sticky', left: 0, background: TEAL_LIGHT, zIndex: 2 }}>#</th>
                               <th style={{ ...thStyle, position: 'sticky', left: '28px', background: TEAL_LIGHT, zIndex: 2, boxShadow: '2px 0 4px rgba(0,0,0,0.06)' }}>Cliente</th>
-                              {['Instrumento', 'Profesor', 'Sede', 'Min', 'Total', 'Tomadas', 'Rest.', 'Valor', 'Pagado', 'Saldo', 'Pago'].map(h => <th key={h} style={{ ...thStyle, textAlign: ['Min','Total','Tomadas','Rest.','Valor','Pagado','Saldo'].includes(h) ? 'center' : 'left' }}>{h}</th>)}
+                              {['Instrumento', 'Profesor', 'Sede', 'Min', 'Total', 'Tomadas', 'Rest.', 'Valor', 'Pagado', 'Saldo'].map(h => <th key={h} style={{ ...thStyle, textAlign: ['Min','Total','Tomadas','Rest.','Valor','Pagado','Saldo'].includes(h) ? 'center' : 'left' }}>{h}</th>)}
                             </tr>
                         </thead>
                         <tbody>
-                          {datos.length === 0 && <tr><td colSpan={13} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin planes activos</td></tr>}
+                          {datos.length === 0 && <tr><td colSpan={12} style={{ padding: '32px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin planes activos</td></tr>}
                           {datos.map((p: any, i) => {
                             const tomadas = p.clases_tomadas || 0, total = p.total_clases || 0, restantes = total - tomadas
                             const nombreCliente = p.clientes?.nombres ? `${p.clientes.nombres} ${p.clientes.apellidos || ''}`.trim() : p.clientes?.nombre || '—'
@@ -1052,9 +1052,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                                 <td style={{ ...tdStyle, textAlign: 'center' }}>{valorPlan ? `$${valorPlan.toLocaleString()}` : '—'}</td>
                                 <td style={{ ...tdStyle, textAlign: 'center', color: '#166534', fontWeight: '500' }}>{totalPagado > 0 ? `$${totalPagado.toLocaleString()}` : '—'}</td>
                                 <td style={{ ...tdStyle, textAlign: 'center', color: saldoPlan && saldoPlan > 0 ? '#991b1b' : '#166534', fontWeight: '500' }}>{saldoPlan !== null ? (saldoPlan > 0 ? `$${saldoPlan.toLocaleString()}` : '✓') : '—'}</td>
-                                <td style={{ ...tdStyle, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
-                                  <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: cPago.bg, color: cPago.color, whiteSpace: 'nowrap' }}>{estPagoReal}</span>
-                                </td>
+
                               </tr>
                             )
                           })}
