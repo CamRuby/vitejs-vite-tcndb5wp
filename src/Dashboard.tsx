@@ -76,7 +76,7 @@ export default function Dashboard({ usuario }: { usuario: any }) {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', fontFamily: 'sans-serif', overflow: 'hidden', boxSizing: 'border-box' }}>
+    <div style={{ display: 'flex', height: '100vh', fontFamily: 'sans-serif', overflow: 'hidden' }}>
 
       {/* Menú lateral */}
       <div style={{ width: '220px', flexShrink: 0, background: '#1e293b', color: 'white', display: 'flex', flexDirection: 'column', padding: '24px 0' }}>
