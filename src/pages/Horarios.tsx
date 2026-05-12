@@ -496,14 +496,14 @@ export default function Horarios() {
     setTeDuracion(String(taller.duracion_min || 60))
     setTeValor(taller.valor_mensual !== null && taller.valor_mensual !== undefined ? String(taller.valor_mensual) : '')
     setTeError('')
-    const hoy = new Date()
-    const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+    // Inscritos cuyo período cubre la fecha de esta sesión
     const { data } = await supabase
       .from('taller_inscripciones')
-      .select('id, mes, valor_pagado, estado, clientes(nombre, telefono)')
+      .select('id, mes, fecha_inicio, fecha_fin, valor_pagado, estado, clientes(nombre, telefono)')
       .eq('taller_id', taller.id)
       .eq('estado', 'activo')
-      .gte('mes', mes)
+      .lte('fecha_inicio', fechaCol)
+      .gte('fecha_fin', fechaCol)
     setInscritosDelTaller(data || [])
     const { data: sesion } = await supabase
       .from('taller_sesiones')
@@ -1268,21 +1268,50 @@ export default function Horarios() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                     <p style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
-                      Inscritos este mes <span style={{ color: TALLER_COLOR }}>({inscritosDelTaller.length})</span>
+                      Inscritos esta sesión <span style={{ color: TALLER_COLOR }}>({inscritosDelTaller.length})</span>
                     </p>
                     {tallerViendo.valor_mensual && <span style={{ fontSize: '14px', color: '#555' }}>${Number(tallerViendo.valor_mensual).toLocaleString()}/mes</span>}
                   </div>
+                  {sesionActual && (sesionActual.estado === 'dada' || sesionActual.estado === 'confirmada') && (
+                    <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#888', fontStyle: 'italic' }}>
+                      Marca ✓ o ✗ por cada estudiante. La sesión pasa a "dada" al marcar al menos uno.
+                    </p>
+                  )}
                   {inscritosDelTaller.length === 0
                     ? <p style={{ textAlign: 'center', color: '#aaa', padding: '24px 0', fontSize: '14px' }}>Sin inscritos este mes</p>
-                    : inscritosDelTaller.map((ins: any, i) => (
-                        <div key={ins.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: i % 2 === 0 ? '#fafbfc' : 'white', marginBottom: '4px' }}>
-                          <div>
-                            <p style={{ margin: 0, fontWeight: '500', fontSize: '14px' }}>{ins.clientes?.nombre || '—'}</p>
-                            <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>{ins.clientes?.telefono || '—'}</p>
+                    : inscritosDelTaller.map((ins: any, i) => {
+                        const sesionId = sesionActual?.id
+                        const puedeMarcar = sesionId && (sesionActual?.estado === 'dada' || sesionActual?.estado === 'confirmada')
+                        const asistio = asistenciasSesion[ins.id]
+                        return (
+                          <div key={ins.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: i % 2 === 0 ? '#fafbfc' : 'white', marginBottom: '4px' }}>
+                            <div style={{ flex: 1 }}>
+                              <p style={{ margin: 0, fontWeight: '500', fontSize: '14px' }}>{ins.clientes?.nombre || '—'}</p>
+                              <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>{ins.clientes?.telefono || '—'}</p>
+                            </div>
+                            {ins.valor_pagado && <span style={{ fontSize: '13px', color: '#555', marginRight: '10px' }}>${Number(ins.valor_pagado).toLocaleString()}</span>}
+                            {puedeMarcar ? (
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button onClick={() => toggleAsistenciaSesion(sesionId, ins.id, true)}
+                                  disabled={guardandoAsistencia}
+                                  style={{ padding: '4px 12px', borderRadius: '6px', border: `1px solid ${asistio === true ? '#166534' : '#e2e8f0'}`, background: asistio === true ? '#dcfce7' : 'white', color: asistio === true ? '#166534' : '#aaa', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
+                                  ✓
+                                </button>
+                                <button onClick={() => toggleAsistenciaSesion(sesionId, ins.id, false)}
+                                  disabled={guardandoAsistencia}
+                                  style={{ padding: '4px 12px', borderRadius: '6px', border: `1px solid ${asistio === false ? '#991b1b' : '#e2e8f0'}`, background: asistio === false ? '#fee2e2' : 'white', color: asistio === false ? '#991b1b' : '#aaa', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
+                                  ✗
+                                </button>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: '12px', fontWeight: '600',
+                                color: asistio === true ? '#166534' : asistio === false ? '#991b1b' : '#aaa' }}>
+                                {asistio === true ? '✓ Asistió' : asistio === false ? '✗ No asistió' : '—'}
+                              </span>
+                            )}
                           </div>
-                          {ins.valor_pagado && <span style={{ fontSize: '13px', color: '#555' }}>${Number(ins.valor_pagado).toLocaleString()}</span>}
-                        </div>
-                      ))
+                        )
+                      })
                   }
                   <button onClick={() => setModalVerTaller(false)} style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>Cerrar</button>
                 </>
