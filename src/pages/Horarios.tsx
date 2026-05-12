@@ -136,6 +136,8 @@ export default function Horarios() {
   const [tallerViendo, setTallerViendo] = useState<any>(null)
   const [inscritosDelTaller, setInscritosDelTaller] = useState<any[]>([])
   const [sesionActual, setSesionActual] = useState<any>(null)
+  const [asistenciasSesion, setAsistenciasSesion] = useState<Record<string, boolean | null>>({})
+  const [guardandoAsistencia, setGuardandoAsistencia] = useState(false)
   const [fechaSesionViendo, setFechaSesionViendo] = useState<string>('')
   const [guardandoSesion, setGuardandoSesion] = useState(false)
   const [modoEdicionTaller, setModoEdicionTaller] = useState(false)
@@ -523,7 +525,43 @@ export default function Horarios() {
       .eq('fecha', fechaCol)
       .single()
     setSesionActual(sesion || null)
+    setAsistenciasSesion({})
+    if (sesion?.id) {
+      const { data: asis } = await supabase
+        .from('taller_asistencias').select('inscripcion_id, asistio').eq('sesion_id', sesion.id)
+      const map: Record<string, boolean | null> = {}
+      ;(asis || []).forEach((a: any) => { map[a.inscripcion_id] = a.asistio })
+      setAsistenciasSesion(map)
+    }
     setModalVerTaller(true)
+  }
+
+  async function cargarAsistenciasSesion(sesionId: string) {
+    const { data } = await supabase
+      .from('taller_asistencias').select('inscripcion_id, asistio').eq('sesion_id', sesionId)
+    const map: Record<string, boolean | null> = {}
+    ;(data || []).forEach((a: any) => { map[a.inscripcion_id] = a.asistio })
+    setAsistenciasSesion(map)
+  }
+
+  async function toggleAsistenciaSesion(sesionId: string, inscripcionId: string, asistio: boolean) {
+    setGuardandoAsistencia(true)
+    const yaExiste = inscripcionId in asistenciasSesion
+    if (yaExiste) {
+      await supabase.from('taller_asistencias').update({ asistio })
+        .eq('sesion_id', sesionId).eq('inscripcion_id', inscripcionId)
+    } else {
+      await supabase.from('taller_asistencias').insert({ sesion_id: sesionId, inscripcion_id: inscripcionId, asistio })
+    }
+    const newMap = { ...asistenciasSesion, [inscripcionId]: asistio }
+    setAsistenciasSesion(newMap)
+    // Si al menos uno asistió, marcar sesión como dada automáticamente
+    const alguienAsistio = Object.values(newMap).some(v => v === true)
+    if (alguienAsistio && sesionActual?.estado !== 'dada') {
+      await supabase.from('taller_sesiones').update({ estado: 'dada' }).eq('id', sesionId)
+      setSesionActual((prev: any) => ({ ...prev, estado: 'dada' }))
+    }
+    setGuardandoAsistencia(false)
   }
 
   async function marcarSesion(nuevoEstado: string) {
@@ -542,18 +580,8 @@ export default function Horarios() {
         sesionId = data.id
       }
     }
-    if (nuevoEstado === 'dada' && sesionId) {
-      const { data: existentes } = await supabase.from('taller_asistencias').select('id').eq('sesion_id', sesionId)
-      if (!existentes || existentes.length === 0) {
-        if (inscritosDelTaller.length > 0) {
-          const asistencias = inscritosDelTaller.map((ins: any) => ({
-            sesion_id: sesionId, inscripcion_id: ins.id, asistio: true
-          }))
-          await supabase.from('taller_asistencias').insert(asistencias)
-        }
-      }
-    }
     setGuardandoSesion(false)
+    if (sesionId) await cargarAsistenciasSesion(sesionId)
   }
 
   async function guardarEdicionTaller() {
