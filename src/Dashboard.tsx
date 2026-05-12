@@ -5,6 +5,7 @@ import Clientes from './pages/Clientes'
 import Profesores from './pages/Profesores'
 import Horarios from './pages/Horarios'
 import Reportes from './pages/Reportes'
+import Importar from './pages/Importar'
 
 const MENU = [
   { id: 'inicio',     label: 'Inicio',     icon: '⊞' },
@@ -12,6 +13,7 @@ const MENU = [
   { id: 'profesores', label: 'Profesores', icon: '🎓' },
   { id: 'horarios',   label: 'Horarios',   icon: '📅' },
   { id: 'reportes',   label: 'Reportes',   icon: '📊' },
+  { id: 'importar',   label: 'Importar',   icon: '📥' },
 ]
 
 export default function Dashboard({ usuario }: { usuario: any }) {
@@ -140,6 +142,7 @@ export default function Dashboard({ usuario }: { usuario: any }) {
         {seccion === 'profesores' && <Profesores key={profesoresKey} />}
         {seccion === 'horarios'   && <Horarios />}
         {seccion === 'reportes'   && <Reportes />}
+        {seccion === 'importar'   && <Importar />}
       </div>
 
       {/* Panel de notificaciones */}
