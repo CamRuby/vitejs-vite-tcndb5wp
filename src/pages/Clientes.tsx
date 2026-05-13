@@ -617,7 +617,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   }
 
   async function cargarDatosCliente(c: any) {
-    const { data: talleresData } = await supabase.from('taller_inscripciones').select('id, mes, fecha_inicio, fecha_fin, valor_pagado, estado, taller_id, talleres(nombre, dia_semana, hora, duracion_min, salones(nombre, sedes(nombre)))').eq('cliente_id', c.id).order('fecha_inicio', { ascending: false })
+    const { data: talleresData } = await supabase.from('taller_inscripciones').select('id, mes, fecha_inicio, fecha_fin, num_sesiones, valor_plan, total_pagado, saldo, valor_pagado, estado, taller_id, talleres(nombre, dia_semana, hora, duracion_min, salones(nombre, sedes(nombre)))').eq('cliente_id', c.id).order('fecha_inicio', { ascending: false })
     setInscripcionesTalleres(talleresData || [])
     // Cargar pagos de talleres
     const insIds = (talleresData || []).map((t: any) => t.id)
@@ -1680,7 +1680,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                 <label style={labelStyle}>Taller *</label>
                 <select value={tallerSeleccionado} onChange={e => { setTallerSeleccionado(e.target.value); setTallerValorPagado('') }} style={estiloInput}>
                   <option value="">— Seleccionar taller —</option>
-                  {talleres.map((t: any) => <option key={t.id} value={t.id}>{t.nombre} · {t.dia_semana}s {t.hora?.substring(0,5)} · {t.salones?.sedes?.nombre}</option>)}
+                  {talleres.map((t: any) => <option key={t.id} value={t.id}>{t.nombre} · {t.dia_semana} {t.hora?.substring(0,5)} · {t.salones?.sedes?.nombre}</option>)}
                 </select>
               </div>
               {tallerSeleccionado && (<>
