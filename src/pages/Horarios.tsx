@@ -1013,33 +1013,22 @@ export default function Horarios() {
                     >
                       {taller && (() => {
                           const sesEst = sesionesEstadoMap[`${taller.id}-${col.fecha}`] || 'programada'
-                          const cardStyle = sesEst === 'dada'
-                            ? { bg: '#fefce8', color: '#854d0e', border: '#fde68a' }
-                            : sesEst === 'cancelada'
-                            ? { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' }
-                            : sesEst === 'confirmada'
-                            ? { bg: TALLER_BG, color: TEAL, border: TEAL_MID }
-                            : { bg: '#f3f4f6', color: '#9ca3af', border: '#e5e7eb' } // programada = grey
-                          return (
-                        <div onClick={e => abrirTaller(e, taller, col.fecha)} title="Clic para ver inscritos"
-                          style={{
-                            background: cardStyle.bg, color: cardStyle.color, border: `1px solid ${cardStyle.border}`,
-                            borderRadius: '6px', padding: '4px 7px',
-                            fontSize: vista === 'dia' ? '13px' : '11px',
-                            cursor: 'pointer', height: 'calc(100% - 4px)',
-                            overflow: 'hidden', boxSizing: 'border-box', margin: '2px 3px',
-                            opacity: sesEst === 'programada' ? 0.7 : 1
-                          }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2px' }}>
-                            <strong>🎸 {taller.nombre}</strong>
-                            <span style={{ fontSize: '11px', fontWeight: '700', whiteSpace: 'nowrap', background: 'rgba(124,58,237,0.15)', padding: '1px 6px', borderRadius: '10px' }}>
-                              {inscritosPorTaller[taller.id] || 0} 👤
-                            </span>
+                          const bg = sesEst === 'dada' ? '#fefce8' : sesEst === 'cancelada' ? '#fee2e2' : sesEst === 'confirmada' ? TALLER_BG : '#f3f4f6'
+                          const color = sesEst === 'dada' ? '#854d0e' : sesEst === 'cancelada' ? '#991b1b' : sesEst === 'confirmada' ? TEAL : '#9ca3af'
+                          const border = sesEst === 'dada' ? '#fde68a' : sesEst === 'cancelada' ? '#fecaca' : sesEst === 'confirmada' ? TEAL_MID : '#e5e7eb'
+                          return <div key="tc" onClick={e => abrirTaller(e, taller, col.fecha)} title="Clic para ver inscritos"
+                            style={{ background: bg, color, border: `1px solid ${border}`, borderRadius: '6px', padding: '4px 7px',
+                              fontSize: vista === 'dia' ? '13px' : '11px', cursor: 'pointer', height: 'calc(100% - 4px)',
+                              overflow: 'hidden', boxSizing: 'border-box', margin: '2px 3px', opacity: sesEst === 'programada' ? 0.7 : 1 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2px' }}>
+                              <strong>🎸 {taller.nombre}</strong>
+                              <span style={{ fontSize: '11px', fontWeight: '700', whiteSpace: 'nowrap', background: 'rgba(124,58,237,0.15)', padding: '1px 6px', borderRadius: '10px' }}>
+                                {inscritosPorTaller[taller.id] || 0} 👤
+                              </span>
+                            </div>
+                            {vista === 'dia' && <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '1px' }}>{taller.profesores?.nombre}</div>}
                           </div>
-                          {vista === 'dia' && <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '1px' }}>{taller.profesores?.nombre}</div>}
-                        </div>
-                          })()}
-                      )}
+                        })()}
 
                       {mainClass && !taller && (() => {
                         const col2 = getColorEstado(mainClass.es_cortesia ? 'dada' : mainClass.estado, mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia)
