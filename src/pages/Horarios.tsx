@@ -550,16 +550,28 @@ export default function Horarios() {
 
   async function toggleAsistenciaSesion(_sesionId: string, inscripcionId: string, asistio: boolean | null) {
     setGuardandoAsistencia(true)
-    // Auto-create sesion if it doesn't exist yet (persists attendance immediately)
+    // Get or create sesion
     let sesionId = sesionActual?.id
     if (!sesionId) {
-      const { data: newSesion } = await supabase.from('taller_sesiones')
-        .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'confirmada' })
-        .select().single()
-      if (!newSesion) { setGuardandoAsistencia(false); return }
-      setSesionActual(newSesion)
-      setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'confirmada' }))
-      sesionId = newSesion.id
+      // Check if one already exists (avoid duplicates)
+      const { data: existing } = await supabase.from('taller_sesiones')
+        .select('id, estado').eq('taller_id', tallerViendo.id).eq('fecha', fechaSesionViendo).maybeSingle()
+      if (existing) {
+        setSesionActual(existing)
+        sesionId = existing.id
+        // If existing is cancelled, don't allow attendance
+        if (existing.estado === 'cancelada' || existing.estado === 'programada') {
+          setGuardandoAsistencia(false); return
+        }
+      } else {
+        const { data: newSesion } = await supabase.from('taller_sesiones')
+          .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'confirmada' })
+          .select().single()
+        if (!newSesion) { setGuardandoAsistencia(false); return }
+        setSesionActual(newSesion)
+        setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'confirmada' }))
+        sesionId = newSesion.id
+      }
     }
     const yaExiste = inscripcionId in asistenciasSesion
     if (asistio === null) {
