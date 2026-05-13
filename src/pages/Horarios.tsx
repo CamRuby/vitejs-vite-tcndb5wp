@@ -633,17 +633,36 @@ export default function Horarios() {
 
   async function borrarTaller() {
     setTeGuardando(true)
-    const hoy = new Date()
-    const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+    const hoy = new Date().toISOString().split('T')[0]
+    // Check for active inscriptions (using fecha_fin for new model, mes for old)
     const { data: inscritos } = await supabase
-      .from('taller_inscripciones').select('id')
-      .eq('taller_id', tallerViendo.id).eq('estado', 'activo').gte('mes', mes)
-    if (inscritos && inscritos.length > 0) {
-      setTeError(`No se puede borrar: tiene ${inscritos.length} inscrito(s) activo(s) este mes.`)
+      .from('taller_inscripciones').select('id, fecha_fin, mes')
+      .eq('taller_id', tallerViendo.id).eq('estado', 'activo')
+    const activos = (inscritos || []).filter((i: any) => {
+      if (i.fecha_fin) return i.fecha_fin >= hoy
+      return i.mes >= hoy.substring(0, 7) + '-01'
+    })
+    if (activos.length > 0) {
+      setTeError(`No se puede borrar: tiene ${activos.length} inscrito(s) activo(s).`)
       setConfirmarBorrarTaller(false); setTeGuardando(false); return
     }
-    await supabase.from('talleres').delete().eq('id', tallerViendo.id)
+    // Delete dependents first to avoid FK constraint errors
+    const { data: sesiones } = await supabase.from('taller_sesiones').select('id').eq('taller_id', tallerViendo.id)
+    if (sesiones && sesiones.length > 0) {
+      const sIds = sesiones.map((s: any) => s.id)
+      await supabase.from('taller_asistencias').delete().in('sesion_id', sIds)
+      await supabase.from('taller_sesiones').delete().eq('taller_id', tallerViendo.id)
+    }
+    const { data: inscripsTaller } = await supabase.from('taller_inscripciones').select('id').eq('taller_id', tallerViendo.id)
+    if (inscripsTaller && inscripsTaller.length > 0) {
+      const iIds = inscripsTaller.map((i: any) => i.id)
+      await supabase.from('pagos').delete().in('inscripcion_id', iIds)
+      await supabase.from('taller_inscripciones').delete().eq('taller_id', tallerViendo.id)
+    }
+    const { error } = await supabase.from('talleres').delete().eq('id', tallerViendo.id)
+    if (error) { setTeError('Error al borrar: ' + error.message); setTeGuardando(false); return }
     setModalVerTaller(false)
+    setConfirmarBorrarTaller(false)
     await cargarTalleres()
     setTeGuardando(false)
   }
