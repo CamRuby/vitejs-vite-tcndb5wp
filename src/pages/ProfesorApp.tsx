@@ -123,6 +123,7 @@ export default function ProfesorApp() {
   const [inscritosTaller, setInscritosTaller] = useState<any[]>([])
   const [sesionHoy, setSesionHoy]             = useState<any>(null)
   const [asistenciasTaller, setAsistenciasTaller] = useState<Record<string, boolean | null>>({})
+  const [resumenTaller, setResumenTaller] = useState('')
   const [guardandoAsistTaller, setGuardandoAsistTaller] = useState(false)
   const [guardandoSesion, setGuardandoSesion] = useState(false)
 
@@ -429,9 +430,10 @@ export default function ProfesorApp() {
       return ins.mes && ins.mes.substring(0,7) === fechaClase.substring(0,7)
     })
     setInscritosTaller(inscFiltrados)
-    const { data: sesion } = await supabase.from('taller_sesiones').select('id, fecha, estado')
+    const { data: sesion } = await supabase.from('taller_sesiones').select('id, fecha, estado, observaciones')
       .eq('taller_id', c.tallerRealId).eq('fecha', c.fecha).maybeSingle()
     setSesionHoy(sesion || null)
+    setResumenTaller(sesion?.observaciones || '')
     setAsistenciasTaller({})
     if (sesion?.id) {
       const { data: asis } = await supabase.from('taller_asistencias')
@@ -779,17 +781,16 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
                 <p style={{ margin:0, fontSize:'13px', fontWeight:'700', color:'#555' }}>Sesión de hoy</p>
                 <span style={{ padding:'3px 10px', borderRadius:'20px', fontSize:'11px', fontWeight:'700',
-                  background: sesionHoy?.estado === 'dada' ? '#fefce8' : sesionHoy?.estado === 'cancelada' ? '#fee2e2' : '#dcfce7',
-                  color: sesionHoy?.estado === 'dada' ? '#854d0e' : sesionHoy?.estado === 'cancelada' ? '#991b1b' : '#166534' }}>
-                  {sesionHoy?.estado || 'confirmada'}
+                  background: sesionHoy?.estado === 'dada' ? '#fefce8' : sesionHoy?.estado === 'cancelada' ? '#fee2e2' : sesionHoy?.estado === 'confirmada' ? '#dcfce7' : '#f3f4f6',
+                  color: sesionHoy?.estado === 'dada' ? '#854d0e' : sesionHoy?.estado === 'cancelada' ? '#991b1b' : sesionHoy?.estado === 'confirmada' ? '#166534' : '#6b7280' }}>
+                  {sesionHoy?.estado || 'programada'}
                 </span>
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                 {(!sesionHoy?.estado || sesionHoy.estado === 'programada') && (
-                  <button className="ba" onClick={() => marcarSesionTaller('confirmada')} disabled={guardandoSesion}
-                    style={{ padding:'14px', background:'#dcfce7', color:'#166534', border:'2px solid #bbf7d0', borderRadius:'14px', fontSize:'15px', fontWeight:'800', cursor:'pointer', fontFamily:'inherit' }}>
-                    Confirmar taller
-                  </button>
+                  <div style={{ padding:'14px', background:'#f3f4f6', borderRadius:'14px', fontSize:'14px', color:'#6b7280', fontWeight:'600', textAlign:'center' }}>
+                    ⏳ Taller aún no confirmado por el administrador
+                  </div>
                 )}
                 {sesionHoy?.estado === 'confirmada' && (<>
                   <button className="ba" onClick={() => {
@@ -833,6 +834,24 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
                 )}
               </div>
             </div>
+            {(sesionHoy?.estado === 'dada' || sesionHoy?.estado === 'confirmada') && (
+              <div style={{ marginBottom:'16px' }}>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>
+                  Resumen de la sesión
+                </label>
+                <textarea value={resumenTaller} onChange={e => setResumenTaller(e.target.value)}
+                  placeholder="Descripción de lo trabajado en esta sesión..."
+                  rows={3} style={{ width:'100%', padding:'10px 12px', border:'1px solid #e5e7eb', borderRadius:'10px', fontSize:'14px', fontFamily:'inherit', resize:'vertical', lineHeight:1.5, boxSizing:'border-box' as const }} />
+                {sesionHoy?.id && (
+                  <button onClick={async () => {
+                    await supabase.from('taller_sesiones').update({ observaciones: resumenTaller.trim() || null }).eq('id', sesionHoy.id)
+                    setSesionHoy((prev: any) => ({ ...prev, observaciones: resumenTaller.trim() || null }))
+                  }} style={{ marginTop:'6px', padding:'9px 18px', background: '#7c3aed', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                    Guardar resumen
+                  </button>
+                )}
+              </div>
+            )}
             <p style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#374151' }}>
               Inscritos esta sesión <span style={{ color:'#7c3aed' }}>({inscritosTaller.length})</span>
             </p>
