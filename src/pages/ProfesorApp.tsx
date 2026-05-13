@@ -820,7 +820,7 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
                 {sesionHoy?.estado === 'dada' && (
                   <div style={{ padding:'14px', background:'#fefce8', color:'#854d0e', border:'2px solid #fde68a', borderRadius:'14px', fontSize:'15px', fontWeight:'800', textAlign:'center' }}>✓ Dado</div>
                 )}
-                {sesionHoy?.estado !== 'cancelada' && sesionHoy?.estado !== 'dada' && (
+                {sesionHoy?.estado === 'confirmada' && (
                   <button className="ba" onClick={() => {
                     const h2 = tallerModal?.hora || '00:00'
                     const claseDate = new Date(tallerModal.fecha + 'T' + h2.substring(0,5) + ':00')
