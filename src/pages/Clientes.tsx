@@ -1624,19 +1624,23 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             <div style={{ overflowY: 'auto', flex: 1 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead style={{ position: 'sticky', top: 0, background: '#f3e8ff', zIndex: 1 }}>
-                  <tr>{['Taller', 'Sede / Salón', 'Día / Hora', 'Desde', 'Valor pagado'].map(h => <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', color: '#7c3aed', fontWeight: '600' }}>{h}</th>)}</tr>
+                  <tr>{['Taller', 'Sede / Salón', 'Día / Hora', 'Desde', 'Hasta', 'Sesiones', 'Valor plan'].map(h => <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', color: '#7c3aed', fontWeight: '600' }}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
                   {inscripcionesTalleres.filter((i: any) => i.estado === 'archivado').map((ins: any, idx) => {
                     const fechaMes = ins.mes ? new Date(ins.mes + 'T12:00:00') : null
                     const mesLabel = fechaMes ? `${fechaMes.getDate()}/${fechaMes.getMonth()+1}/${fechaMes.getFullYear()}` : '—'
+                    const desde = ins.fecha_inicio || mesLabel
+                    const hasta = ins.fecha_fin || '—'
                     return (
                       <tr key={ins.id} style={{ borderTop: '1px solid #f8fafc', background: idx % 2 === 0 ? 'white' : '#fafbfc' }}>
                         <td style={{ padding: '11px 16px', fontSize: '14px', fontWeight: '500', color: '#333' }}>🎸 {ins.talleres?.nombre || '—'}</td>
                         <td style={{ padding: '11px 16px', fontSize: '13px', color: '#555' }}>{ins.talleres?.salones?.nombre} — {ins.talleres?.salones?.sedes?.nombre}</td>
                         <td style={{ padding: '11px 16px', fontSize: '13px', color: '#555' }}>{ins.talleres?.dia_semana} {ins.talleres?.hora?.substring(0,5)}</td>
-                        <td style={{ padding: '11px 16px', fontSize: '13px', color: '#888' }}>{mesLabel}</td>
-                        <td style={{ padding: '11px 16px', fontSize: '13px', color: '#555', fontWeight: '500' }}>${ins.valor_pagado ? Number(ins.valor_pagado).toLocaleString() : '—'}</td>
+                        <td style={{ padding: '11px 16px', fontSize: '13px', color: '#888' }}>{desde}</td>
+                        <td style={{ padding: '11px 16px', fontSize: '13px', color: '#888' }}>{hasta}</td>
+                        <td style={{ padding: '11px 16px', fontSize: '13px', color: '#555', textAlign: 'center' }}>{ins.num_sesiones || 4}</td>
+                        <td style={{ padding: '11px 16px', fontSize: '13px', color: '#555', fontWeight: '500' }}>{ins.valor_plan ? `$${Number(ins.valor_plan).toLocaleString()}` : ins.valor_pagado ? `$${Number(ins.valor_pagado).toLocaleString()}` : '—'}</td>
                       </tr>
                     )
                   })}
