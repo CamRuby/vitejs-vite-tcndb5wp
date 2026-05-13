@@ -634,7 +634,7 @@ export default function Horarios() {
   async function borrarTaller() {
     setTeGuardando(true)
     const hoy = new Date().toISOString().split('T')[0]
-    // Check for active inscriptions (using fecha_fin for new model, mes for old)
+    // Block if there are active inscriptions
     const { data: inscritos } = await supabase
       .from('taller_inscripciones').select('id, fecha_fin, mes')
       .eq('taller_id', tallerViendo.id).eq('estado', 'activo')
@@ -643,24 +643,20 @@ export default function Horarios() {
       return i.mes >= hoy.substring(0, 7) + '-01'
     })
     if (activos.length > 0) {
-      setTeError(`No se puede borrar: tiene ${activos.length} inscrito(s) activo(s).`)
+      setTeError(`No se puede archivar: tiene ${activos.length} inscrito(s) activo(s).`)
       setConfirmarBorrarTaller(false); setTeGuardando(false); return
     }
-    // Delete dependents first to avoid FK constraint errors
+    // Archive the taller — preserves historical inscriptions and payments
+    // Only delete sesiones (not needed for history) and active inscriptions
     const { data: sesiones } = await supabase.from('taller_sesiones').select('id').eq('taller_id', tallerViendo.id)
     if (sesiones && sesiones.length > 0) {
       const sIds = sesiones.map((s: any) => s.id)
       await supabase.from('taller_asistencias').delete().in('sesion_id', sIds)
       await supabase.from('taller_sesiones').delete().eq('taller_id', tallerViendo.id)
     }
-    const { data: inscripsTaller } = await supabase.from('taller_inscripciones').select('id').eq('taller_id', tallerViendo.id)
-    if (inscripsTaller && inscripsTaller.length > 0) {
-      const iIds = inscripsTaller.map((i: any) => i.id)
-      await supabase.from('pagos').delete().in('inscripcion_id', iIds)
-      await supabase.from('taller_inscripciones').delete().eq('taller_id', tallerViendo.id)
-    }
-    const { error } = await supabase.from('talleres').delete().eq('id', tallerViendo.id)
-    if (error) { setTeError('Error al borrar: ' + error.message); setTeGuardando(false); return }
+    // Mark taller as archived — does NOT delete inscripciones or pagos
+    const { error } = await supabase.from('talleres').update({ estado: 'archivado' }).eq('id', tallerViendo.id)
+    if (error) { setTeError('Error: ' + error.message); setTeGuardando(false); return }
     setModalVerTaller(false)
     setConfirmarBorrarTaller(false)
     await cargarTalleres()
@@ -1476,13 +1472,13 @@ export default function Horarios() {
                     <button onClick={() => setModoEdicionTaller(false)} style={{ padding: '10px 16px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>Cancelar</button>
                   </div>
                   {!confirmarBorrarTaller ? (
-                    <button onClick={() => setConfirmarBorrarTaller(true)} style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Borrar taller</button>
+                    <button onClick={() => setConfirmarBorrarTaller(true)} style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Archivar taller</button>
                   ) : (
                     <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '14px', marginTop: '10px' }}>
-                      <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#991b1b', fontWeight: '700' }}>¿Borrar el taller "{tallerViendo.nombre}"?</p>
+                      <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#991b1b', fontWeight: '700' }}>¿Archivar el taller "{tallerViendo.nombre}"?</p>
                       <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#666' }}>Se eliminará permanentemente.</p>
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={borrarTaller} disabled={teGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>Sí, borrar</button>
+                        <button onClick={borrarTaller} disabled={teGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>Sí, archivar</button>
                         <button onClick={() => setConfirmarBorrarTaller(false)} style={{ padding: '8px 14px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Cancelar</button>
                       </div>
                     </div>
