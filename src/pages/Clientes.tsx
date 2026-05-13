@@ -1563,7 +1563,6 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                   </div>
                 )}
               </div>
-                )})()}
             )
           })}
         </div>
