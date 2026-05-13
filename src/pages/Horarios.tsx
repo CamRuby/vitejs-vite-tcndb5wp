@@ -544,22 +544,32 @@ export default function Horarios() {
     setAsistenciasSesion(map)
   }
 
-  async function toggleAsistenciaSesion(sesionId: string, inscripcionId: string, asistio: boolean) {
+  async function toggleAsistenciaSesion(_sesionId: string, inscripcionId: string, asistio: boolean | null) {
     setGuardandoAsistencia(true)
-    const yaExiste = inscripcionId in asistenciasSesion
-    if (yaExiste) {
-      await supabase.from('taller_asistencias').update({ asistio })
-        .eq('sesion_id', sesionId).eq('inscripcion_id', inscripcionId)
-    } else {
-      await supabase.from('taller_asistencias').insert({ sesion_id: sesionId, inscripcion_id: inscripcionId, asistio })
+    // Auto-create sesion if it doesn't exist yet (persists attendance immediately)
+    let sesionId = sesionActual?.id
+    if (!sesionId) {
+      const { data: newSesion } = await supabase.from('taller_sesiones')
+        .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'confirmada' })
+        .select().single()
+      if (!newSesion) { setGuardandoAsistencia(false); return }
+      setSesionActual(newSesion)
+      sesionId = newSesion.id
     }
-    const newMap = { ...asistenciasSesion, [inscripcionId]: asistio }
-    setAsistenciasSesion(newMap)
-    // Si al menos uno asistió, marcar sesión como dada automáticamente
-    const alguienAsistio = Object.values(newMap).some(v => v === true)
-    if (alguienAsistio && sesionActual?.estado !== 'dada') {
-      await supabase.from('taller_sesiones').update({ estado: 'dada' }).eq('id', sesionId)
-      setSesionActual((prev: any) => ({ ...prev, estado: 'dada' }))
+    const yaExiste = inscripcionId in asistenciasSesion
+    if (asistio === null) {
+      await supabase.from('taller_asistencias').delete()
+        .eq('sesion_id', sesionId).eq('inscripcion_id', inscripcionId)
+      const newMap = { ...asistenciasSesion }; delete newMap[inscripcionId]
+      setAsistenciasSesion(newMap)
+    } else {
+      if (yaExiste) {
+        await supabase.from('taller_asistencias').update({ asistio })
+          .eq('sesion_id', sesionId).eq('inscripcion_id', inscripcionId)
+      } else {
+        await supabase.from('taller_asistencias').insert({ sesion_id: sesionId, inscripcion_id: inscripcionId, asistio })
+      }
+      setAsistenciasSesion(prev => ({ ...prev, [inscripcionId]: asistio }))
     }
     setGuardandoAsistencia(false)
   }
@@ -1331,7 +1341,7 @@ export default function Horarios() {
                       Inscritos esta sesión <span style={{ color: TALLER_COLOR }}>({inscritosDelTaller.length})</span>
                     </p>
                   </div>
-                  {sesionActual && (sesionActual.estado === 'dada' || sesionActual.estado === 'confirmada') && (
+                  {(sesionActual?.estado === 'dada' || sesionActual?.estado === 'confirmada' || !sesionActual) && (
                     <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#888', fontStyle: 'italic' }}>
                       Selecciona los estudiantes que asistieron a esta sesión.
                     </p>
@@ -1340,7 +1350,7 @@ export default function Horarios() {
                     ? <p style={{ textAlign: 'center', color: '#aaa', padding: '24px 0', fontSize: '14px' }}>Sin inscritos esta sesión</p>
                     : inscritosDelTaller.map((ins: any, i) => {
                         const sesionId = sesionActual?.id
-                        const puedeMarcar = sesionId && (sesionActual?.estado === 'dada' || sesionActual?.estado === 'confirmada')
+                        const puedeMarcar = sesionActual?.estado === 'dada' || sesionActual?.estado === 'confirmada' || !sesionActual
                         const asistio = asistenciasSesion[ins.id]
                         return (
                           <div key={ins.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: i % 2 === 0 ? '#fafbfc' : 'white', marginBottom: '4px' }}>
