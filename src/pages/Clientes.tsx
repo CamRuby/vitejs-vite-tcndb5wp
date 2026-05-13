@@ -1669,7 +1669,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                 {fi && ff && (
                   <div style={{ background: '#f3e8ff', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#7c3aed', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
                     <span>📅 <strong>{fi}</strong> → <strong>{ff}</strong></span>
-                    <span>🎸 <strong>{sesionesCalc}</strong> sesiones · {tSel?.dia_semana}s</span>
+                    <span>🎸 <strong>{sesionesCalc}</strong> sesiones · {tSel?.dia_semana}{tSel?.dia_semana?.endsWith('s') ? '' : 's'}</span>
                   </div>
                 )}
                 <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px' }}>
