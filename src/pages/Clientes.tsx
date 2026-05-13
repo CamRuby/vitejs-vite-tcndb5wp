@@ -1851,7 +1851,15 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
           pagos={pagosTalleres[modalAbonoTaller.id] || []}
           error={abonoError}
           guardando={abonoGuardando}
-          onGuardar={registrarAbonoTaller}
+          onRegistrar={registrarAbonoTaller}
+          onAnular={async (pagoId: string) => {
+            await supabase.from('pagos').delete().eq('id', pagoId)
+            const pagosActuales = (pagosTalleres[modalAbonoTaller.id] || []).filter((p: any) => p.id !== pagoId)
+            const nuevoTotal = pagosActuales.reduce((s: number, p: any) => s + Number(p.monto), 0)
+            const nuevoSaldo = (modalAbonoTaller.valor_plan || 0) - nuevoTotal
+            await supabase.from('taller_inscripciones').update({ total_pagado: nuevoTotal, saldo: nuevoSaldo }).eq('id', modalAbonoTaller.id)
+            await cargarDatosCliente(clienteSeleccionado)
+          }}
           onCerrar={() => { setModalAbonoTaller(null); setAbonoError('') }}
         />
       )}
