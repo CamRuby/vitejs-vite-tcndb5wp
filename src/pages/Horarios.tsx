@@ -138,6 +138,8 @@ export default function Horarios() {
   const [inscritosDelTaller, setInscritosDelTaller] = useState<any[]>([])
   const [sesionActual, setSesionActual] = useState<any>(null)
   const [asistenciasSesion, setAsistenciasSesion] = useState<Record<string, boolean | null>>({})
+  const [confirmacionesSesion, setConfirmacionesSesion] = useState<Set<string>>(new Set())
+  const [guardandoConfirmacion, setGuardandoConfirmacion] = useState(false)
   const [guardandoAsistencia, setGuardandoAsistencia] = useState(false)
   const [fechaSesionViendo, setFechaSesionViendo] = useState<string>('')
   const [guardandoSesion, setGuardandoSesion] = useState(false)
@@ -530,14 +532,35 @@ export default function Horarios() {
       .single()
     setSesionActual(sesion || null)
     setAsistenciasSesion({})
+    setConfirmacionesSesion(new Set())
     if (sesion?.id) {
-      const { data: asis } = await supabase
-        .from('taller_asistencias').select('inscripcion_id, asistio').eq('sesion_id', sesion.id)
+      const [{ data: asis }, { data: confs }] = await Promise.all([
+        supabase.from('taller_asistencias').select('inscripcion_id, asistio').eq('sesion_id', sesion.id),
+        supabase.from('taller_confirmaciones').select('inscripcion_id').eq('sesion_id', sesion.id)
+      ])
       const map: Record<string, boolean | null> = {}
       ;(asis || []).forEach((a: any) => { map[a.inscripcion_id] = a.asistio })
       setAsistenciasSesion(map)
+      setConfirmacionesSesion(new Set((confs || []).map((c: any) => c.inscripcion_id)))
     }
     setModalVerTaller(true)
+  }
+
+  async function toggleConfirmacion(inscripcionId: string) {
+    if (!sesionActual?.id) return
+    setGuardandoConfirmacion(true)
+    const yaConfirmado = confirmacionesSesion.has(inscripcionId)
+    if (yaConfirmado) {
+      await supabase.from('taller_confirmaciones').delete()
+        .eq('sesion_id', sesionActual.id).eq('inscripcion_id', inscripcionId)
+      setConfirmacionesSesion(prev => { const n = new Set(prev); n.delete(inscripcionId); return n })
+    } else {
+      await supabase.from('taller_confirmaciones').upsert({
+        sesion_id: sesionActual.id, inscripcion_id: inscripcionId, confirmado: true
+      }, { onConflict: 'sesion_id,inscripcion_id' })
+      setConfirmacionesSesion(prev => new Set([...prev, inscripcionId]))
+    }
+    setGuardandoConfirmacion(false)
   }
 
   async function cargarAsistenciasSesion(sesionId: string) {
@@ -592,6 +615,17 @@ export default function Horarios() {
   }
 
   async function marcarSesion(nuevoEstado: string) {
+    // Validate before confirming
+    if (nuevoEstado === 'confirmada') {
+      if (inscritosDelTaller.length === 0) {
+        alert('No hay inscritos activos para esta sesión. Inscribe al menos un estudiante antes de confirmar.')
+        return
+      }
+      if (confirmacionesSesion.size === 0) {
+        alert('Selecciona al menos un inscrito que haya confirmado su asistencia.')
+        return
+      }
+    }
     setGuardandoSesion(true)
     let sesionId = sesionActual?.id
     if (sesionActual) {
@@ -1377,37 +1411,63 @@ export default function Horarios() {
                       Inscritos esta sesión <span style={{ color: TALLER_COLOR }}>({inscritosDelTaller.length})</span>
                     </p>
                   </div>
-                  {(sesionActual?.estado === 'dada' || sesionActual?.estado === 'confirmada' || !sesionActual) && (
-                    <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#888', fontStyle: 'italic' }}>
-                      Selecciona los estudiantes que asistieron a esta sesión.
-                    </p>
-                  )}
                   {inscritosDelTaller.length === 0
                     ? <p style={{ textAlign: 'center', color: '#aaa', padding: '24px 0', fontSize: '14px' }}>Sin inscritos esta sesión</p>
-                    : inscritosDelTaller.map((ins: any, i) => {
-                        const sesionId = sesionActual?.id
-                        const puedeMarcar = sesionActual?.estado === 'dada' || sesionActual?.estado === 'confirmada' || !sesionActual
-                        const asistio = asistenciasSesion[ins.id]
-                        return (
-                          <div key={ins.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: i % 2 === 0 ? '#fafbfc' : 'white', marginBottom: '4px' }}>
-                            <div style={{ flex: 1 }}>
-                              <p style={{ margin: 0, fontWeight: '500', fontSize: '14px' }}>{ins.clientes?.nombre || '—'}</p>
-                              <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>{ins.clientes?.telefono || '—'}</p>
+                    : (<>
+                        {/* PROGRAMADA: show confirmation checkboxes */}
+                        {(!sesionActual || sesionActual.estado === 'programada') && (
+                          <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#1d4ed8', fontStyle: 'italic' }}>
+                            Selecciona los estudiantes que confirmaron asistencia para esta sesión.
+                          </p>
+                        )}
+                        {/* CONFIRMADA/DADA: show attendance checkboxes */}
+                        {(sesionActual?.estado === 'confirmada' || sesionActual?.estado === 'dada') && (
+                          <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#166534', fontStyle: 'italic' }}>
+                            Selecciona los estudiantes que asistieron a esta sesión.
+                          </p>
+                        )}
+                        {inscritosDelTaller.map((ins: any, i) => {
+                          const sesionId = sesionActual?.id
+                          const esProg = !sesionActual || sesionActual.estado === 'programada'
+                          const esConfirmadaODada = sesionActual?.estado === 'confirmada' || sesionActual?.estado === 'dada'
+                          const confirmado = confirmacionesSesion.has(ins.id)
+                          const asistio = asistenciasSesion[ins.id]
+                          return (
+                            <div key={ins.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '8px', background: i % 2 === 0 ? '#fafbfc' : 'white', marginBottom: '4px' }}>
+                              <div style={{ flex: 1 }}>
+                                <p style={{ margin: 0, fontWeight: '500', fontSize: '14px' }}>{ins.clientes?.nombre || '—'}</p>
+                                <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>{ins.clientes?.telefono || '—'}</p>
+                              </div>
+                              {/* Confirmation checkbox — visible in programada state */}
+                              {esProg && (
+                                <button onClick={() => sesionActual?.id ? toggleConfirmacion(ins.id) : (
+                                  // Auto-create sesion as programada before confirming
+                                  supabase.from('taller_sesiones')
+                                    .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'programada' })
+                                    .select().single()
+                                    .then(({ data }) => { if (data) { setSesionActual(data); setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'programada' })) } })
+                                )}
+                                  disabled={guardandoConfirmacion || !sesionActual?.id && false}
+                                  style={{ width: '32px', height: '32px', borderRadius: '8px', border: confirmado ? '2px solid #1d4ed8' : '1px solid #e2e8f0', background: confirmado ? '#eff6ff' : 'white', color: confirmado ? '#1d4ed8' : '#aaa', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {confirmado ? '✓' : ''}
+                                </button>
+                              )}
+                              {/* Attendance checkbox — visible in confirmada/dada state */}
+                              {esConfirmadaODada && (
+                                <button onClick={() => toggleAsistenciaSesion(sesionId, ins.id, asistio === true ? null : true)}
+                                  disabled={guardandoAsistencia}
+                                  style={{ width: '32px', height: '32px', borderRadius: '8px', border: asistio === true ? '2px solid #166534' : '1px solid #e2e8f0', background: asistio === true ? '#dcfce7' : 'white', color: asistio === true ? '#166534' : '#aaa', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {asistio === true ? '✓' : ''}
+                                </button>
+                              )}
+                              {/* Read-only badge for other states */}
+                              {!esProg && !esConfirmadaODada && (
+                                <span style={{ fontSize: '12px', color: '#aaa' }}>—</span>
+                              )}
                             </div>
-                            {puedeMarcar ? (
-                              <button onClick={() => toggleAsistenciaSesion(sesionId, ins.id, asistio === true ? null : true)}
-                                disabled={guardandoAsistencia}
-                                style={{ width: '32px', height: '32px', borderRadius: '8px', border: asistio === true ? '2px solid #166534' : '1px solid #e2e8f0', background: asistio === true ? '#dcfce7' : 'white', color: asistio === true ? '#166534' : '#aaa', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {asistio === true ? '✓' : ''}
-                              </button>
-                            ) : (
-                              <span style={{ fontSize: '12px', fontWeight: '600', color: asistio === true ? '#166534' : '#aaa' }}>
-                                {asistio === true ? '✓ Asistió' : '—'}
-                              </span>
-                            )}
-                          </div>
-                        )
-                      })
+                          )
+                        })}
+                      </>)
                   }
                   <button onClick={() => setModalVerTaller(false)} style={{ width: '100%', marginTop: '16px', padding: '10px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>Cerrar</button>
                 </>
