@@ -444,24 +444,31 @@ export default function ProfesorApp() {
     }
   }
 
-  async function toggleAsistTaller(inscripcionId: string, asistio: boolean) {
-    if (!sesionHoy?.id) return
+  async function toggleAsistTaller(inscripcionId: string, asistio: boolean | null) {
+    // Only allowed when session is confirmada or dada
+    if (!sesionHoy?.id || (sesionHoy.estado !== 'confirmada' && sesionHoy.estado !== 'dada')) return
     setGuardandoAsistTaller(true)
     const yaExiste = inscripcionId in asistenciasTaller
-    if (yaExiste) {
+    if (asistio === null) {
+      await supabase.from('taller_asistencias').delete()
+        .eq('sesion_id', sesionHoy.id).eq('inscripcion_id', inscripcionId)
+      setAsistenciasTaller(prev => { const n = { ...prev }; delete n[inscripcionId]; return n })
+    } else if (yaExiste) {
       await supabase.from('taller_asistencias').update({ asistio })
         .eq('sesion_id', sesionHoy.id).eq('inscripcion_id', inscripcionId)
+      setAsistenciasTaller(prev => ({ ...prev, [inscripcionId]: asistio }))
     } else {
       await supabase.from('taller_asistencias').insert({
         sesion_id: sesionHoy.id, inscripcion_id: inscripcionId, asistio
       })
+      setAsistenciasTaller(prev => ({ ...prev, [inscripcionId]: asistio }))
     }
-    setAsistenciasTaller(prev => ({ ...prev, [inscripcionId]: asistio }))
     setGuardandoAsistTaller(false)
   }
 
   async function marcarSesionTaller(nuevoEstado: string) {
-    if (!tallerModal) return
+    // Never allow a professor to confirm — only admins can do that
+    if (!tallerModal || nuevoEstado === 'confirmada') return
     setGuardandoSesion(true)
     if (sesionHoy) {
       await supabase.from('taller_sesiones').update({ estado: nuevoEstado }).eq('id', sesionHoy.id)
