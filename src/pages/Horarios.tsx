@@ -134,6 +134,7 @@ export default function Horarios() {
 
   const [modalVerTaller, setModalVerTaller] = useState(false)
   const [tallerViendo, setTallerViendo] = useState<any>(null)
+  const [sesionesEstadoMap, setSesionesEstadoMap] = useState<Record<string, string>>({})
   const [inscritosDelTaller, setInscritosDelTaller] = useState<any[]>([])
   const [sesionActual, setSesionActual] = useState<any>(null)
   const [asistenciasSesion, setAsistenciasSesion] = useState<Record<string, boolean | null>>({})
@@ -273,15 +274,18 @@ export default function Horarios() {
     if (data?.length) {
       const hoy = new Date()
       const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
-      const { data: ins } = await supabase
-        .from('taller_inscripciones')
-        .select('taller_id')
-        .in('taller_id', data.map((t: any) => t.id))
-        .eq('estado', 'activo')
-        .gte('mes', mes)
+      const [{ data: ins }, { data: sesiones }] = await Promise.all([
+        supabase.from('taller_inscripciones').select('taller_id')
+          .in('taller_id', data.map((t: any) => t.id)).eq('estado', 'activo').gte('mes', mes),
+        supabase.from('taller_sesiones').select('taller_id, fecha, estado')
+          .in('taller_id', data.map((t: any) => t.id))
+      ])
       const conteo: Record<string, number> = {}
       ;(ins || []).forEach((i: any) => { conteo[i.taller_id] = (conteo[i.taller_id] || 0) + 1 })
       setInscritosPorTaller(conteo)
+      const sMap: Record<string, string> = {}
+      ;(sesiones || []).forEach((s: any) => { sMap[`${s.taller_id}-${s.fecha}`] = s.estado })
+      setSesionesEstadoMap(sMap)
     }
   }
 
@@ -554,6 +558,7 @@ export default function Horarios() {
         .select().single()
       if (!newSesion) { setGuardandoAsistencia(false); return }
       setSesionActual(newSesion)
+      setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'confirmada' }))
       sesionId = newSesion.id
     }
     const yaExiste = inscripcionId in asistenciasSesion
@@ -591,7 +596,11 @@ export default function Horarios() {
       }
     }
     setGuardandoSesion(false)
-    if (sesionId) await cargarAsistenciasSesion(sesionId)
+    if (sesionId) {
+      await cargarAsistenciasSesion(sesionId)
+      // Update sesionesEstadoMap so the card color updates immediately
+      setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: nuevoEstado }))
+    }
   }
 
   async function guardarEdicionTaller() {
@@ -991,13 +1000,24 @@ export default function Horarios() {
                       }}
                     >
                       {taller && (
+                        {(() => {
+                          const sesEst = sesionesEstadoMap[`${taller.id}-${col.fecha}`] || 'programada'
+                          const cardStyle = sesEst === 'dada'
+                            ? { bg: '#fefce8', color: '#854d0e', border: '#fde68a' }
+                            : sesEst === 'cancelada'
+                            ? { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' }
+                            : sesEst === 'confirmada'
+                            ? { bg: TALLER_BG, color: TEAL, border: TEAL_MID }
+                            : { bg: '#f3f4f6', color: '#9ca3af', border: '#e5e7eb' } // programada = grey
+                          return (
                         <div onClick={e => abrirTaller(e, taller, col.fecha)} title="Clic para ver inscritos"
                           style={{
-                            background: TALLER_BG, color: TALLER_COLOR, border: `1px solid ${TALLER_BORDER}`,
+                            background: cardStyle.bg, color: cardStyle.color, border: `1px solid ${cardStyle.border}`,
                             borderRadius: '6px', padding: '4px 7px',
                             fontSize: vista === 'dia' ? '13px' : '11px',
                             cursor: 'pointer', height: 'calc(100% - 4px)',
-                            overflow: 'hidden', boxSizing: 'border-box', margin: '2px 3px'
+                            overflow: 'hidden', boxSizing: 'border-box', margin: '2px 3px',
+                            opacity: sesEst === 'programada' ? 0.7 : 1
                           }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2px' }}>
                             <strong>🎸 {taller.nombre}</strong>
@@ -1007,6 +1027,7 @@ export default function Horarios() {
                           </div>
                           {vista === 'dia' && <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '1px' }}>{taller.profesores?.nombre}</div>}
                         </div>
+                          )})()}
                       )}
 
                       {mainClass && !taller && (() => {
