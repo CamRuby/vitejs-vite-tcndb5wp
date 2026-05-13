@@ -1011,8 +1011,7 @@ export default function Horarios() {
                         }
                       }}
                     >
-                      {taller && (
-                        {(() => {
+                      {taller && (() => {
                           const sesEst = sesionesEstadoMap[`${taller.id}-${col.fecha}`] || 'programada'
                           const cardStyle = sesEst === 'dada'
                             ? { bg: '#fefce8', color: '#854d0e', border: '#fde68a' }
@@ -1039,7 +1038,7 @@ export default function Horarios() {
                           </div>
                           {vista === 'dia' && <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '1px' }}>{taller.profesores?.nombre}</div>}
                         </div>
-                          )})()}
+                          })()}
                       )}
 
                       {mainClass && !taller && (() => {
