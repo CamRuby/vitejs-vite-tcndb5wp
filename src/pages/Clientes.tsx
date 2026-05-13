@@ -552,7 +552,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   // ── Historial por plan: qué planes están expandidos ──
   const [planesExpandidos, setPlanesExpandidos] = useState<Set<string>>(new Set())
 
-  const [pagosPlanes, setPagosPlanes] = useState<Record<string, any[]>>({})
+  const [pagosPlanes, setPagosPlanes]       = useState<Record<string, any[]>>({})
+  const [pagosTalleres, setPagosTalleres]   = useState<Record<string, any[]>>({})
+  const [modalAbonoTaller, setModalAbonoTaller] = useState<any>(null)
   const [pagosActivosTotales, setPagosActivosTotales] = useState<Record<string, number>>({})
   const [modalAbono, setModalAbono] = useState<any>(null)
   const [abonoGuardando, setAbonoGuardando] = useState(false)
@@ -622,6 +624,16 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   async function cargarDatosCliente(c: any) {
     const { data: talleresData } = await supabase.from('taller_inscripciones').select('id, mes, fecha_inicio, fecha_fin, valor_pagado, estado, taller_id, talleres(nombre, dia_semana, hora, duracion_min, salones(nombre, sedes(nombre)))').eq('cliente_id', c.id).order('fecha_inicio', { ascending: false })
     setInscripcionesTalleres(talleresData || [])
+    // Cargar pagos de talleres
+    const insIds = (talleresData || []).map((t: any) => t.id)
+    if (insIds.length > 0) {
+      const { data: pgT } = await supabase.from('pagos').select('*').in('inscripcion_id', insIds).order('fecha', { ascending: false })
+      const mapT: Record<string, any[]> = {}
+      ;(pgT || []).forEach((pg: any) => { if (!mapT[pg.inscripcion_id]) mapT[pg.inscripcion_id] = []; mapT[pg.inscripcion_id].push(pg) })
+      setPagosTalleres(mapT)
+    } else {
+      setPagosTalleres({})
+    }
 
     const { data: planesData } = await supabase.from('contratos').select('id, total_clases, clases_tomadas, valor_plan, tipo_plan, estado, fecha_inicio, duracion_min, instrumento_id, profesor_id, sede_id, instrumento_id, instrumentos(nombre), profesores(nombre), sedes(nombre)').eq('cliente_id', c.id).order('fecha_inicio', { ascending: false })
 
@@ -863,6 +875,24 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       })
     }
     setModalTaller(false); setTallerGuardando(false)
+    await cargarDatosCliente(clienteSeleccionado)
+  }
+
+  async function registrarAbonoTaller(formAbono: { monto: string; metodo: string; fecha: string; notas: string }) {
+    if (!formAbono.monto || Number(formAbono.monto) <= 0) { setAbonoError('Ingresa un monto válido'); return }
+    if (!formAbono.fecha) { setAbonoError('Selecciona una fecha'); return }
+    setAbonoGuardando(true); setAbonoError('')
+    const ins = modalAbonoTaller
+    const pagosActuales = pagosTalleres[ins.id] || []
+    const nuevoTotal = pagosActuales.reduce((s: number, p: any) => s + Number(p.monto), 0) + Number(formAbono.monto)
+    const nuevoSaldo = (ins.valor_plan || 0) - nuevoTotal
+    const { error } = await supabase.from('pagos').insert({
+      inscripcion_id: ins.id, monto: Number(formAbono.monto),
+      fecha: formAbono.fecha, metodo: formAbono.metodo, notas: formAbono.notas || null
+    })
+    if (error) { setAbonoError('Error: ' + error.message); setAbonoGuardando(false); return }
+    await supabase.from('taller_inscripciones').update({ total_pagado: nuevoTotal, saldo: nuevoSaldo }).eq('id', ins.id)
+    setModalAbonoTaller(null); setAbonoGuardando(false)
     await cargarDatosCliente(clienteSeleccionado)
   }
 
