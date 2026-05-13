@@ -1496,10 +1496,17 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
               : esActivo ? { bg: '#f3e8ff', color: '#7c3aed', border: '#d8b4fe' }
               : esCompletado ? { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' }
               : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' }
+            // Payment calculations
+            const pagosIns = pagosTalleres[ins.id] || []
+            const totalPagadoIns = pagosIns.reduce((s: number, p: any) => s + Number(p.monto), 0)
+            const valorPlanIns = ins.valor_plan ? Number(ins.valor_plan) : 0
+            const saldoIns = valorPlanIns - totalPagadoIns
+            const estadoPagoIns = valorPlanIns === 0 ? 'Sin valor' : totalPagadoIns === 0 ? 'Sin pagar' : totalPagadoIns >= valorPlanIns ? 'Pagado' : 'Parcial'
+            const cPagoIns = colorEstadoPago(estadoPagoIns)
             return (
               <div key={ins.id} style={{ background: 'white', borderRadius: '14px', padding: '16px 20px', border: `1px solid ${colorEstado.border}`, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', marginBottom: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
+                <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '10px' }}>
+                  <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                       <p style={{ margin: 0, fontWeight: '600', fontSize: '16px', color: '#1a1a1a' }}>🎸 {ins.talleres?.nombre || '—'}</p>
                       <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600', background: colorEstado.bg, color: colorEstado.color }}>
@@ -1508,14 +1515,27 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                     </div>
                     <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>🏫 {ins.talleres?.salones?.nombre} — {ins.talleres?.salones?.sedes?.nombre}</p>
                     <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>
-                      📅 {ins.fecha_inicio || mesLabel} → {ins.fecha_fin || '—'} · {ins.talleres?.dia_semana} {ins.talleres?.hora?.substring(0,5)} · {ins.talleres?.duracion_min} min
+                      📅 {ins.fecha_inicio || mesLabel} → {ins.fecha_fin || '—'} · {ins.num_sesiones || 4} sesiones · {ins.talleres?.dia_semana}
                     </p>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: esVencida ? '#c2410c' : '#7c3aed' }}>${ins.valor_pagado ? Number(ins.valor_pagado).toLocaleString() : '—'}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#aaa' }}>valor pagado</p>
-                  </div>
                 </div>
+                {valorPlanIns > 0 && (
+                  <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '10px 14px', marginBottom: '10px', display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div>
+                      <p style={{ margin: '0 0 2px', fontSize: '11px', color: '#666', fontWeight: '600', textTransform: 'uppercase' }}>Total pagado</p>
+                      <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: TEAL }}>${totalPagadoIns.toLocaleString('es-CO')}</p>
+                    </div>
+                    <div>
+                      <p style={{ margin: '0 0 2px', fontSize: '11px', color: '#666', fontWeight: '600', textTransform: 'uppercase' }}>Saldo</p>
+                      <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: saldoIns > 0 ? '#991b1b' : '#166534' }}>${saldoIns.toLocaleString('es-CO')}</p>
+                    </div>
+                    <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: cPagoIns.bg, color: cPagoIns.color }}>{estadoPagoIns}</span>
+                    <button onClick={() => { setModalAbonoTaller({ ...ins, total_pagado: totalPagadoIns }); setAbonoError('') }}
+                      style={{ marginLeft: 'auto', padding: '7px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                      + Registrar abono
+                    </button>
+                  </div>
+                )}
                 <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                   {esVencida ? (
                     <>
