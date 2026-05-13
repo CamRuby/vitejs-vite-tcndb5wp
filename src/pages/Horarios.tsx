@@ -1370,11 +1370,36 @@ export default function Horarios() {
                     </div>
                     {sesionActual?.estado === 'cancelada' ? (
                       <div>
-                        <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#991b1b', fontWeight: '600' }}>⚠️ Sesión cancelada — solo puede borrarse</p>
+                        <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#991b1b', fontWeight: '600' }}>⚠️ Sesión cancelada</p>
+                        <div style={{ marginBottom: '8px' }}>
+                          <label style={{ fontSize: '12px', color: '#555', fontWeight: '600', display: 'block', marginBottom: '4px' }}>Reasignar profesor</label>
+                          <select
+                            defaultValue={sesionActual?.profesor_id || tallerViendo?.profesor_id || ''}
+                            onChange={async e => {
+                              const nuevoProf = e.target.value
+                              if (!nuevoProf) return
+                              if (sesionActual?.id) {
+                                await supabase.from('taller_sesiones').update({ estado: 'confirmada', profesor_id: nuevoProf }).eq('id', sesionActual.id)
+                              } else {
+                                await supabase.from('taller_sesiones').insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'confirmada', profesor_id: nuevoProf })
+                              }
+                              setSesionActual((prev: any) => ({ ...prev, estado: 'confirmada', profesor_id: nuevoProf }))
+                              setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'confirmada' }))
+                            }}
+                            style={{ width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px' }}>
+                            <option value="">— Seleccionar nuevo profesor —</option>
+                            {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                          </select>
+                        </div>
                         <button onClick={async () => {
                           if (window.confirm('¿Borrar esta sesión cancelada?')) {
-                            if (sesionActual?.id) await supabase.from('taller_sesiones').delete().eq('id', sesionActual.id)
+                            if (sesionActual?.id) {
+                              await supabase.from('taller_asistencias').delete().eq('sesion_id', sesionActual.id)
+                              await supabase.from('taller_confirmaciones').delete().eq('sesion_id', sesionActual.id)
+                              await supabase.from('taller_sesiones').delete().eq('id', sesionActual.id)
+                            }
                             setSesionActual(null)
+                            setSesionesEstadoMap(prev => { const n = {...prev}; delete n[`${tallerViendo.id}-${fechaSesionViendo}`]; return n })
                           }
                         }} style={{ width: '100%', padding: '8px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
                           🗑 Borrar esta sesión
