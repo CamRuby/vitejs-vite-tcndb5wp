@@ -769,33 +769,60 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
                   {sesionHoy?.estado || 'confirmada'}
                 </span>
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                {!sesionHoy?.estado || sesionHoy.estado === 'programada' ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {(!sesionHoy?.estado || sesionHoy.estado === 'programada') && (
                   <button className="ba" onClick={() => marcarSesionTaller('confirmada')} disabled={guardandoSesion}
                     style={{ padding:'14px', background:'#dcfce7', color:'#166534', border:'2px solid #bbf7d0', borderRadius:'14px', fontSize:'15px', fontWeight:'800', cursor:'pointer', fontFamily:'inherit' }}>
-                    Confirmar
+                    Confirmar taller
                   </button>
-                ) : sesionHoy.estado === 'confirmada' ? (
-                  <button className="ba" onClick={() => marcarSesionTaller('dada')} disabled={guardandoSesion}
+                )}
+                {sesionHoy?.estado === 'confirmada' && (<>
+                  <button className="ba" onClick={() => {
+                    const hay = Object.values(asistenciasTaller).some(v => v === true)
+                    if (!hay) { alert('Selecciona al menos un asistente antes de marcar el taller como dado'); return }
+                    marcarSesionTaller('dada')
+                  }} disabled={guardandoSesion}
                     style={{ padding:'14px', background:'#7c3aed', color:'white', border:'none', borderRadius:'14px', fontSize:'15px', fontWeight:'800', cursor:'pointer', fontFamily:'inherit' }}>
-                    Marcar dado
+                    ✓ Marcar dado
                   </button>
-                ) : sesionHoy.estado === 'dada' ? (
-                  <div style={{ padding:'14px', background:'#fefce8', color:'#854d0e', border:'2px solid #fde68a', borderRadius:'14px', fontSize:'15px', fontWeight:'800', textAlign:'center' }}>
-                    ✓ Dado
+                  <button className="ba" onClick={() => {
+                    const hay = Object.values(asistenciasTaller).some(v => v === true)
+                    if (hay) { alert('Hay asistentes seleccionados. Desmárcalos primero si ninguno asistió.'); return }
+                    if (window.confirm('¿Confirmar que ningún inscrito asistió a esta sesión?')) marcarSesionTaller('dada')
+                  }} disabled={guardandoSesion}
+                    style={{ padding:'14px', background:'white', color:'#6b7280', border:'1px solid #e5e7eb', borderRadius:'14px', fontSize:'14px', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
+                    Ningún inscrito asistió
+                  </button>
+                </>)}
+                {sesionHoy?.estado === 'dada' && (
+                  <div style={{ padding:'14px', background:'#fefce8', color:'#854d0e', border:'2px solid #fde68a', borderRadius:'14px', fontSize:'15px', fontWeight:'800', textAlign:'center' }}>✓ Dado</div>
+                )}
+                {sesionHoy?.estado !== 'cancelada' && sesionHoy?.estado !== 'dada' && (
+                  <button className="ba" onClick={() => {
+                    const h2 = tallerModal?.hora || '00:00'
+                    const claseDate = new Date(tallerModal.fecha + 'T' + h2.substring(0,5) + ':00')
+                    const mins = Math.floor((claseDate.getTime() - Date.now()) / 60000)
+                    if (mins >= 0 && mins < 180) {
+                      if (!window.confirm('⚠️ Cancelación tardía — quedan menos de 3 horas.\n¿Confirmar cancelación?')) return
+                    }
+                    marcarSesionTaller('cancelada')
+                  }} disabled={guardandoSesion}
+                    style={{ padding:'14px', background:'#fff7ed', color:'#c2410c', border:'2px solid #fed7aa', borderRadius:'14px', fontSize:'15px', fontWeight:'800', cursor:'pointer', fontFamily:'inherit' }}>
+                    Cancelar taller
+                  </button>
+                )}
+                {sesionHoy?.estado === 'cancelada' && (
+                  <div style={{ padding:'14px', background:'#fee2e2', color:'#991b1b', border:'2px solid #fecaca', borderRadius:'14px', fontSize:'14px', fontWeight:'700', textAlign:'center' }}>
+                    ✗ Cancelado — solo se puede borrar desde el administrador
                   </div>
-                ) : null}
-                <button className="ba" onClick={() => marcarSesionTaller('cancelada')} disabled={guardandoSesion || sesionHoy?.estado === 'cancelada'}
-                  style={{ padding:'14px', background: sesionHoy?.estado === 'cancelada' ? '#fee2e2' : '#fff7ed', color:'#c2410c', border:'2px solid #fed7aa', borderRadius:'14px', fontSize:'15px', fontWeight:'800', cursor: guardandoSesion ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
-                  {sesionHoy?.estado === 'cancelada' ? '✗ Cancelado' : 'Cancelar'}
-                </button>
+                )}
               </div>
             </div>
             <p style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#374151' }}>
               Inscritos esta sesión <span style={{ color:'#7c3aed' }}>({inscritosTaller.length})</span>
             </p>
             {(sesionHoy?.estado === 'dada' || sesionHoy?.estado === 'confirmada') && (
-              <p style={{ fontSize:'12px', color:'#9ca3af', marginBottom:'8px', fontStyle:'italic' }}>Marca ✓ o ✗ por cada asistente</p>
+              <p style={{ fontSize:'12px', color:'#9ca3af', marginBottom:'8px', fontStyle:'italic' }}>Selecciona los estudiantes que asistieron a esta sesión</p>
             )}
             {inscritosTaller.length === 0
               ? <p style={{ textAlign:'center', color:'#9ca3af', fontSize:'13px', padding:'16px 0' }}>Sin inscritos esta sesión</p>
@@ -811,15 +838,13 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
                       </div>
                       <p style={{ margin:0, fontSize:'14px', fontWeight:'600', color:'#1f2937', flex:1 }}>{nombre}</p>
                       {puedeMarcar ? (
-                        <div style={{ display:'flex', gap:'6px' }}>
-                          <button onClick={() => toggleAsistTaller(ins.id, true)} disabled={guardandoAsistTaller}
-                            style={{ width:'36px', height:'36px', borderRadius:'50%', border: asistio === true ? '2px solid #166534' : '1px solid #e5e7eb', background: asistio === true ? '#dcfce7' : 'white', color: asistio === true ? '#166534' : '#aaa', fontSize:'16px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✓</button>
-                          <button onClick={() => toggleAsistTaller(ins.id, false)} disabled={guardandoAsistTaller}
-                            style={{ width:'36px', height:'36px', borderRadius:'50%', border: asistio === false ? '2px solid #dc2626' : '1px solid #e5e7eb', background: asistio === false ? '#fee2e2' : 'white', color: asistio === false ? '#dc2626' : '#aaa', fontSize:'16px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✗</button>
-                        </div>
+                        <button onClick={() => toggleAsistTaller(ins.id, asistio === true ? null : true)} disabled={guardandoAsistTaller}
+                          style={{ width:'36px', height:'36px', borderRadius:'8px', border: asistio === true ? '2px solid #166534' : '1px solid #e5e7eb', background: asistio === true ? '#dcfce7' : 'white', color: asistio === true ? '#166534' : '#aaa', fontSize:'18px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                          {asistio === true ? '✓' : ''}
+                        </button>
                       ) : (
-                        <span style={{ fontSize:'13px', fontWeight:'600', color: asistio === true ? '#166534' : asistio === false ? '#dc2626' : '#aaa' }}>
-                          {asistio === true ? '✓' : asistio === false ? '✗' : '—'}
+                        <span style={{ fontSize:'13px', fontWeight:'600', color: asistio === true ? '#166534' : '#aaa' }}>
+                          {asistio === true ? '✓ Asistió' : '—'}
                         </span>
                       )}
                     </div>
