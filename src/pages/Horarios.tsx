@@ -1288,37 +1288,56 @@ export default function Horarios() {
                         {sesionActual?.estado || 'programada'}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      {[
-                        { est: 'programada', label: 'Programada', bg: '#eff6ff', color: '#1d4ed8' },
-                        { est: 'confirmada', label: 'Confirmada', bg: '#dcfce7', color: '#166534' },
-                        { est: 'dada', label: 'Dada', bg: '#fefce8', color: '#854d0e' },
-                        { est: 'cancelada', label: 'Cancelada', bg: '#fee2e2', color: '#991b1b' },
-                      ].map(op => {
-                        const esActual = (sesionActual?.estado || 'programada') === op.est
-                        return (
-                          <button key={op.est} onClick={() => !esActual && marcarSesion(op.est)}
-                            disabled={guardandoSesion || esActual}
-                            style={{ flex: 1, padding: '6px', borderRadius: '8px', cursor: esActual ? 'default' : 'pointer', fontSize: '12px', fontWeight: '600', border: `1px solid ${esActual ? op.color : '#e2e8f0'}`, background: esActual ? op.bg : 'white', color: esActual ? op.color : '#666' }}>
-                            {op.label}
-                          </button>
-                        )
-                      })}
-                    </div>
+                    {sesionActual?.estado === 'cancelada' ? (
+                      <div>
+                        <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#991b1b', fontWeight: '600' }}>⚠️ Sesión cancelada — solo puede borrarse</p>
+                        <button onClick={async () => {
+                          if (window.confirm('¿Borrar esta sesión cancelada?')) {
+                            if (sesionActual?.id) await supabase.from('taller_sesiones').delete().eq('id', sesionActual.id)
+                            setSesionActual(null)
+                          }
+                        }} style={{ width: '100%', padding: '8px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                          🗑 Borrar esta sesión
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {[
+                          { est: 'programada', label: 'Programada', bg: '#eff6ff', color: '#1d4ed8' },
+                          { est: 'confirmada', label: 'Confirmada', bg: '#dcfce7', color: '#166534' },
+                          { est: 'dada', label: 'Dada', bg: '#fefce8', color: '#854d0e' },
+                          { est: 'cancelada', label: 'Cancelada', bg: '#fee2e2', color: '#991b1b' },
+                        ].map(op => {
+                          const esActual = (sesionActual?.estado || 'programada') === op.est
+                          return (
+                            <button key={op.est} onClick={() => {
+                              if (op.est === 'dada') {
+                                const hay = Object.values(asistenciasSesion).some(v => v === true)
+                                if (!hay) { alert('Selecciona al menos un asistente antes de marcar la sesión como dada'); return }
+                              }
+                              !esActual && marcarSesion(op.est)
+                            }}
+                              disabled={guardandoSesion || esActual}
+                              style={{ flex: 1, padding: '6px', borderRadius: '8px', cursor: esActual ? 'default' : 'pointer', fontSize: '12px', fontWeight: '600', border: `1px solid ${esActual ? op.color : '#e2e8f0'}`, background: esActual ? op.bg : 'white', color: esActual ? op.color : '#666' }}>
+                              {op.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <p style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
                       Inscritos esta sesión <span style={{ color: TALLER_COLOR }}>({inscritosDelTaller.length})</span>
                     </p>
-
                   </div>
                   {sesionActual && (sesionActual.estado === 'dada' || sesionActual.estado === 'confirmada') && (
                     <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#888', fontStyle: 'italic' }}>
-                      Marca ✓ o ✗ por cada estudiante. La sesión pasa a "dada" al marcar al menos uno.
+                      Selecciona los estudiantes que asistieron a esta sesión.
                     </p>
                   )}
                   {inscritosDelTaller.length === 0
-                    ? <p style={{ textAlign: 'center', color: '#aaa', padding: '24px 0', fontSize: '14px' }}>Sin inscritos este mes</p>
+                    ? <p style={{ textAlign: 'center', color: '#aaa', padding: '24px 0', fontSize: '14px' }}>Sin inscritos esta sesión</p>
                     : inscritosDelTaller.map((ins: any, i) => {
                         const sesionId = sesionActual?.id
                         const puedeMarcar = sesionId && (sesionActual?.estado === 'dada' || sesionActual?.estado === 'confirmada')
@@ -1329,24 +1348,15 @@ export default function Horarios() {
                               <p style={{ margin: 0, fontWeight: '500', fontSize: '14px' }}>{ins.clientes?.nombre || '—'}</p>
                               <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>{ins.clientes?.telefono || '—'}</p>
                             </div>
-                            {ins.valor_pagado && <span style={{ fontSize: '13px', color: '#555', marginRight: '10px' }}>${Number(ins.valor_pagado).toLocaleString()}</span>}
                             {puedeMarcar ? (
-                              <div style={{ display: 'flex', gap: '6px' }}>
-                                <button onClick={() => toggleAsistenciaSesion(sesionId, ins.id, true)}
-                                  disabled={guardandoAsistencia}
-                                  style={{ padding: '4px 12px', borderRadius: '6px', border: `1px solid ${asistio === true ? '#166534' : '#e2e8f0'}`, background: asistio === true ? '#dcfce7' : 'white', color: asistio === true ? '#166534' : '#aaa', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
-                                  ✓
-                                </button>
-                                <button onClick={() => toggleAsistenciaSesion(sesionId, ins.id, false)}
-                                  disabled={guardandoAsistencia}
-                                  style={{ padding: '4px 12px', borderRadius: '6px', border: `1px solid ${asistio === false ? '#991b1b' : '#e2e8f0'}`, background: asistio === false ? '#fee2e2' : 'white', color: asistio === false ? '#991b1b' : '#aaa', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
-                                  ✗
-                                </button>
-                              </div>
+                              <button onClick={() => toggleAsistenciaSesion(sesionId, ins.id, asistio === true ? null : true)}
+                                disabled={guardandoAsistencia}
+                                style={{ width: '32px', height: '32px', borderRadius: '8px', border: asistio === true ? '2px solid #166534' : '1px solid #e2e8f0', background: asistio === true ? '#dcfce7' : 'white', color: asistio === true ? '#166534' : '#aaa', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {asistio === true ? '✓' : ''}
+                              </button>
                             ) : (
-                              <span style={{ fontSize: '12px', fontWeight: '600',
-                                color: asistio === true ? '#166534' : asistio === false ? '#991b1b' : '#aaa' }}>
-                                {asistio === true ? '✓ Asistió' : asistio === false ? '✗ No asistió' : '—'}
+                              <span style={{ fontSize: '12px', fontWeight: '600', color: asistio === true ? '#166534' : '#aaa' }}>
+                                {asistio === true ? '✓ Asistió' : '—'}
                               </span>
                             )}
                           </div>
