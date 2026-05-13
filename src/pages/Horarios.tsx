@@ -271,7 +271,7 @@ export default function Horarios() {
     const { data } = await supabase
       .from('talleres')
       .select('id, nombre, profesor_id, salon_id, dia_semana, hora, duracion_min, valor_mensual, profesores(nombre), salones(id, nombre, sede_id)')
-      .in('salon_id', ids)
+      .in('salon_id', ids).neq('estado', 'archivado')
     setTalleres(data || [])
     if (data?.length) {
       const hoy = new Date()
