@@ -253,7 +253,21 @@ export default function ProfesorApp() {
       const { data: inscrip } = await supabase.from('taller_inscripciones').select('taller_id')
         .in('taller_id', ids).eq('estado', 'activo').gte('mes', mesT)
       const confirmados = new Set((inscrip || []).map((i: any) => i.taller_id))
-      talleresConfirmados = (talleresData || []).filter((t: any) => confirmados.has(t.id))
+      const talleresConInscritos = (talleresData || []).filter((t: any) => confirmados.has(t.id))
+      // Load sesion estado for each taller for this week
+      const hoyStr = fechaLocal(new Date())
+      const finSemana = fechaLocal(new Date(new Date().setDate(new Date().getDate() + 6)))
+      if (talleresConInscritos.length > 0) {
+        const { data: sesiones } = await supabase.from('taller_sesiones')
+          .select('taller_id, fecha, estado')
+          .in('taller_id', talleresConInscritos.map((t: any) => t.id))
+          .gte('fecha', hoyStr).lte('fecha', finSemana)
+        const sesionMap: Record<string, string> = {}
+        ;(sesiones || []).forEach((s: any) => { sesionMap[`${s.taller_id}-${s.fecha}`] = s.estado })
+        talleresConfirmados = talleresConInscritos.map((t: any) => ({ ...t, _sesionMap: sesionMap }))
+      } else {
+        talleresConfirmados = []
+      }
     }
 
     const clasesFinales = [
@@ -266,11 +280,12 @@ export default function ProfesorApp() {
       const fechaStr = fechaLocal(dia)
       talleresConfirmados.forEach((t: any) => {
         if (DIAS_SEMANA[t.dia_semana] === dia.getDay()) {
+          const sesionEstadoHoy = t._sesionMap?.[`${t.id}-${fechaStr}`] || null
           clasesFinales.push({
             id: `taller-${t.id}-${fechaStr}`,
             fecha: fechaStr, hora: t.hora,
             duracion_min: t.duracion_min,
-            estado: 'confirmada', esTaller: true,
+            estado: 'confirmada', esTaller: true, sesionEstado: sesionEstadoHoy,
             tallerRealId: t.id, nombreTaller: t.nombre,
             salones: t.salones, contratos: null,
             observaciones: null,
@@ -1045,7 +1060,7 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
   const badge      = badgeEstado(c.estado, esInasistencia, c.esTaller)
   const confirmada = c.estado === 'confirmada' && !c.esTaller
   const expandido  = resumenExpandido === c.id
-  const esProg     = c.estado === 'programada' && !c.esTaller
+  const esProg     = (c.estado === 'programada' && !c.esTaller) || (c.esTaller && (c.sesionEstado === 'programada' || c.sesionEstado === null))
   const sinResumen = !c.esTaller && !c.observaciones && (c.estado === 'dada' || (c.estado === 'cancelada' && !c.cancelado_por_academia))
 
   const borderColor = c.esTaller ? '#7c3aed'
