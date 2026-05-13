@@ -836,9 +836,7 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
                     const claseDate = new Date(tallerModal.fecha + 'T' + h2.substring(0,5) + ':00')
                     const mins = Math.floor((claseDate.getTime() - Date.now()) / 60000)
                     const msg = mins >= 0 && mins < 180
-                      ? '⚠️ Aviso tardío de no posible asistencia (menos de 3 horas).
-
-Se notificará a la asistente para reasignar.'
+                      ? '⚠️ Aviso tardío — quedan menos de 3 horas. Se notificará a la asistente para reasignar.'
                       : 'Se notificará a la asistente para reasignar el taller a otro profesor.'
                     if (window.confirm(msg)) marcarSesionTaller('cancelada')
                   }} disabled={guardandoSesion}
