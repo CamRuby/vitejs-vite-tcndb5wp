@@ -1563,6 +1563,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                   </div>
                 )}
               </div>
+                )})()}
             )
           })}
         </div>
@@ -1798,6 +1799,17 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             </div>
           </div>
         </div>
+      )}
+
+      {modalAbonoTaller && (
+        <ModalAbono
+          plan={{ ...modalAbonoTaller, valor_plan: modalAbonoTaller.valor_plan, id: modalAbonoTaller.id }}
+          pagos={pagosTalleres[modalAbonoTaller.id] || []}
+          error={abonoError}
+          guardando={abonoGuardando}
+          onGuardar={registrarAbonoTaller}
+          onCerrar={() => { setModalAbonoTaller(null); setAbonoError('') }}
+        />
       )}
 
       {modalAbono && (
