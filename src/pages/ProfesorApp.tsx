@@ -425,14 +425,24 @@ export default function ProfesorApp() {
       .select('id, mes, fecha_inicio, fecha_fin, clientes(nombre, nombres, apellidos)')
       .eq('taller_id', c.tallerRealId).eq('estado', 'activo')
     const fechaClase = c.fecha
-    const inscFiltrados = (inscritos || []).filter((ins: any) => {
+    const inscFiltradosFecha = (inscritos || []).filter((ins: any) => {
       if (ins.fecha_inicio && ins.fecha_fin) return ins.fecha_inicio <= fechaClase && ins.fecha_fin >= fechaClase
       return ins.mes && ins.mes.substring(0,7) === fechaClase.substring(0,7)
     })
-    setInscritosTaller(inscFiltrados)
     const { data: sesion } = await supabase.from('taller_sesiones').select('id, fecha, estado, observaciones')
       .eq('taller_id', c.tallerRealId).eq('fecha', c.fecha).maybeSingle()
     setSesionHoy(sesion || null)
+    // If sesion is confirmada or dada, only show confirmed students
+    let inscFiltrados = inscFiltradosFecha
+    if (sesion?.id && (sesion.estado === 'confirmada' || sesion.estado === 'dada')) {
+      const { data: confs } = await supabase.from('taller_confirmaciones')
+        .select('inscripcion_id').eq('sesion_id', sesion.id)
+      if (confs && confs.length > 0) {
+        const confIds = new Set(confs.map((c: any) => c.inscripcion_id))
+        inscFiltrados = inscFiltradosFecha.filter((ins: any) => confIds.has(ins.id))
+      }
+    }
+    setInscritosTaller(inscFiltrados)
     setResumenTaller(sesion?.observaciones || '')
     setAsistenciasTaller({})
     if (sesion?.id) {
@@ -825,18 +835,20 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
                     const h2 = tallerModal?.hora || '00:00'
                     const claseDate = new Date(tallerModal.fecha + 'T' + h2.substring(0,5) + ':00')
                     const mins = Math.floor((claseDate.getTime() - Date.now()) / 60000)
-                    if (mins >= 0 && mins < 180) {
-                      if (!window.confirm('⚠️ Cancelación tardía — quedan menos de 3 horas.\n¿Confirmar cancelación?')) return
-                    }
-                    marcarSesionTaller('cancelada')
+                    const msg = mins >= 0 && mins < 180
+                      ? '⚠️ Aviso tardío de no posible asistencia (menos de 3 horas).
+
+Se notificará a la asistente para reasignar.'
+                      : 'Se notificará a la asistente para reasignar el taller a otro profesor.'
+                    if (window.confirm(msg)) marcarSesionTaller('cancelada')
                   }} disabled={guardandoSesion}
                     style={{ padding:'14px', background:'#fff7ed', color:'#c2410c', border:'2px solid #fed7aa', borderRadius:'14px', fontSize:'15px', fontWeight:'800', cursor:'pointer', fontFamily:'inherit' }}>
-                    Cancelar taller
+                    No puedo asistir
                   </button>
                 )}
                 {sesionHoy?.estado === 'cancelada' && (
                   <div style={{ padding:'14px', background:'#fee2e2', color:'#991b1b', border:'2px solid #fecaca', borderRadius:'14px', fontSize:'14px', fontWeight:'700', textAlign:'center' }}>
-                    ✗ Cancelado — solo se puede borrar desde el administrador
+                    ✗ Aviso enviado — la asistente reasignará el taller
                   </div>
                 )}
               </div>
