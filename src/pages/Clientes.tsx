@@ -535,6 +535,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [tallerSeleccionado, setTallerSeleccionado] = useState('')
   const [tallerValorPagado, setTallerValorPagado] = useState('')
   const [mesTaller, setMesTaller] = useState('')
+  const [tallerNumSesiones, setTallerNumSesiones]   = useState(4)
+  const [tallerFechaHasta, setTallerFechaHasta]     = useState('')
+  const [tallerModoFecha, setTallerModoFecha]       = useState(false)
   const [tallerGuardando, setTallerGuardando] = useState(false)
   const [tallerError, setTallerError] = useState('')
   const [esRenovacion, setEsRenovacion] = useState(false)
@@ -808,6 +811,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     setTallerSeleccionado('')
     setTallerValorPagado('')
     setTallerError('')
+    setTallerNumSesiones(4)
+    setTallerFechaHasta('')
+    setTallerModoFecha(false)
     setModalTaller(true)
   }
 
@@ -816,27 +822,46 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     setTallerGuardando(true); setTallerError('')
     const taller = talleres.find((t: any) => t.id === tallerSeleccionado)
     const fechaInicio = proximaSesionTaller(taller?.dia_semana || 'lunes')
-    const fechaFin = calcularFechaFin(fechaInicio, taller?.dia_semana)
+    // Calcular sesiones y fecha_fin
+    let numSesiones = tallerNumSesiones
+    let fechaFin: string
+    if (tallerModoFecha && tallerFechaHasta) {
+      fechaFin = tallerFechaHasta
+      const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
+      const diaT = dias.indexOf((taller?.dia_semana || '').toLowerCase())
+      let cnt = 0; let d = new Date(fechaInicio + 'T12:00:00')
+      const finD = new Date(fechaFin + 'T12:00:00')
+      while (d <= finD) { if (d.getDay() === diaT) cnt++; d.setDate(d.getDate() + 1) }
+      numSesiones = Math.max(cnt, 1)
+    } else {
+      fechaFin = calcularFechaFin(fechaInicio, taller?.dia_semana, numSesiones)
+    }
+    const valorBase = taller?.valor_mensual || 0
+    const valorPlan = Math.round((valorBase / 4) * numSesiones)
+    const valorPagadoNum = tallerValorPagado !== '' ? Number(tallerValorPagado) : 0
     const mes = fechaInicio.substring(0, 7) + '-01'
-    // Verificar solapamiento
     const { data: yaInscrito } = await supabase
       .from('taller_inscripciones').select('id')
-      .eq('taller_id', tallerSeleccionado)
-      .eq('cliente_id', clienteSeleccionado.id)
-      .eq('estado', 'activo')
-      .lte('fecha_inicio', fechaFin)
-      .gte('fecha_fin', fechaInicio)
+      .eq('taller_id', tallerSeleccionado).eq('cliente_id', clienteSeleccionado.id).eq('estado', 'activo')
+      .lte('fecha_inicio', fechaFin).gte('fecha_fin', fechaInicio)
     if (yaInscrito && yaInscrito.length > 0) {
-      setTallerError('Este cliente ya tiene una inscripción activa que se solapa con ese período.')
+      setTallerError('Este cliente ya tiene una inscripción activa en ese período.')
       setTallerGuardando(false); return
     }
-    const { error } = await supabase.from('taller_inscripciones').insert({
+    const { data: nueva, error } = await supabase.from('taller_inscripciones').insert({
       taller_id: tallerSeleccionado, cliente_id: clienteSeleccionado.id,
       mes, fecha_inicio: fechaInicio, fecha_fin: fechaFin,
-      valor_pagado: tallerValorPagado !== '' ? Number(tallerValorPagado) : (taller?.valor_mensual || null),
-      estado: 'activo'
-    })
+      num_sesiones: numSesiones, valor_plan: valorPlan,
+      total_pagado: valorPagadoNum, saldo: valorPlan - valorPagadoNum,
+      valor_pagado: valorPagadoNum, estado: 'activo'
+    }).select().single()
     if (error) { setTallerError('Error: ' + error.message); setTallerGuardando(false); return }
+    if (nueva && valorPagadoNum > 0) {
+      await supabase.from('pagos').insert({
+        inscripcion_id: nueva.id, monto: valorPagadoNum,
+        fecha: new Date().toISOString().split('T')[0], metodo: 'Efectivo'
+      })
+    }
     setModalTaller(false); setTallerGuardando(false)
     await cargarDatosCliente(clienteSeleccionado)
   }
@@ -1578,48 +1603,107 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       )}
 
       {/* Modal asignar a taller */}
-      {modalTaller && (
+      {modalTaller && (() => {
+        const tSel = talleres.find((x: any) => x.id === tallerSeleccionado)
+        const fi = tSel ? proximaSesionTaller(tSel.dia_semana) : ''
+        let sesionesCalc = tallerNumSesiones
+        if (tallerModoFecha && tallerFechaHasta && tSel && fi) {
+          const dias2 = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
+          const dt2 = dias2.indexOf(tSel.dia_semana.toLowerCase())
+          let cnt2 = 0; let dd2 = new Date(fi + 'T12:00:00'); const finD2 = new Date(tallerFechaHasta + 'T12:00:00')
+          while (dd2 <= finD2) { if (dd2.getDay() === dt2) cnt2++; dd2.setDate(dd2.getDate() + 1) }
+          sesionesCalc = Math.max(cnt2, 1)
+        }
+        const ff = tallerModoFecha && tallerFechaHasta ? tallerFechaHasta
+          : fi ? calcularFechaFin(fi, tSel?.dia_semana, sesionesCalc) : ''
+        const valorBase = tSel?.valor_mensual || 0
+        const valorPlan = tSel ? Math.round((valorBase / 4) * sesionesCalc) : 0
+        const valorPagadoNum = tallerValorPagado !== '' ? Number(tallerValorPagado) : 0
+        const saldo = valorPlan - valorPagadoNum
+        return (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-            <div style={{ background: '#7c3aed', padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '520px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ background: '#7c3aed', padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
                 <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>🎸 Asignar a taller</h3>
                 <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>{clienteSeleccionado?.nombre}</p>
               </div>
               <button onClick={() => setModalTaller(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
             </div>
-            <div style={{ padding: '24px' }}>
+            <div style={{ padding: '24px', overflowY: 'auto' }}>
               <div style={{ marginBottom: '16px' }}>
                 <label style={labelStyle}>Taller *</label>
-                <select value={tallerSeleccionado} onChange={e => { setTallerSeleccionado(e.target.value); const t = talleres.find((x: any) => x.id === e.target.value); if (t?.valor_mensual) setTallerValorPagado(String(t.valor_mensual)); else setTallerValorPagado('') }} style={estiloInput}>
+                <select value={tallerSeleccionado} onChange={e => { setTallerSeleccionado(e.target.value); setTallerValorPagado('') }} style={estiloInput}>
                   <option value="">— Seleccionar taller —</option>
-                  {talleres.map((t: any) => <option key={t.id} value={t.id}>{t.nombre} · {t.salones?.nombre} ({t.salones?.sedes?.nombre}) · {t.dia_semana} {t.hora?.substring(0,5)}</option>)}
+                  {talleres.map((t: any) => <option key={t.id} value={t.id}>{t.nombre} · {t.dia_semana}s {t.hora?.substring(0,5)} · {t.salones?.sedes?.nombre}</option>)}
                 </select>
               </div>
-              {tallerSeleccionado && (() => {
-                const t = talleres.find((x: any) => x.id === tallerSeleccionado)
-                const fi = t ? proximaSesionTaller(t.dia_semana) : ''
-                const ff = fi ? calcularFechaFin(fi, t?.dia_semana) : ''
-                return fi ? (
-                  <div style={{ background: '#f3e8ff', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#7c3aed' }}>
-                    📅 4 sesiones: <strong>{fi}</strong> → <strong>{ff}</strong>
-                    <span style={{ marginLeft: '8px', color: '#888', fontSize: '12px' }}>{t?.dia_semana}s</span>
+              {tallerSeleccionado && (<>
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={labelStyle}>Duración de la inscripción</label>
+                  <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+                    {[4, 8, 12].map(n => (
+                      <button key={n} onClick={() => { setTallerNumSesiones(n); setTallerModoFecha(false) }}
+                        style={{ padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
+                          border: !tallerModoFecha && tallerNumSesiones === n ? '2px solid #7c3aed' : '1px solid #e2e8f0',
+                          background: !tallerModoFecha && tallerNumSesiones === n ? '#f3e8ff' : 'white',
+                          color: !tallerModoFecha && tallerNumSesiones === n ? '#7c3aed' : '#555' }}>
+                        {n} sesiones
+                      </button>
+                    ))}
+                    <button onClick={() => setTallerModoFecha(true)}
+                      style={{ padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
+                        border: tallerModoFecha ? '2px solid #7c3aed' : '1px solid #e2e8f0',
+                        background: tallerModoFecha ? '#f3e8ff' : 'white',
+                        color: tallerModoFecha ? '#7c3aed' : '#555' }}>
+                      Hasta fecha →
+                    </button>
                   </div>
-                ) : null
-              })()}
-              <div style={{ marginBottom: '20px' }}>
-                <label style={labelStyle}>Valor pagado ($)</label>
-                <input type="number" min={0} value={tallerValorPagado} onChange={e => setTallerValorPagado(e.target.value)} placeholder="Se toma del taller si se deja vacío" style={estiloInput} />
-              </div>
+                  {tallerModoFecha && (
+                    <input type="date" value={tallerFechaHasta} min={fi}
+                      onChange={e => setTallerFechaHasta(e.target.value)}
+                      style={{ ...estiloInput, marginTop: '8px' }} />
+                  )}
+                </div>
+                {fi && ff && (
+                  <div style={{ background: '#f3e8ff', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#7c3aed', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    <span>📅 <strong>{fi}</strong> → <strong>{ff}</strong></span>
+                    <span>🎸 <strong>{sesionesCalc}</strong> sesiones · {tSel?.dia_semana}s</span>
+                  </div>
+                )}
+                <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', alignItems: 'end' }}>
+                    <div>
+                      <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#888', fontWeight: '600', textTransform: 'uppercase' }}>Valor plan</p>
+                      <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#1a1a1a' }}>${valorPlan.toLocaleString('es-CO')}</p>
+                    </div>
+                    <div>
+                      <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#888', fontWeight: '600', textTransform: 'uppercase' }}>Abono inicial</p>
+                      <input type="number" min={0} max={valorPlan} value={tallerValorPagado}
+                        onChange={e => setTallerValorPagado(e.target.value)}
+                        placeholder="0"
+                        style={{ width: '100%', padding: '6px 8px', border: `1px solid ${TEAL_MID}`, borderRadius: '6px', fontSize: '15px', fontWeight: '600', boxSizing: 'border-box' as const }} />
+                    </div>
+                    <div>
+                      <p style={{ margin: '0 0 4px', fontSize: '11px', color: '#888', fontWeight: '600', textTransform: 'uppercase' }}>Saldo</p>
+                      <p style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: saldo > 0 ? '#991b1b' : '#166534' }}>${saldo.toLocaleString('es-CO')}</p>
+                    </div>
+                  </div>
+                </div>
+              </>)}
               {tallerError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{tallerError}</p>}
               <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={inscribirEnTaller} disabled={tallerGuardando} style={{ flex: 1, padding: '11px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>{tallerGuardando ? 'Inscribiendo...' : 'Inscribir'}</button>
+                <button onClick={inscribirEnTaller} disabled={tallerGuardando || !tallerSeleccionado}
+                  style={{ flex: 1, padding: '11px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '600' }}>
+                  {tallerGuardando ? 'Inscribiendo...' : 'Inscribir'}
+                </button>
                 <button onClick={() => setModalTaller(false)} style={{ padding: '11px 18px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px' }}>Cancelar</button>
               </div>
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {modalPlan !== null && (
         <ModalPlan plan={modalPlan} profesores={profesores} instrumentos={instrumentos} sedes={sedes}
