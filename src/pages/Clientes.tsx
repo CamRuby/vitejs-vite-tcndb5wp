@@ -58,28 +58,23 @@ function proximaSesionTaller(diaSemana: string, desde: Date = new Date()): strin
   return proxima.toISOString().split('T')[0]
 }
 
-function calcularFechaFin(fechaInicio: string, diaSemana?: string): string {
-  // fecha_fin = fecha de la 4ta sesión del taller desde fecha_inicio (inclusive)
+function calcularFechaFin(fechaInicio: string, diaSemana?: string, numSesiones = 4): string {
   if (!diaSemana) {
-    // fallback: un mes menos un día
     const d = new Date(fechaInicio + 'T12:00:00')
-    d.setMonth(d.getMonth() + 1); d.setDate(d.getDate() - 1)
+    d.setDate(d.getDate() + numSesiones * 7 - 1)
     return d.toISOString().split('T')[0]
   }
   const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
   const diaTarget = dias.indexOf(diaSemana.toLowerCase())
-  // Generar las próximas 4 sesiones desde fecha_inicio
   let fecha = new Date(fechaInicio + 'T12:00:00')
   let sesiones = 0
-  // fecha_inicio ya ES la primera sesión, so count it
-  for (let i = 0; i < 28; i++) { // max 28 days = 4 weeks
+  for (let i = 0; i < numSesiones * 7 + 7; i++) {
     if (fecha.getDay() === diaTarget) {
       sesiones++
-      if (sesiones === 4) return fecha.toISOString().split('T')[0]
+      if (sesiones === numSesiones) return fecha.toISOString().split('T')[0]
     }
     fecha.setDate(fecha.getDate() + 1)
   }
-  // fallback
   const d2 = new Date(fechaInicio + 'T12:00:00')
   d2.setDate(d2.getDate() + 27)
   return d2.toISOString().split('T')[0]
@@ -1718,7 +1713,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                 {fi && ff && (
                   <div style={{ background: '#f3e8ff', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#7c3aed', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
                     <span>📅 <strong>{fi}</strong> → <strong>{ff}</strong></span>
-                    <span>🎸 <strong>{sesionesCalc}</strong> sesiones · {tSel?.dia_semana}{tSel?.dia_semana?.endsWith('s') ? '' : 's'}</span>
+                    <span>🎸 <strong>{sesionesCalc}</strong> sesiones · {tSel?.dia_semana}</span>
                   </div>
                 )}
                 <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px' }}>
