@@ -58,6 +58,7 @@ export default function Profesores() {
   const [filtroVista, setFiltroVista] = useState<'historial' | 'programadas'>('historial')
 
   const [claseModal, setClaseModal] = useState<any>(null)
+  const [modalAsistentes, setModalAsistentes] = useState<any[]>([])
   const [editHon, setEditHon] = useState('')
   const [editObsAdmin, setEditObsAdmin] = useState('')
   const [guardandoH, setGuardandoH] = useState(false)
@@ -121,7 +122,7 @@ export default function Profesores() {
       .select('id, nombre, hora, duracion_min, salones(nombre, sedes(nombre))').eq('profesor_id', p.id)
     if (talleres && talleres.length > 0) {
       const { data: sesiones } = await supabase.from('taller_sesiones')
-        .select('id, fecha, estado, observaciones, taller_id')
+        .select('id, fecha, estado, observaciones, honorario_valor, taller_id')
         .in('taller_id', talleres.map((t: any) => t.id))
         .gte('fecha', fi).lte('fecha', ff)
         .order('fecha', { ascending: false })
@@ -140,7 +141,7 @@ export default function Profesores() {
           salones: t?.salones,
           observaciones: s.observaciones,
           es_cortesia: false, cancelado_tarde: false, cancelado_por_academia: false,
-          honorario_valor: null, numero_calculado: null, contratos: null
+          honorario_valor: s.honorario_valor ?? null, numero_calculado: null, contratos: null
         }
       })
       result = [...result, ...tallerRows].sort((a, b) =>
@@ -206,13 +207,47 @@ export default function Profesores() {
     setTarifas(prev => prev.filter(t => t.id !== id))
   }
 
+  async function abrirClaseModal(c: any) {
+    setClaseModal(c)
+    setEditHon(String(getHon(c)))
+    setEditObsAdmin(c.observaciones_admin || '')
+    setModalAsistentes([])
+    if (c.esTaller) {
+      // Load attendees from taller_asistencias
+      const sesionId = c.id.replace('taller-', '')
+      const { data: asis } = await supabase.from('taller_asistencias')
+        .select('inscripcion_id, asistio, taller_inscripciones(clientes(nombre))')
+        .eq('sesion_id', sesionId)
+      const asistentes = (asis || []).filter((a: any) => a.asistio)
+      setModalAsistentes(asistentes)
+      // Auto-calculate honorario based on attendee count
+      const numAsistentes = asistentes.length
+      let autoHon = 0
+      if (numAsistentes >= 3) {
+        const tarTaller = tarifas.find(x => x.modalidad === 'taller' && x.duracion_min === c.duracion_min)
+        autoHon = tarTaller ? Number(tarTaller.valor) : 0
+      } else {
+        const tarReg = tarifas.find(x => x.modalidad === 'presencial' && x.duracion_min === c.duracion_min)
+          || tarifas.find(x => !x.taller_grupal && x.duracion_min === c.duracion_min)
+        autoHon = tarReg ? Number(tarReg.valor) : 0
+        if (numAsistentes === 0) autoHon = 0 // will show 50%/100% choice
+      }
+      if (numAsistentes > 0) setEditHon(String(autoHon))
+    }
+  }
+
   async function guardarClaseModal() {
     if (!claseModal) return
     setGuardandoH(true)
     const update: any = { observaciones_admin: editObsAdmin || null }
-    // Solo guardar honorario si aplica
     if (claseModal.estado === 'dada' || claseModal.cancelado_tarde) {
       update.honorario_valor = Number(editHon)
+    }
+    if (claseModal.esTaller) {
+      const sesionId = claseModal.id.replace('taller-', '')
+      await supabase.from('taller_sesiones').update({ honorario_valor: Number(editHon) }).eq('id', sesionId)
+      setClases(prev => prev.map(c => c.id === claseModal.id ? { ...c, honorario_valor: Number(editHon) } : c))
+      setClaseModal(null); setGuardandoH(false); return
     }
     await supabase.from('clases').update(update).eq('id', claseModal.id)
     setClases(prev => prev.map(c => c.id === claseModal.id ? { ...c, ...update } : c))
@@ -229,7 +264,7 @@ export default function Profesores() {
   // ── Punto 2: getHon corregido — sin filtro por ciudad, busca por duracion_min ──
   function getHon(c: any) {
     if (c.honorario_valor !== null && c.honorario_valor !== undefined) return Number(c.honorario_valor)
-    // Buscar tarifa por duración. Si hay varias modalidades, preferir presencial.
+    if (c.esTaller) return 0
     const presencial = tarifas.find(x => !x.taller_grupal && x.duracion_min === c.duracion_min && x.modalidad === 'presencial')
     if (presencial) return presencial.valor || 0
     const cualquiera = tarifas.find(x => !x.taller_grupal && x.duracion_min === c.duracion_min)
@@ -584,7 +619,7 @@ export default function Profesores() {
                               : null}
                           </td>
                           <td style={{ ...tdS, textAlign: 'center' }}>
-                            <button onClick={() => { setClaseModal(c); setEditHon(String(getHon(c))); setEditObsAdmin(c.observaciones_admin || '') }}
+                            <button onClick={() => abrirClaseModal(c)}
                               style={{ background: 'none', borderRadius: '6px', padding: '3px 10px', cursor: 'pointer', fontSize: '11px',
                                 border: c.observaciones_admin ? '1.5px solid #dc2626' : `1px solid ${TEAL_MID}`,
                                 color: c.observaciones_admin ? '#dc2626' : TEAL,
@@ -611,9 +646,9 @@ export default function Profesores() {
             <div style={{ background: TEAL, padding: '16px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
                 {/* Punto 5: "Detalle de la clase" */}
-                <h3 style={{ margin: 0, color: 'white', fontSize: '16px' }}>Detalle de la clase</h3>
+                <h3 style={{ margin: 0, color: 'white', fontSize: '16px' }}>{claseModal.esTaller ? '🎸 Sesión de taller' : 'Detalle de la clase'}</h3>
                 <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
-                  {claseModal.contratos?.clientes?.nombre} · {claseModal.fecha} {claseModal.hora?.substring(0, 5)}
+                  {claseModal.esTaller ? claseModal.nombreTaller : claseModal.contratos?.clientes?.nombre} · {claseModal.fecha} {claseModal.hora?.substring(0, 5)}
                 </p>
               </div>
               <button onClick={() => setClaseModal(null)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '5px 11px', cursor: 'pointer' }}>✕</button>
@@ -634,6 +669,29 @@ export default function Profesores() {
                   </span>
                 </div>
               </div>
+
+              {/* Asistentes del taller */}
+              {claseModal.esTaller && (
+                <div style={{ marginBottom: '16px' }}>
+                  <p style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: '700', color: '#333' }}>
+                    Asistentes ({modalAsistentes.length})
+                    <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: '600', padding: '1px 8px', borderRadius: '10px',
+                      background: modalAsistentes.length >= 3 ? '#f3e8ff' : '#eff6ff',
+                      color: modalAsistentes.length >= 3 ? '#7c3aed' : '#1d4ed8' }}>
+                      {modalAsistentes.length >= 3 ? 'Tarifa taller' : modalAsistentes.length > 0 ? 'Tarifa regular' : 'Sin asistentes'}
+                    </span>
+                  </p>
+                  {modalAsistentes.length === 0
+                    ? <p style={{ fontSize: '13px', color: '#aaa', fontStyle: 'italic' }}>Ningún inscrito asistió</p>
+                    : modalAsistentes.map((a: any, i) => (
+                        <div key={i} style={{ padding: '6px 10px', background: '#f8fafc', borderRadius: '8px', marginBottom: '4px', fontSize: '13px', color: '#333' }}>
+                          ✓ {a.taller_inscripciones?.clientes?.nombre || '—'}
+                        </div>
+                      ))
+                  }
+
+                </div>
+              )}
 
               {/* Aviso cancelada tarde — automático, sin toggle manual */}
               {claseModal.estado === 'cancelada' && claseModal.cancelado_tarde && (
