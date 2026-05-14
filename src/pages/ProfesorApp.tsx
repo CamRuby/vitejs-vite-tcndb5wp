@@ -493,16 +493,16 @@ export default function ProfesorApp() {
       const confIds = new Set((confs || []).map((c: any) => c.inscripcion_id))
       inscFiltrados = inscFiltradosFecha.filter((ins: any) => confIds.has(ins.id))
     }
-    setInscritosTaller(inscFiltrados)
-    setResumenTaller(sesion?.observaciones || '')
-    setAsistenciasTaller({})
+    // Load asistencias first, then set everything together
+    let asisMap: Record<string, boolean | null> = {}
     if (sesion?.id) {
       const { data: asis } = await supabase.from('taller_asistencias')
         .select('inscripcion_id, asistio').eq('sesion_id', sesion.id)
-      const map: Record<string, boolean | null> = {}
-      ;(asis || []).forEach((a: any) => { map[a.inscripcion_id] = a.asistio })
-      setAsistenciasTaller(map)
+      ;(asis || []).forEach((a: any) => { asisMap[a.inscripcion_id] = a.asistio })
     }
+    setAsistenciasTaller(asisMap)
+    setInscritosTaller(inscFiltrados)
+    setResumenTaller(sesion?.observaciones || '')
   }
 
   async function toggleAsistTaller(inscripcionId: string, asistio: boolean | null) {
