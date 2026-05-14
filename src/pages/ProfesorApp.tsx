@@ -281,11 +281,13 @@ export default function ProfesorApp() {
       talleresConfirmados.forEach((t: any) => {
         if (DIAS_SEMANA[t.dia_semana] === dia.getDay()) {
           const sesionEstadoHoy = t._sesionMap?.[`${t.id}-${fechaStr}`] || null
+          // Use sesionEstado as the card estado so all downstream logic works
+          const estadoTaller = sesionEstadoHoy || 'programada'
           clasesFinales.push({
             id: `taller-${t.id}-${fechaStr}`,
             fecha: fechaStr, hora: t.hora,
             duracion_min: t.duracion_min,
-            estado: 'confirmada', esTaller: true, sesionEstado: sesionEstadoHoy,
+            estado: estadoTaller, esTaller: true, sesionEstado: estadoTaller,
             tallerRealId: t.id, nombreTaller: t.nombre,
             salones: t.salones, contratos: null,
             observaciones: null,
@@ -493,8 +495,7 @@ export default function ProfesorApp() {
 
   function abrirModal(clase: any) {
     if (clase.esTaller) {
-      // Block if sesion is programada or doesn't exist yet
-      if (clase.sesionEstado === 'programada' || clase.sesionEstado === null) return
+      if (clase.estado === 'programada') return  // blocked — not yet confirmed by admin
       abrirTaller(clase); return
     }
     setClaseActiva(clase)
@@ -1099,7 +1100,7 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
   const badge      = badgeEstado(c.estado, esInasistencia, c.esTaller)
   const confirmada = c.estado === 'confirmada' && !c.esTaller
   const expandido  = resumenExpandido === c.id
-  const esProg     = (c.estado === 'programada' && !c.esTaller) || (c.esTaller && (c.sesionEstado === 'programada' || c.sesionEstado === null || c.sesionEstado === undefined))
+  const esProg     = c.estado === 'programada'
   const sinResumen = !c.esTaller && !c.observaciones && (c.estado === 'dada' || (c.estado === 'cancelada' && !c.cancelado_por_academia))
 
   const borderColor = c.esTaller ? '#7c3aed'
