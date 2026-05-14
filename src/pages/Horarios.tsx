@@ -1478,10 +1478,14 @@ export default function Horarios() {
                             Selecciona los estudiantes que confirmaron asistencia para esta sesión.
                           </p>
                         )}
-                        {/* CONFIRMADA/DADA: show attendance checkboxes */}
-                        {(sesionActual?.estado === 'confirmada' || sesionActual?.estado === 'dada') && (
+                        {sesionActual?.estado === 'confirmada' && (
                           <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#166534', fontStyle: 'italic' }}>
                             Selecciona los estudiantes que asistieron a esta sesión.
+                          </p>
+                        )}
+                        {sesionActual?.estado === 'dada' && (
+                          <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#854d0e', fontStyle: 'italic' }}>
+                            Sesión dada — asistentes registrados.
                           </p>
                         )}
                         {inscritosDelTaller.map((ins: any, i) => {
