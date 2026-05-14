@@ -501,8 +501,8 @@ export default function Profesores() {
               <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead style={{ background: TEAL_LIGHT }}>
-                    <tr>{['Fecha', 'Hora', 'Cliente', 'Duración', 'Sede', 'Estado', 'Honorarios', 'Resumen', ''].map(h => (
-                        <th key={h} style={{ ...thS, textAlign: h === 'Cliente' ? 'center' : 'left' }}>{h}</th>
+                    <tr>{['Fecha', 'Hora', 'Cliente / Taller', 'Duración', 'Sede', 'Estado', 'Honorarios', 'Resumen', ''].map(h => (
+                        <th key={h} style={{ ...thS, textAlign: h === 'Cliente / Taller' ? 'center' : 'left' }}>{h}</th>
                       ))}</tr>
                   </thead>
                   <tbody>
@@ -561,6 +561,7 @@ export default function Profesores() {
                   </tbody>
                 </table>
               </div>
+              )}
             </div>
           )}
         </div>
