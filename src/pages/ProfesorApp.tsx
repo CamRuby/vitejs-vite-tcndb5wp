@@ -251,10 +251,20 @@ export default function ProfesorApp() {
     const ids = (talleresData || []).map((t: any) => t.id)
     let talleresConfirmados: any[] = []
     if (ids.length > 0) {
-      const { data: inscrip } = await supabase.from('taller_inscripciones').select('taller_id')
-        .in('taller_id', ids).eq('estado', 'activo').gte('mes', mesT)
-      const confirmados = new Set((inscrip || []).map((i: any) => i.taller_id))
-      const talleresConInscritos = (talleresData || []).filter((t: any) => confirmados.has(t.id))
+      const hoyStr2 = fechaLocal(new Date())
+      // Use fecha_fin if available, fallback to mes for old records
+      const { data: inscrip } = await supabase.from('taller_inscripciones')
+        .select('taller_id, mes, fecha_inicio, fecha_fin')
+        .in('taller_id', ids).eq('estado', 'activo')
+      const confirmados = new Set(
+        (inscrip || []).filter((i: any) => {
+          if (i.fecha_fin) return i.fecha_fin >= hoyStr2
+          if (i.mes) return i.mes >= mesT
+          return true
+        }).map((i: any) => i.taller_id)
+      )
+      // Show ALL talleres the professor has — even without active inscriptions (so programada ones appear)
+      const talleresConInscritos = talleresData || []
       // Load sesion estado for each taller for this week
       const hoyStr = fechaLocal(new Date())
       const finSemana = fechaLocal(new Date(new Date().setDate(new Date().getDate() + 6)))
