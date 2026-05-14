@@ -262,7 +262,6 @@ export default function ProfesorApp() {
         const { data: sesiones } = await supabase.from('taller_sesiones')
           .select('taller_id, fecha, estado')
           .in('taller_id', talleresConInscritos.map((t: any) => t.id))
-          .gte('fecha', hoyStr).lte('fecha', finSemana)
         const sesionMap: Record<string, string> = {}
         ;(sesiones || []).forEach((s: any) => { sesionMap[`${s.taller_id}-${s.fecha}`] = s.estado })
         talleresConfirmados = talleresConInscritos.map((t: any) => ({ ...t, _sesionMap: sesionMap }))
