@@ -352,6 +352,7 @@ export default function ProfesorApp() {
       duracion_min: s.talleres?.duracion_min,
       estado: 'dada',
       esTaller: true,
+      tallerRealId: s.taller_id,
       nombreTaller: s.talleres?.nombre,
       salones: s.talleres?.salones,
       observaciones: s.observaciones,
