@@ -1111,9 +1111,9 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
       boxShadow: esProg ? '0 1px 4px rgba(0,0,0,0.04)' : '0 2px 12px rgba(0,0,0,0.06)',
       borderLeft:`4px solid ${borderColor}`,
       animation:`fadeUp ${0.1+i*0.03}s ease`,
-      cursor:'pointer',
+      cursor: esProg ? 'default' : 'pointer',
       opacity: esProg ? 0.65 : 1
-    }} onClick={onTap}>
+    }} onClick={esProg ? undefined : onTap}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'12px', marginBottom:'8px' }}>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'baseline', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
