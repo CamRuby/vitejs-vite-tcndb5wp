@@ -553,7 +553,14 @@ export default function Horarios() {
     if (yaConfirmado) {
       await supabase.from('taller_confirmaciones').delete()
         .eq('sesion_id', sesionActual.id).eq('inscripcion_id', inscripcionId)
-      setConfirmacionesSesion(prev => { const n = new Set(prev); n.delete(inscripcionId); return n })
+      const nuevasConfs = new Set(confirmacionesSesion); nuevasConfs.delete(inscripcionId)
+      setConfirmacionesSesion(nuevasConfs)
+      // If no more confirmed students, revert session to programada
+      if (nuevasConfs.size === 0 && sesionActual.estado === 'confirmada') {
+        await supabase.from('taller_sesiones').update({ estado: 'programada' }).eq('id', sesionActual.id)
+        setSesionActual((prev: any) => ({ ...prev, estado: 'programada' }))
+        setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'programada' }))
+      }
     } else {
       await supabase.from('taller_confirmaciones').upsert({
         sesion_id: sesionActual.id, inscripcion_id: inscripcionId, confirmado: true
