@@ -104,9 +104,7 @@ export default function Profesores() {
         .lte('fecha', ff)
         .order('fecha', { ascending: false })
       if (error) throw error
-      result = (d || []).filter((c: any) =>
-        c.estado === 'dada' || c.estado === 'cancelada'
-      )
+      result = d || []
     } catch {
       // Fallback sin columnas nuevas (aún no migradas en Supabase)
       const { data: d } = await supabase
@@ -116,10 +114,7 @@ export default function Profesores() {
         .gte('fecha', fi)
         .lte('fecha', ff)
         .order('fecha', { ascending: false })
-      const rawFb = (d || []).filter((c: any) =>
-        c.estado === 'dada' || c.estado === 'cancelada'
-      )
-      result = rawFb.map((c: any) => ({ ...c, cancelado_tarde: false, cancelado_por_academia: false, observaciones_admin: null }))
+      result = (d || []).map((c: any) => ({ ...c, cancelado_tarde: false, cancelado_por_academia: false, observaciones_admin: null }))
     }
     setClases(result)
   }
