@@ -6,7 +6,7 @@ const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
 const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
 const DURACIONES = [30, 45, 60, 90, 120]
-const MODALIDADES = ['presencial', 'domicilio']
+const MODALIDADES = ['presencial', 'domicilio', 'taller']
 const HORAS = Array.from({ length: 29 }, (_, i) => {
   const h = Math.floor(i / 2) + 7
   const m = i % 2 === 0 ? '00' : '30'
@@ -572,8 +572,9 @@ export default function Profesores() {
                               {esTarde ? '⚠️ Cancelada (tarde)' : c.estado}
                             </span>
                           </td>
-                          <td style={{ ...tdS, fontWeight: '600', color: pagarHon ? TEAL : '#aaa' }}>
-                            {c.esTaller ? <span style={{ color: '#aaa' }}>—</span> : pagarHon ? `$${hon.toLocaleString()}` : '—'}
+                          <td style={{ ...tdS, fontWeight: '600', color: (pagarHon || c.honorario_valor) ? TEAL : '#aaa' }}>
+                            {c.esTaller ? <span style={{ color: '#aaa' }}>—</span>
+                              : (pagarHon || c.honorario_valor !== null) ? `$${hon.toLocaleString()}` : '—'}
                             {!c.esTaller && c.honorario_valor !== null && c.honorario_valor !== undefined && <span style={{ fontSize: '10px', color: '#f59e0b', marginLeft: '4px' }}>editado</span>}
                           </td>
                           {/* Indicador de resumen */}
