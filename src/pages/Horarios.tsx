@@ -529,7 +529,7 @@ export default function Horarios() {
       .select('id, fecha, estado, profesor_id')
       .eq('taller_id', taller.id)
       .eq('fecha', fechaCol)
-      .single()
+      .maybeSingle()
     setSesionActual(sesion || null)
     setAsistenciasSesion({})
     setConfirmacionesSesion(new Set())
@@ -551,13 +551,21 @@ export default function Horarios() {
     // Auto-create sesion as programada if it doesn't exist yet
     let sesId = sesionActual?.id
     if (!sesId) {
-      const { data: newSes, error } = await supabase.from('taller_sesiones')
-        .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'programada' })
-        .select().single()
-      if (error || !newSes) { setGuardandoConfirmacion(false); return }
-      setSesionActual(newSes)
-      setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'programada' }))
-      sesId = newSes.id
+      // Check if session already exists in DB (local state might be stale)
+      const { data: existing } = await supabase.from('taller_sesiones')
+        .select('id, estado').eq('taller_id', tallerViendo.id).eq('fecha', fechaSesionViendo).maybeSingle()
+      if (existing) {
+        setSesionActual(existing)
+        sesId = existing.id
+      } else {
+        const { data: newSes, error: insError } = await supabase.from('taller_sesiones')
+          .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'programada' })
+          .select().single()
+        if (insError || !newSes) { setGuardandoConfirmacion(false); return }
+        setSesionActual(newSes)
+        setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'programada' }))
+        sesId = newSes.id
+      }
     }
     const yaConfirmado = confirmacionesSesion.has(inscripcionId)
     if (yaConfirmado) {
