@@ -294,7 +294,7 @@ export default function ProfesorApp() {
           // Use sesionEstado as the card estado so all downstream logic works
           const estadoTaller = sesionEstadoHoy || 'programada'
           // Don't show talleres that are already 'dada' in today's list
-          if (estadoTaller === 'dada') continue
+          if (estadoTaller === 'dada') { /* skip */ } else
           clasesFinales.push({
             id: `taller-${t.id}-${fechaStr}`,
             fecha: fechaStr, hora: t.hora,
