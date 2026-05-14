@@ -279,7 +279,7 @@ export default function Profesores() {
   const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
   // Incluir canceladas tarde en honorarios
   const canceladasTarde = clases.filter(c => c.estado === 'cancelada' && c.cancelado_tarde)
-  const totalHon = [...dadas, ...canceladasTarde].reduce((s, c) => s + getHon(c), 0)  // dadas ya excluye cortesías
+  const totalHon = [...dadas, ...canceladasTarde].reduce((s, c) => s + getHon(c), 0)
   const cnt = {
     programada: clases.filter(c => c.estado === 'programada').length,
     confirmada: clases.filter(c => c.estado === 'confirmada').length,
@@ -608,9 +608,8 @@ export default function Profesores() {
                             </span>
                           </td>
                           <td style={{ ...tdS, fontWeight: '600', color: (pagarHon || c.honorario_valor) ? TEAL : '#aaa' }}>
-                            {c.esTaller ? <span style={{ color: '#aaa' }}>—</span>
-                              : (pagarHon || c.honorario_valor !== null) ? `$${hon.toLocaleString()}` : '—'}
-                            {!c.esTaller && c.honorario_valor !== null && c.honorario_valor !== undefined && <span style={{ fontSize: '10px', color: '#f59e0b', marginLeft: '4px' }}>editado</span>}
+                            {(pagarHon || c.honorario_valor !== null) ? `$${hon.toLocaleString()}` : '—'}
+                            {c.honorario_valor !== null && c.honorario_valor !== undefined && !c.esTaller && <span style={{ fontSize: '10px', color: '#f59e0b', marginLeft: '4px' }}>editado</span>}
                           </td>
                           {/* Indicador de resumen */}
                           <td style={{ ...tdS, textAlign: 'center' }}>
