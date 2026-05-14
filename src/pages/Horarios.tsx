@@ -526,7 +526,7 @@ export default function Horarios() {
     setInscritosDelTaller(inscData)
     const { data: sesion } = await supabase
       .from('taller_sesiones')
-      .select('id, fecha, estado')
+      .select('id, fecha, estado, profesor_id')
       .eq('taller_id', taller.id)
       .eq('fecha', fechaCol)
       .single()
@@ -1342,7 +1342,7 @@ export default function Horarios() {
               <div>
                 <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>🎸 {tallerViendo.nombre}</h3>
                 <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
-                  {tallerViendo.profesores?.nombre} · {tallerViendo.salones?.nombre} · {tallerViendo.dia_semana} {tallerViendo.hora?.substring(0, 5)}
+                  {sesionActual?.profesor_id && sesionActual.profesor_id !== tallerViendo?.profesor_id ? `${profesores.find((p: any) => p.id === sesionActual.profesor_id)?.nombre || tallerViendo.profesores?.nombre} (reemplazo)` : tallerViendo.profesores?.nombre} · {tallerViendo.salones?.nombre} · {tallerViendo.dia_semana} {tallerViendo.hora?.substring(0, 5)}
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '6px' }}>
@@ -1374,17 +1374,25 @@ export default function Horarios() {
                         <div style={{ marginBottom: '8px' }}>
                           <label style={{ fontSize: '12px', color: '#555', fontWeight: '600', display: 'block', marginBottom: '4px' }}>Reasignar profesor</label>
                           <select
-                            defaultValue={sesionActual?.profesor_id || tallerViendo?.profesor_id || ''}
+                            value={sesionActual?.profesor_id || tallerViendo?.profesor_id || ''}
                             onChange={async e => {
                               const nuevoProf = e.target.value
                               if (!nuevoProf) return
+                              // Update professor on the taller itself
+                              await supabase.from('talleres').update({ profesor_id: nuevoProf }).eq('id', tallerViendo.id)
+                              // Update sesion estado to confirmada
                               if (sesionActual?.id) {
-                                await supabase.from('taller_sesiones').update({ estado: 'confirmada', profesor_id: nuevoProf }).eq('id', sesionActual.id)
+                                await supabase.from('taller_sesiones').update({ estado: 'confirmada' }).eq('id', sesionActual.id)
+                                setSesionActual((prev: any) => ({ ...prev, estado: 'confirmada' }))
                               } else {
-                                await supabase.from('taller_sesiones').insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'confirmada', profesor_id: nuevoProf })
+                                const { data: newSes } = await supabase.from('taller_sesiones')
+                                  .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'confirmada' })
+                                  .select().single()
+                                if (newSes) setSesionActual(newSes)
                               }
-                              setSesionActual((prev: any) => ({ ...prev, estado: 'confirmada', profesor_id: nuevoProf }))
                               setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'confirmada' }))
+                              // Refresh talleres to show new professor
+                              await cargarTalleres()
                             }}
                             style={{ width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px' }}>
                             <option value="">— Seleccionar nuevo profesor —</option>
@@ -1465,14 +1473,20 @@ export default function Horarios() {
                               </div>
                               {/* Confirmation checkbox — visible in programada state */}
                               {esProg && (
-                                <button onClick={() => sesionActual?.id ? toggleConfirmacion(ins.id) : (
-                                  // Auto-create sesion as programada before confirming
-                                  supabase.from('taller_sesiones')
-                                    .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'programada' })
-                                    .select().single()
-                                    .then(({ data }) => { if (data) { setSesionActual(data); setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'programada' })) } })
-                                )}
-                                  disabled={guardandoConfirmacion || !sesionActual?.id && false}
+                                <button onClick={async () => {
+                                  if (!sesionActual?.id) {
+                                    const { data } = await supabase.from('taller_sesiones')
+                                      .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'programada' })
+                                      .select().single()
+                                    if (data) {
+                                      setSesionActual(data)
+                                      setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'programada' }))
+                                    }
+                                    return
+                                  }
+                                  toggleConfirmacion(ins.id)
+                                }}
+                                  disabled={guardandoConfirmacion}
                                   style={{ width: '32px', height: '32px', borderRadius: '8px', border: confirmado ? '2px solid #1d4ed8' : '1px solid #e2e8f0', background: confirmado ? '#eff6ff' : 'white', color: confirmado ? '#1d4ed8' : '#aaa', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                   {confirmado ? '✓' : ''}
                                 </button>
