@@ -1511,7 +1511,15 @@ export default function Horarios() {
                                 <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>{ins.clientes?.telefono || '—'}</p>
                               </div>
                               {/* In confirmada/dada: show confirmed badge + toggle confirmation + attendance checkbox */}
-                              {esConfirmadaODada && (
+                              {sesionActual?.estado === 'dada' && (
+                                <span style={{ marginRight: '8px', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: '700',
+                                  background: asistio === true ? '#dcfce7' : '#f1f5f9',
+                                  color: asistio === true ? '#166534' : '#94a3b8',
+                                  border: `1px solid ${asistio === true ? '#bbf7d0' : '#e2e8f0'}` }}>
+                                  {asistio === true ? '✓ Asistió' : '✗ No asistió'}
+                                </span>
+                              )}
+                              {sesionActual?.estado === 'confirmada' && (
                                 <span onClick={() => toggleConfirmacion(ins.id)}
                                   style={{ marginRight: '8px', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: '700', cursor: 'pointer',
                                     background: confirmado ? '#eff6ff' : '#f1f5f9', color: confirmado ? '#1d4ed8' : '#94a3b8',
@@ -1527,8 +1535,8 @@ export default function Horarios() {
                                   {confirmado ? '✓' : ''}
                                 </button>
                               )}
-                              {/* Attendance checkbox — visible in confirmada/dada state */}
-                              {esConfirmadaODada && (
+                              {/* Attendance checkbox — only for confirmada, read-only for dada */}
+                              {sesionActual?.estado === 'confirmada' && (
                                 <button onClick={() => toggleAsistenciaSesion(sesionId, ins.id, asistio === true ? null : true)}
                                   disabled={guardandoAsistencia}
                                   style={{ width: '32px', height: '32px', borderRadius: '8px', border: asistio === true ? '2px solid #166534' : '1px solid #e2e8f0', background: asistio === true ? '#dcfce7' : 'white', color: asistio === true ? '#166534' : '#aaa', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
