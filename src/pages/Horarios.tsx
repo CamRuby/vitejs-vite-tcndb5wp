@@ -1496,6 +1496,15 @@ export default function Horarios() {
                                 <p style={{ margin: 0, fontWeight: '500', fontSize: '14px' }}>{ins.clientes?.nombre || '—'}</p>
                                 <p style={{ margin: 0, fontSize: '12px', color: '#888' }}>{ins.clientes?.telefono || '—'}</p>
                               </div>
+                              {/* In confirmada/dada: show confirmed badge + toggle confirmation + attendance checkbox */}
+                              {esConfirmadaODada && (
+                                <span onClick={() => toggleConfirmacion(ins.id)}
+                                  style={{ marginRight: '8px', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: '700', cursor: 'pointer',
+                                    background: confirmado ? '#eff6ff' : '#f1f5f9', color: confirmado ? '#1d4ed8' : '#94a3b8',
+                                    border: confirmado ? '1px solid #bfdbfe' : '1px solid #e2e8f0' }}>
+                                  {confirmado ? '✓ Confirmó' : 'No confirmó'}
+                                </span>
+                              )}
                               {/* Confirmation checkbox — visible in programada state */}
                               {esProg && (
                                 <button onClick={() => toggleConfirmacion(ins.id)}
