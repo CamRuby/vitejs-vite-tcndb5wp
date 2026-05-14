@@ -116,6 +116,37 @@ export default function Profesores() {
         .order('fecha', { ascending: false })
       result = (d || []).map((c: any) => ({ ...c, cancelado_tarde: false, cancelado_por_academia: false, observaciones_admin: null }))
     }
+    // Load taller sesiones for this professor
+    const { data: talleres } = await supabase.from('talleres')
+      .select('id, nombre, hora, duracion_min, salones(nombre, sedes(nombre))').eq('profesor_id', p.id)
+    if (talleres && talleres.length > 0) {
+      const { data: sesiones } = await supabase.from('taller_sesiones')
+        .select('id, fecha, estado, observaciones, taller_id')
+        .in('taller_id', talleres.map((t: any) => t.id))
+        .gte('fecha', fi).lte('fecha', ff)
+        .order('fecha', { ascending: false })
+      const tallerMap: Record<string, any> = {}
+      talleres.forEach((t: any) => { tallerMap[t.id] = t })
+      const tallerRows = (sesiones || []).map((s: any) => {
+        const t = tallerMap[s.taller_id]
+        return {
+          id: `taller-${s.id}`,
+          fecha: s.fecha,
+          hora: t?.hora || '00:00:00',
+          duracion_min: t?.duracion_min,
+          estado: s.estado,
+          esTaller: true,
+          nombreTaller: t?.nombre,
+          salones: t?.salones,
+          observaciones: s.observaciones,
+          es_cortesia: false, cancelado_tarde: false, cancelado_por_academia: false,
+          honorario_valor: null, numero_calculado: null, contratos: null
+        }
+      })
+      result = [...result, ...tallerRows].sort((a, b) =>
+        b.fecha.localeCompare(a.fecha) || (b.hora || '').localeCompare(a.hora || '')
+      )
+    }
     setClases(result)
   }
 
@@ -207,8 +238,8 @@ export default function Profesores() {
 
   // ── Clases filtradas según la vista activa ──
   const clasesFiltradas = filtroVista === 'programadas'
-    ? clases.filter(c => c.estado === 'programada')
-    : clases.filter(c => c.estado !== 'programada')
+    ? clases.filter(c => c.estado === 'programada' || c.estado === 'confirmada')
+    : clases.filter(c => c.estado === 'dada' || c.estado === 'cancelada')
 
   const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
   // Incluir canceladas tarde en honorarios
@@ -521,13 +552,18 @@ export default function Profesores() {
                           <td style={tdS}>{c.fecha}</td>
                           <td style={tdS}>{c.hora?.substring(0, 5) || '—'}</td>
                           <td style={{ ...tdS, fontWeight: '500', textAlign: 'center' }}>
-                            {c.contratos?.clientes?.nombre || '—'}
-                            {!c.es_cortesia && c.numero_calculado && c.contratos?.total_clases && (
-                              <span style={{ marginLeft: '6px', fontSize: '11px', color: TEAL, fontWeight: '700' }}>
-                                ({c.numero_calculado}/{c.contratos.total_clases})
-                              </span>
-                            )}
-                            {(c.estado === 'cancelada' && !c.cancelado_por_academia) && <span style={{ marginLeft: '6px', fontSize: '11px', background: '#fff7ed', color: '#c2410c', padding: '1px 6px', borderRadius: '10px' }}>Inasistencia</span>}
+                            {c.esTaller
+                              ? <span style={{ color: '#7c3aed', fontWeight: '600' }}>🎸 {c.nombreTaller || '—'}</span>
+                              : <>
+                                  {c.contratos?.clientes?.nombre || '—'}
+                                  {!c.es_cortesia && c.numero_calculado && c.contratos?.total_clases && (
+                                    <span style={{ marginLeft: '6px', fontSize: '11px', color: TEAL, fontWeight: '700' }}>
+                                      ({c.numero_calculado}/{c.contratos.total_clases})
+                                    </span>
+                                  )}
+                                  {(c.estado === 'cancelada' && !c.cancelado_por_academia) && <span style={{ marginLeft: '6px', fontSize: '11px', background: '#fff7ed', color: '#c2410c', padding: '1px 6px', borderRadius: '10px' }}>Inasistencia</span>}
+                                </>
+                            }
                           </td>
                           <td style={{ ...tdS, textAlign: 'center' }}>{c.duracion_min} min</td>
                           <td style={tdS}>{c.salones?.sedes?.nombre || '—'}</td>
@@ -537,8 +573,8 @@ export default function Profesores() {
                             </span>
                           </td>
                           <td style={{ ...tdS, fontWeight: '600', color: pagarHon ? TEAL : '#aaa' }}>
-                            {pagarHon ? `$${hon.toLocaleString()}` : '—'}
-                            {c.honorario_valor !== null && c.honorario_valor !== undefined && <span style={{ fontSize: '10px', color: '#f59e0b', marginLeft: '4px' }}>editado</span>}
+                            {c.esTaller ? <span style={{ color: '#aaa' }}>—</span> : pagarHon ? `$${hon.toLocaleString()}` : '—'}
+                            {!c.esTaller && c.honorario_valor !== null && c.honorario_valor !== undefined && <span style={{ fontSize: '10px', color: '#f59e0b', marginLeft: '4px' }}>editado</span>}
                           </td>
                           {/* Indicador de resumen */}
                           <td style={{ ...tdS, textAlign: 'center' }}>
