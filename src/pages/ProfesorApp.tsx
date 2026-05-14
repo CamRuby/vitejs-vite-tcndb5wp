@@ -932,8 +932,11 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
             <p style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'700', color:'#374151' }}>
               Inscritos esta sesión <span style={{ color:'#7c3aed' }}>({inscritosTaller.length})</span>
             </p>
-            {(sesionHoy?.estado === 'dada' || sesionHoy?.estado === 'confirmada') && (
+            {sesionHoy?.estado === 'confirmada' && (
               <p style={{ fontSize:'12px', color:'#9ca3af', marginBottom:'8px', fontStyle:'italic' }}>Selecciona los estudiantes que asistieron a esta sesión</p>
+            )}
+            {sesionHoy?.estado === 'dada' && (
+              <p style={{ fontSize:'13px', color:'#854d0e', fontWeight:'600', marginBottom:'8px' }}>Asistieron a esta sesión:</p>
             )}
             {inscritosTaller.length === 0
               ? <p style={{ textAlign:'center', color:'#9ca3af', fontSize:'13px', padding:'16px 0' }}>Sin inscritos esta sesión</p>
@@ -948,7 +951,12 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
                         {nombre.charAt(0).toUpperCase()}
                       </div>
                       <p style={{ margin:0, fontSize:'14px', fontWeight:'600', color:'#1f2937', flex:1 }}>{nombre}</p>
-                      {puedeMarcar ? (
+                      {sesionHoy?.estado === 'dada' ? (
+                        <span style={{ fontSize:'12px', fontWeight:'700', color: asistio === true ? '#166534' : '#9ca3af',
+                          background: asistio === true ? '#dcfce7' : '#f1f5f9', padding:'3px 10px', borderRadius:'20px' }}>
+                          {asistio === true ? '✓ Asistió' : '✗ No asistió'}
+                        </span>
+                      ) : puedeMarcar ? (
                         <button onClick={() => toggleAsistTaller(ins.id, asistio === true ? null : true)} disabled={guardandoAsistTaller}
                           style={{ width:'36px', height:'36px', borderRadius:'8px', border: asistio === true ? '2px solid #166534' : '1px solid #e5e7eb', background: asistio === true ? '#dcfce7' : 'white', color: asistio === true ? '#166534' : '#aaa', fontSize:'18px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
                           {asistio === true ? '✓' : ''}
