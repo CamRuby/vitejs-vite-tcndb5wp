@@ -493,7 +493,11 @@ export default function ProfesorApp() {
   }
 
   function abrirModal(clase: any) {
-    if (clase.esTaller) { abrirTaller(clase); return }
+    if (clase.esTaller) {
+      // Block if sesion is programada or doesn't exist yet
+      if (clase.sesionEstado === 'programada' || clase.sesionEstado === null) return
+      abrirTaller(clase); return
+    }
     setClaseActiva(clase)
     setResumen(clase.observaciones || '')
     setPantallaModal('acciones')
@@ -1096,7 +1100,7 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
   const badge      = badgeEstado(c.estado, esInasistencia, c.esTaller)
   const confirmada = c.estado === 'confirmada' && !c.esTaller
   const expandido  = resumenExpandido === c.id
-  const esProg     = (c.estado === 'programada' && !c.esTaller) || (c.esTaller && (c.sesionEstado === 'programada' || c.sesionEstado === null))
+  const esProg     = (c.estado === 'programada' && !c.esTaller) || (c.esTaller && (c.sesionEstado === 'programada' || c.sesionEstado === null || c.sesionEstado === undefined))
   const sinResumen = !c.esTaller && !c.observaciones && (c.estado === 'dada' || (c.estado === 'cancelada' && !c.cancelado_por_academia))
 
   const borderColor = c.esTaller ? '#7c3aed'
