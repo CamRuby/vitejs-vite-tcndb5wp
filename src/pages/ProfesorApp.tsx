@@ -188,6 +188,7 @@ export default function ProfesorApp() {
   function getHonorario(c: any): number | 'pendiente' {
     const esInasistencia = c.estado === 'cancelada' && !c.cancelado_por_academia
     if (c.estado !== 'dada' && !esInasistencia) return 0
+    if (c.esTaller) return c.honorario_valor !== null && c.honorario_valor !== undefined ? Number(c.honorario_valor) : 0
     if (esInasistencia && c.honorario_valor === null) return 'pendiente'
     if (c.honorario_valor !== null && c.honorario_valor !== undefined) return Number(c.honorario_valor)
     if (c.estado !== 'dada') return 0
@@ -337,7 +338,7 @@ export default function ProfesorApp() {
     if (tallerIds.length > 0) {
       const { data: ts } = await supabase
         .from('taller_sesiones')
-        .select('id, fecha, estado, observaciones, taller_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))')
+        .select('id, fecha, estado, observaciones, honorario_valor, taller_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))')
         .eq('estado', 'dada')
         .gte('fecha', fi).lte('fecha', ff)
         .in('taller_id', tallerIds)
@@ -357,7 +358,7 @@ export default function ProfesorApp() {
       salones: s.talleres?.salones,
       observaciones: s.observaciones,
       contratos: null, cancelado_por_academia: false, es_cortesia: false,
-      honorario_valor: null, modalidad: 'taller'
+      honorario_valor: s.honorario_valor ?? null, modalidad: 'taller'
     }))
 
     // Merge and sort by fecha DESC, hora DESC
