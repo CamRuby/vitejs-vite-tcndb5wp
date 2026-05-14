@@ -561,7 +561,6 @@ export default function Profesores() {
                   </tbody>
                 </table>
               </div>
-              )}
             </div>
           )}
         </div>
