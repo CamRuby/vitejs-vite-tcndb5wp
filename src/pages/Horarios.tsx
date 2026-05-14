@@ -523,7 +523,6 @@ export default function Horarios() {
         return ins.mes && ins.mes.substring(0, 7) === fechaCol.substring(0, 7)
       })
     } catch { inscData = [] }
-    setInscritosDelTaller(inscData)
     const { data: sesion } = await supabase
       .from('taller_sesiones')
       .select('id, fecha, estado, profesor_id')
@@ -542,7 +541,18 @@ export default function Horarios() {
       ;(asis || []).forEach((a: any) => { map[a.inscripcion_id] = a.asistio })
       setAsistenciasSesion(map)
       setConfirmacionesSesion(new Set((confs || []).map((c: any) => c.inscripcion_id)))
+      // For dada sessions: override inscData with actual attendees from asistencias
+      if (sesion.estado === 'dada' && asis && asis.length > 0) {
+        const asisIds = new Set(asis.filter((a: any) => a.asistio).map((a: any) => a.inscripcion_id))
+        // Load full inscrito data for those who attended
+        const { data: inscDada } = await supabase
+          .from('taller_inscripciones')
+          .select('id, clientes(nombre, telefono)')
+          .in('id', [...asisIds])
+        if (inscDada && inscDada.length > 0) inscData = inscDada
+      }
     }
+    setInscritosDelTaller(inscData)
     setModalVerTaller(true)
   }
 
