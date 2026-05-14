@@ -293,6 +293,8 @@ export default function ProfesorApp() {
           const sesionEstadoHoy = t._sesionMap?.[`${t.id}-${fechaStr}`] || null
           // Use sesionEstado as the card estado so all downstream logic works
           const estadoTaller = sesionEstadoHoy || 'programada'
+          // Don't show talleres that are already 'dada' in today's list
+          if (estadoTaller === 'dada') continue
           clasesFinales.push({
             id: `taller-${t.id}-${fechaStr}`,
             fecha: fechaStr, hora: t.hora,
@@ -326,8 +328,40 @@ export default function ProfesorApp() {
       .gte('fecha', fi).lte('fecha', ff)
       .in('estado', ['dada', 'cancelada'])
       .order('fecha', { ascending: false })
+      .order('hora', { ascending: false })
 
-    setClases(data || [])
+    // Also load talleres dadas for this month
+    const { data: tallerSesiones } = await supabase
+      .from('taller_sesiones')
+      .select('id, fecha, estado, observaciones, taller_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))')
+      .eq('estado', 'dada')
+      .gte('fecha', fi).lte('fecha', ff)
+      .in('taller_id', (await supabase.from('talleres').select('id').eq('profesor_id', profesor.id)).data?.map((t: any) => t.id) || [])
+      .order('fecha', { ascending: false })
+
+    const tallerClases = (tallerSesiones || []).map((s: any) => ({
+      id: `taller-sesion-${s.id}`,
+      fecha: s.fecha,
+      hora: s.talleres?.hora || '00:00:00',
+      duracion_min: s.talleres?.duracion_min,
+      estado: 'dada',
+      esTaller: true,
+      nombreTaller: s.talleres?.nombre,
+      salones: s.talleres?.salones,
+      observaciones: s.observaciones,
+      contratos: null, cancelado_por_academia: false, es_cortesia: false,
+      honorario_valor: null, modalidad: 'taller'
+    }))
+
+    // Merge and sort by fecha DESC, hora DESC
+    const merged = [...(data || []), ...tallerClases]
+      .sort((a, b) => {
+        const fechaDiff = b.fecha.localeCompare(a.fecha)
+        if (fechaDiff !== 0) return fechaDiff
+        return (b.hora || '').localeCompare(a.hora || '')
+      })
+
+    setClases(merged)
     setCargandoClases(false)
   }
 
