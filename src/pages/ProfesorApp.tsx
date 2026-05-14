@@ -448,10 +448,9 @@ export default function ProfesorApp() {
     if (sesion?.id && (sesion.estado === 'confirmada' || sesion.estado === 'dada')) {
       const { data: confs } = await supabase.from('taller_confirmaciones')
         .select('inscripcion_id').eq('sesion_id', sesion.id)
-      if (confs && confs.length > 0) {
-        const confIds = new Set(confs.map((c: any) => c.inscripcion_id))
-        inscFiltrados = inscFiltradosFecha.filter((ins: any) => confIds.has(ins.id))
-      }
+      // Always filter by confirmaciones — if none exist, show empty list
+      const confIds = new Set((confs || []).map((c: any) => c.inscripcion_id))
+      inscFiltrados = inscFiltradosFecha.filter((ins: any) => confIds.has(ins.id))
     }
     setInscritosTaller(inscFiltrados)
     setResumenTaller(sesion?.observaciones || '')
