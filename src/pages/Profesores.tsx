@@ -122,7 +122,7 @@ export default function Profesores() {
       .select('id, nombre, hora, duracion_min, salones(nombre, sedes(nombre))').eq('profesor_id', p.id)
     if (talleres && talleres.length > 0) {
       const { data: sesiones } = await supabase.from('taller_sesiones')
-        .select('id, fecha, estado, observaciones, honorario_valor, taller_id')
+        .select('id, fecha, estado, observaciones, honorario_valor, observaciones_admin, taller_id')
         .in('taller_id', talleres.map((t: any) => t.id))
         .gte('fecha', fi).lte('fecha', ff)
         .order('fecha', { ascending: false })
@@ -141,7 +141,9 @@ export default function Profesores() {
           salones: t?.salones,
           observaciones: s.observaciones,
           es_cortesia: false, cancelado_tarde: false, cancelado_por_academia: false,
-          honorario_valor: s.honorario_valor ?? null, numero_calculado: null, contratos: null
+          honorario_valor: s.honorario_valor ?? null,
+          observaciones_admin: s.observaciones_admin ?? null,
+          numero_calculado: null, contratos: null
         }
       })
       result = [...result, ...tallerRows].sort((a, b) =>
@@ -245,8 +247,13 @@ export default function Profesores() {
     }
     if (claseModal.esTaller) {
       const sesionId = claseModal.id.replace('taller-', '')
-      await supabase.from('taller_sesiones').update({ honorario_valor: Number(editHon) }).eq('id', sesionId)
-      setClases(prev => prev.map(c => c.id === claseModal.id ? { ...c, honorario_valor: Number(editHon) } : c))
+      await supabase.from('taller_sesiones').update({
+        honorario_valor: Number(editHon),
+        observaciones_admin: editObsAdmin || null
+      }).eq('id', sesionId)
+      setClases(prev => prev.map(c => c.id === claseModal.id
+        ? { ...c, honorario_valor: Number(editHon), observaciones_admin: editObsAdmin || null }
+        : c))
       setClaseModal(null); setGuardandoH(false); return
     }
     await supabase.from('clases').update(update).eq('id', claseModal.id)
