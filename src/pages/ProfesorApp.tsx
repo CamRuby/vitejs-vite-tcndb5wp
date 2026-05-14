@@ -331,15 +331,21 @@ export default function ProfesorApp() {
       .order('hora', { ascending: false })
 
     // Also load talleres dadas for this month
-    const { data: tallerSesiones } = await supabase
-      .from('taller_sesiones')
-      .select('id, fecha, estado, observaciones, taller_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))')
-      .eq('estado', 'dada')
-      .gte('fecha', fi).lte('fecha', ff)
-      .in('taller_id', (await supabase.from('talleres').select('id').eq('profesor_id', profesor.id)).data?.map((t: any) => t.id) || [])
-      .order('fecha', { ascending: false })
+    const { data: talleresProfIds } = await supabase.from('talleres').select('id').eq('profesor_id', profesor.id)
+    const tallerIds = (talleresProfIds || []).map((t: any) => t.id)
+    let tallerSesiones: any[] = []
+    if (tallerIds.length > 0) {
+      const { data: ts } = await supabase
+        .from('taller_sesiones')
+        .select('id, fecha, estado, observaciones, taller_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))')
+        .eq('estado', 'dada')
+        .gte('fecha', fi).lte('fecha', ff)
+        .in('taller_id', tallerIds)
+        .order('fecha', { ascending: false })
+      tallerSesiones = ts || []
+    }
 
-    const tallerClases = (tallerSesiones || []).map((s: any) => ({
+    const tallerClases = tallerSesiones.map((s: any) => ({
       id: `taller-sesion-${s.id}`,
       fecha: s.fecha,
       hora: s.talleres?.hora || '00:00:00',
@@ -534,6 +540,12 @@ export default function ProfesorApp() {
       if (data) setSesionHoy(data)
     }
     setGuardandoSesion(false)
+    // If marked as dada, close modal and refresh list so it disappears from hoy
+    if (nuevoEstado === 'dada') {
+      setTallerModal(null)
+      setExito('¡Taller marcado como dado!')
+      if (vista === 'hoy') cargarHoy(); else cargarHistorial()
+    }
   }
 
   function abrirModal(clase: any) {
@@ -898,7 +910,7 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
                 )}
               </div>
             </div>
-            {(sesionHoy?.estado === 'dada' || sesionHoy?.estado === 'confirmada') && (
+            {sesionHoy?.id && (sesionHoy.estado === 'dada' || sesionHoy.estado === 'confirmada') && (
               <div style={{ marginBottom:'16px' }}>
                 <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>
                   Resumen de la sesión
