@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import { auditar } from '../auditoria'
 
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
@@ -256,6 +257,7 @@ export default function Profesores() {
         : c))
       setClaseModal(null); setGuardandoH(false); return
     }
+    auditar('editar_honorario', 'clases', claseModal.id, { honorario_valor: Number(editHon), obs_admin: editObsAdmin })
     await supabase.from('clases').update(update).eq('id', claseModal.id)
     setClases(prev => prev.map(c => c.id === claseModal.id ? { ...c, ...update } : c))
     setClaseModal(null)
