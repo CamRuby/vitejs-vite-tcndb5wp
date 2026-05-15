@@ -912,7 +912,20 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       'Dada':'#854d0e','Taller dado':'#7c3aed','Cortesía':'#0369a1',
       'Inasistencia':'#c2410c','Cancelada (tarde)':'#92400e','Cancelada':'#475569'
     }
-    const filasPdf = clases.map((cl: any) => {
+    // Determine most common sede
+    const sedeCount: Record<string, number> = {}
+    clases.forEach((cl: any) => {
+      const s = cl.salones?.sedes?.nombre
+      if (s) sedeCount[s] = (sedeCount[s] || 0) + 1
+    })
+    const sedeComun = Object.entries(sedeCount).sort((a,b) => b[1]-a[1])[0]?.[0] || ''
+
+    // Sort most recent first
+    const clasesDsc = [...clases].sort((a,b) =>
+      b.fecha.localeCompare(a.fecha) || (b.hora||'').localeCompare(a.hora||'')
+    )
+
+    const filasPdf = clasesDsc.map((cl: any) => {
       const esCortesia = cl.es_cortesia
       const esInasistencia = cl.estado === 'cancelada' && !cl.cancelado_por_academia
       const esCancelada = cl.estado === 'cancelada' && cl.cancelado_por_academia
@@ -924,19 +937,17 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       const fecha = cl.fecha ? `${cl.fecha.substring(8,10)}/${cl.fecha.substring(5,7)}/${cl.fecha.substring(0,4)}` : '—'
       const num = cl.esTaller ? 'Taller' : cl.numero_calculado ? `${cl.numero_calculado}/${cl.contratos?.total_clases||'?'}` : '—'
       const instrumento = cl.contratos?.instrumentos?.nombre || '—'
-      // Build resumen cell: show tipo badge when no observations, or prepend tipo to observations
       const resumenStack: any[] = []
       if (tipo) resumenStack.push({ text: tipo, fontSize: 7, bold: true, color: colorTipo, italics: true, margin: [0,0,0,cl.observaciones?3:0] })
       if (cl.observaciones) resumenStack.push({ text: cl.observaciones, fontSize: 8, color: '#444', lineHeight: 1.4 })
       const resumenCell = resumenStack.length > 0 ? { stack: resumenStack } : { text: '—', fontSize: 8, color: '#ccc' }
       return [
         { text: fecha, fontSize: 9, color: '#555' },
+        { text: num, fontSize: 9, color: '#888', alignment: 'center' },
         { text: cl.hora?.substring(0,5)||'—', fontSize: 9 },
         { text: cl.duracion_min ? `${cl.duracion_min} min` : '—', fontSize: 9 },
         { text: instrumento, fontSize: 9 },
         { text: cl.profesores?.nombre||'—', fontSize: 9 },
-        { text: cl.salones?.sedes?.nombre||'—', fontSize: 9 },
-        { text: num, fontSize: 9, color: '#888', alignment: 'center' },
         resumenCell
       ]
     })
@@ -949,7 +960,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
           columns: [
             { stack: [
               { text: 'Academia Ruby Salamanca', fontSize: 16, bold: true, color: TEAL_PDF },
-              { text: `Historial de Clases — ${nombre}`, fontSize: 12, bold: true, margin: [0,3,0,0] }
+              { text: `Historial de Clases — ${nombre}${sedeComun ? ' · ' + sedeComun : ''}`, fontSize: 12, bold: true, margin: [0,3,0,0] }
             ]},
             { stack: [
               { text: `${clases.length} clases registradas`, fontSize: 9, color: '#888', alignment: 'right' },
@@ -961,18 +972,17 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
         {
           table: {
             headerRows: 1,
-            widths: [48, 30, 30, 70, 80, 46, 28, '*'],
+            widths: [48, 24, 30, 28, 76, 84, '*'],
             body: [
               [
-                { text: 'FECHA', style: 'th' }, { text: 'HORA', style: 'th' },
-                { text: 'DUR.', style: 'th' }, { text: 'INSTRUMENTO', style: 'th' },
-                { text: 'PROFESOR', style: 'th' }, { text: 'SEDE', style: 'th' },
-                { text: '#', style: 'th' },
+                { text: 'FECHA', style: 'th' }, { text: '#', style: 'th' },
+                { text: 'HORA', style: 'th' }, { text: 'DUR.', style: 'th' },
+                { text: 'INSTRUMENTO', style: 'th' }, { text: 'PROFESOR', style: 'th' },
                 { text: 'RESUMEN / OBSERVACIONES', style: 'th' }
               ],
               ...(filasPdf.length > 0 ? filasPdf : [[
-                { text: 'Sin clases registradas', colSpan: 8, alignment: 'center', color: '#aaa', fontSize: 10 },
-                {},{},{},{},{},{},{}
+                { text: 'Sin clases registradas', colSpan: 7, alignment: 'center', color: '#aaa', fontSize: 10 },
+                {},{},{},{},{},{}
               ]])
             ]
           },
@@ -994,7 +1004,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       })
     }
     const fechaHoy = new Date().toLocaleDateString('es-CO').replace(/\//g,'-')
-    pdfMake.createPdf(docDef).download(`Historial de clases - ${nombre} (${fechaHoy}).pdf`)
+    const sedeLabel = sedeComun ? ` - ${sedeComun}` : ''
+    pdfMake.createPdf(docDef).download(`Historial de clases - ${nombre}${sedeLabel} (${fechaHoy}).pdf`)
   }
 
   async function abrirModalTaller() {
