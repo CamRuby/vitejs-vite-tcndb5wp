@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import { auditar } from '../auditoria'
 import pdfMake from 'pdfmake/build/pdfmake'
 import pdfFonts from 'pdfmake/build/vfs_fonts'
 pdfMake.vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs
@@ -813,6 +814,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       const hoy = new Date().toISOString().split('T')[0]
       await supabase.from('clases').delete().eq('contrato_id', planId).eq('estado', 'programada').gte('fecha', hoy)
     }
+    auditar('cambiar_estado_plan', 'contratos', planId, { estado: nuevoEstado })
     const { error } = await supabase.from('contratos').update({ estado: nuevoEstado }).eq('id', planId)
     if (error) { alert('Error: ' + error.message); await cargarDatosCliente(clienteSeleccionado) }
     cargarVista(vistaActual)
@@ -863,6 +865,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       valor_pagado: inscripcion.valor_pagado, estado: 'activo'
     })
     if (error) { alert('Error al renovar: ' + error.message); return }
+    auditar('archivar_inscripcion_taller', 'taller_inscripciones', inscripcion.id, { cliente_id: clienteSeleccionado?.id })
     await supabase.from('taller_inscripciones').update({ estado: 'archivado' }).eq('id', inscripcion.id)
     await cargarDatosCliente(clienteSeleccionado)
   }
@@ -1081,12 +1084,14 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     const pagosActuales = pagosTalleres[ins.id] || []
     const nuevoTotal = pagosActuales.reduce((s: number, p: any) => s + Number(p.monto), 0) + Number(formAbono.monto)
     const nuevoSaldo = (ins.valor_plan || 0) - nuevoTotal
+    auditar('registrar_abono_taller', 'pagos', ins.id, { monto: Number(formAbono.monto), metodo: formAbono.metodo })
     const { error } = await supabase.from('pagos').insert({
       inscripcion_id: ins.id, monto: Number(formAbono.monto),
       fecha: formAbono.fecha, metodo: formAbono.metodo, notas: formAbono.notas || null
     })
     if (error) { setAbonoError('Error: ' + error.message); setAbonoGuardando(false); return }
     await supabase.from('taller_inscripciones').update({ total_pagado: nuevoTotal, saldo: nuevoSaldo }).eq('id', ins.id)
+    auditar('registrar_abono_taller', 'taller_inscripciones', ins.id, { monto: Number(formAbono.monto), metodo: formAbono.metodo })
     setModalAbonoTaller(null); setAbonoGuardando(false)
     await cargarDatosCliente(clienteSeleccionado)
   }
