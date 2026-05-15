@@ -132,6 +132,8 @@ export default function Horarios() {
   const [tallerValor, setTallerValor] = useState('')
   const [tallerError, setTallerError] = useState('')
   const [tallerGuardando, setTallerGuardando] = useState(false)
+  const [tallerVacacional, setTallerVacacional] = useState(false)
+  const [tallerFechaFin, setTallerFechaFin] = useState('')
 
   const [modalVerTaller, setModalVerTaller] = useState(false)
   const [tallerViendo, setTallerViendo] = useState<any>(null)
