@@ -436,7 +436,7 @@ export default function ProfesorApp() {
     setGuardando(true)
     const minutos  = minutosParaClase(claseActiva.fecha, claseActiva.hora)
     const esTardia = minutos < 180
-    const motivo   = esTardia ? 'Cancelación tardía — posible clase de cortesía' : 'Cancelación a tiempo'
+    const motivo   = esTardia ? '' : 'Cancelación a tiempo'
     await supabase.from('clases').update({
       estado: 'cancelada',
       motivo_cancelacion: motivo,
@@ -451,7 +451,7 @@ export default function ProfesorApp() {
       claseActiva.id
     )
     if (esTardia) {
-      setAvisoCancelacion(`La cancelación tardía perjudica es una situación negativa que afecta el servicio. La administración decidirá la acción a seguir de acuerdo a los términos del contrato`)
+      setAvisoCancelacion(`La cancelación tardía es una situación negativa que afecta el servicio. La administración decidirá la acción a seguir de acuerdo a los términos del contrato`)
       setPantallaModal('avisoTardia')
       setGuardando(false)
     } else {
