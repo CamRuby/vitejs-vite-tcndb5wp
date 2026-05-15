@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import pdfMake from 'pdfmake/build/pdfmake'
+import pdfFonts from 'pdfmake/build/vfs_fonts'
+pdfMake.vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs
 
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
