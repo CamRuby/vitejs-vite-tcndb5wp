@@ -895,8 +895,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
         <td>${cl.salones?.sedes?.nombre || '—'}</td>
         <td style="text-align:center"><span style="background:${bgTipo};color:${colorTipo};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${tipo}</span></td>
         <td style="color:#aaa;text-align:center">${num}/${totalClases}</td>
-        <td style="color:#555;font-size:12px;line-height:1.5">${cl.observaciones ? cl.observaciones.replace(/
-/g,'<br>') : '<span style="color:#ccc">—</span>'}</td>
+        <td style="color:#555;font-size:12px;line-height:1.5">${cl.observaciones ? cl.observaciones.replace(/\n/g,'<br>') : '<span style="color:#ccc">—</span>'}</td>
       </tr>`
     }).join('')
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
