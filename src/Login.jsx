@@ -1,25 +1,21 @@
 import { useState } from 'react'
 import { supabase } from './supabase'
 
+const TEAL = '#1a8a8a'
+const TEAL_DARK = '#0d5f5f'
+
 export default function Login() {
-  const [email, setEmail] = useState('')
+  const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError]       = useState('')
   const [cargando, setCargando] = useState(false)
 
   async function handleLogin(e) {
     e.preventDefault()
     setCargando(true)
     setError('')
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
-
-    if (error) {
-      setError('Correo o contraseña incorrectos')
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) setError('Correo o contraseña incorrectos')
     setCargando(false)
   }
 
@@ -29,86 +25,111 @@ export default function Login() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: '#f5f5f5'
+      background: `linear-gradient(150deg, ${TEAL} 0%, ${TEAL_DARK} 100%)`,
+      padding: '24px',
+      boxSizing: 'border-box'
     }}>
-      <div style={{
-        background: 'white',
-        padding: '40px',
-        borderRadius: '12px',
-        width: '100%',
-        maxWidth: '400px',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.1)'
-      }}>
-        <h1 style={{ marginBottom: '8px', fontSize: '24px' }}>
-          Academia de Música
-        </h1>
-        <p style={{ color: '#666', marginBottom: '32px' }}>
-          Ingresa con tu cuenta
-        </p>
+      <style>{`
+        @keyframes fadeUp { from { opacity:0; transform:translateY(20px) } to { opacity:1; transform:translateY(0) } }
+        .login-input:focus { border-color: ${TEAL} !important; box-shadow: 0 0 0 3px ${TEAL}33 !important; outline: none !important; }
+        .login-btn:hover { opacity: 0.92; }
+        .login-btn:active { transform: scale(0.99); }
+      `}</style>
 
-        <form onSubmit={handleLogin}>
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500' }}>
-              Correo electrónico
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #ddd',
-                borderRadius: '8px',
-                fontSize: '16px',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
+      <div style={{ width: '100%', maxWidth: '380px', animation: 'fadeUp 0.4s ease' }}>
 
-          <div style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', fontWeight: '500' }}>
-              Contraseña
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #ddd',
-                borderRadius: '8px',
-                fontSize: '16px',
-                boxSizing: 'border-box'
-              }}
-            />
-          </div>
-
-          {error && (
-            <p style={{ color: 'red', marginBottom: '16px' }}>{error}</p>
-          )}
-
-          <button
-            type="submit"
-            disabled={cargando}
+        <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+          <img
+            src="/Logo_RubySalamanca.png"
+            alt="Academia Ruby Salamanca"
             style={{
-              width: '100%',
-              padding: '12px',
-              background: '#2563eb',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '16px',
-              cursor: 'pointer',
-              fontWeight: '500'
+              width: '100px', height: '100px', objectFit: 'contain',
+              background: 'white', borderRadius: '28px', padding: '10px',
+              boxSizing: 'border-box', display: 'block', margin: '0 auto 18px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
             }}
-          >
-            {cargando ? 'Ingresando...' : 'Ingresar'}
-          </button>
-        </form>
+          />
+          <h1 style={{ margin: 0, color: 'white', fontSize: '26px', fontWeight: '800', letterSpacing: '-0.5px' }}>
+            Academia Ruby Salamanca
+          </h1>
+          <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.65)', fontSize: '13px', fontWeight: '500', letterSpacing: '0.5px' }}>
+            PORTAL ADMINISTRATIVO
+          </p>
+        </div>
+
+        <div style={{
+          background: 'white', borderRadius: '24px', padding: '32px',
+          boxShadow: '0 24px 80px rgba(0,0,0,0.25)'
+        }}>
+          <form onSubmit={handleLogin}>
+            <div style={{ marginBottom: '18px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#6b7280', marginBottom: '8px', letterSpacing: '1px' }}>
+                CORREO ELECTRÓNICO
+              </label>
+              <input
+                className="login-input"
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                placeholder="nombre@email.com"
+                style={{
+                  width: '100%', padding: '13px 16px',
+                  border: '2px solid #e5e7eb', borderRadius: '12px',
+                  fontSize: '15px', boxSizing: 'border-box',
+                  fontFamily: 'inherit', color: '#1f2937',
+                  transition: 'border-color 0.2s, box-shadow 0.2s'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#6b7280', marginBottom: '8px', letterSpacing: '1px' }}>
+                CONTRASEÑA
+              </label>
+              <input
+                className="login-input"
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                placeholder="••••••••"
+                style={{
+                  width: '100%', padding: '13px 16px',
+                  border: '2px solid #e5e7eb', borderRadius: '12px',
+                  fontSize: '15px', boxSizing: 'border-box',
+                  fontFamily: 'inherit', color: '#1f2937',
+                  transition: 'border-color 0.2s, box-shadow 0.2s'
+                }}
+              />
+            </div>
+
+            {error && (
+              <div style={{
+                background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px',
+                padding: '11px 14px', marginBottom: '18px',
+                color: '#dc2626', fontSize: '13px', fontWeight: '600', textAlign: 'center'
+              }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              className="login-btn"
+              type="submit"
+              disabled={cargando}
+              style={{
+                width: '100%', padding: '15px',
+                background: cargando ? '#b2d8d8' : TEAL,
+                color: 'white', border: 'none', borderRadius: '12px',
+                fontSize: '16px', fontWeight: '700', cursor: cargando ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit', transition: 'opacity 0.2s, transform 0.1s'
+              }}
+            >
+              {cargando ? 'Ingresando...' : 'Entrar →'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   )
