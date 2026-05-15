@@ -1696,7 +1696,8 @@ export default function Horarios() {
                                 cancelado_por_academia: null,
                                 cancelado_tarde: false
                               }).eq('id', claseEditando.id)
-                              setClaseEditando((prev: any) => ({ ...prev, profesor_id: nuevoProf, estado: 'confirmada' }))
+                              setClaseEditando((prev: any) => ({ ...prev, profesor_id: nuevoProf, estado: 'confirmada', cancelado_por_academia: null, cancelado_tarde: false }))
+                              setEditEstado('confirmada')
                               await cargarClases()
                             }}
                             style={{ width: '100%', padding: '7px 10px', border: '1px solid #fed7aa', borderRadius: '8px', fontSize: '13px', marginBottom: '8px' }}>
