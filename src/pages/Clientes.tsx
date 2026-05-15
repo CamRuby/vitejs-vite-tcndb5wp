@@ -903,62 +903,90 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     const clases = [...todasClasesConNumero, ...tallerClasesHist]
       .sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.hora||'').localeCompare(b.hora||''))
     const nombre = clienteSeleccionado?.nombre || `${clienteSeleccionado?.nombres||''} ${clienteSeleccionado?.apellidos||''}`.trim() || '—'
-    const filas = clases.map((cl: any) => {
+    const TEAL_PDF = '#1a8a8a'
+    const TEAL_LIGHT_PDF = '#e8f5f5'
+    const colores: Record<string,string> = {
+      'Dada':'#854d0e','Taller dado':'#7c3aed','Cortesía':'#0369a1',
+      'Inasistencia':'#c2410c','Cancelada (tarde)':'#92400e','Cancelada':'#475569'
+    }
+    const filasPdf = clases.map((cl: any) => {
       const esCortesia = cl.es_cortesia
       const esInasistencia = cl.estado === 'cancelada' && !cl.cancelado_por_academia
       const esCancelada = cl.estado === 'cancelada' && cl.cancelado_por_academia
       const esCancelTardia = esCancelada && cl.cancelado_tarde
-      const tipo = esCortesia ? 'Cortesía' : esInasistencia ? 'Inasistencia' : esCancelTardia ? 'Cancelada (tarde)' : esCancelada ? 'Cancelada' : cl.esTaller ? 'Taller dado' : 'Dada'
-      const colors: Record<string,string> = { 'Dada':'#854d0e', 'Taller dado':'#7c3aed', 'Cortesía':'#0369a1', 'Inasistencia':'#c2410c', 'Cancelada (tarde)':'#92400e', 'Cancelada':'#475569' }
-      const bgs: Record<string,string> = { 'Dada':'#fefce8', 'Taller dado':'#f3e8ff', 'Cortesía':'#e0f2fe', 'Inasistencia':'#fff7ed', 'Cancelada (tarde)':'#fff7ed', 'Cancelada':'#f8fafc' }
-      const num = cl.esTaller ? '🎸' : cl.numero_calculado ? `${cl.numero_calculado}/${cl.contratos?.total_clases||'?'}` : '—'
+      const tipo = esCortesia ? 'Cortesía' : esInasistencia ? 'Inasistencia'
+        : esCancelTardia ? 'Cancelada (tarde)' : esCancelada ? 'Cancelada'
+        : cl.esTaller ? 'Taller dado' : 'Dada'
+      const colorTipo = colores[tipo] || '#333'
+      const fecha = cl.fecha ? `${cl.fecha.substring(8,10)}/${cl.fecha.substring(5,7)}/${cl.fecha.substring(0,4)}` : '—'
+      const num = cl.esTaller ? 'Taller' : cl.numero_calculado ? `${cl.numero_calculado}/${cl.contratos?.total_clases||'?'}` : '—'
       const instrumento = cl.contratos?.instrumentos?.nombre || '—'
-      const resumen = cl.observaciones ? cl.observaciones.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>') : '<span style="color:#ccc">—</span>'
-      return `<tr>
-        <td>${cl.fecha?.substring(8,10)}/${cl.fecha?.substring(5,7)}/${cl.fecha?.substring(0,4)}</td>
-        <td>${cl.hora?.substring(0,5)||'—'}</td>
-        <td>${cl.duracion_min||'—'} min</td>
-        <td>${instrumento}</td>
-        <td>${cl.profesores?.nombre||'—'}</td>
-        <td>${cl.salones?.sedes?.nombre||'—'}</td>
-        <td><span style="background:${bgs[tipo]||'#f1f5f9'};color:${colors[tipo]||'#333'};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap">${tipo}</span></td>
-        <td style="color:#888;font-size:11px;white-space:nowrap">${num}</td>
-        <td style="color:#444;font-size:11px;line-height:1.6">${resumen}</td>
-      </tr>`
-    }).join('')
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Historial de Clases — ${nombre}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',Arial,sans-serif;padding:24px 32px;color:#1a1a1a;font-size:12px}
-.header{border-bottom:3px solid #1a8a8a;padding-bottom:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end}
-h1{font-size:18px;color:#1a8a8a;font-weight:800;margin-bottom:3px}
-h2{font-size:14px;font-weight:700}
-table{width:100%;border-collapse:collapse}
-thead tr{background:#e8f5f5}
-th{padding:7px 8px;text-align:left;font-size:9px;color:#1a8a8a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid #1a8a8a}
-td{padding:7px 8px;vertical-align:top;border-bottom:1px solid #f0f4f8}
-tr:nth-child(even) td{background:#fafbfc}
-.footer{margin-top:24px;font-size:9px;color:#aaa;text-align:center;border-top:1px solid #e2e8f0;padding-top:10px}
-@media print{@page{size:A4 landscape;margin:12mm}body{padding:0}button{display:none}}
-</style></head><body>
-<div class="header">
-  <div><h1>Academia Ruby Salamanca</h1><h2>Historial de Clases — ${nombre}</h2></div>
-  <div style="text-align:right;font-size:11px;color:#888;line-height:1.6">
-    <div>${clases.length} clases registradas</div>
-    <div>Generado: ${new Date().toLocaleDateString('es-CO')}</div>
-  </div>
-</div>
-<table>
-  <thead><tr><th>Fecha</th><th>Hora</th><th>Dur.</th><th>Instrumento / Taller</th><th>Profesor</th><th>Sede</th><th>Tipo</th><th>#</th><th>Resumen / Observaciones</th></tr></thead>
-  <tbody>${filas||'<tr><td colspan="9" style="text-align:center;color:#aaa;padding:20px">Sin clases registradas</td></tr>'}</tbody>
-</table>
-<div class="footer">Academia Ruby Salamanca · Historial de Clases · ${nombre}</div>
-<script>window.onload = function(){ window.print() }</script>
-<div class="footer">Academia Ruby Salamanca · Portal administrativo · ${nombre}</div>
-</body></html>`
-    const win = window.open('', '_blank')
-    if (win) { win.document.write(html + '</body></html>'); win.document.close() }
+      return [
+        { text: fecha, fontSize: 9, color: '#555' },
+        { text: cl.hora?.substring(0,5)||'—', fontSize: 9 },
+        { text: cl.duracion_min ? `${cl.duracion_min} min` : '—', fontSize: 9 },
+        { text: instrumento, fontSize: 9 },
+        { text: cl.profesores?.nombre||'—', fontSize: 9 },
+        { text: cl.salones?.sedes?.nombre||'—', fontSize: 9 },
+        { text: tipo, fontSize: 8, bold: true, color: colorTipo },
+        { text: num, fontSize: 9, color: '#888', alignment: 'center' },
+        { text: cl.observaciones || '—', fontSize: 8, color: '#444', lineHeight: 1.4 }
+      ]
+    })
+    const docDef: any = {
+      pageSize: 'A4', pageOrientation: 'landscape',
+      pageMargins: [30, 45, 30, 40],
+      info: { title: `Historial de Clases - ${nombre}`, author: 'Academia Ruby Salamanca' },
+      content: [
+        {
+          columns: [
+            { stack: [
+              { text: 'Academia Ruby Salamanca', fontSize: 16, bold: true, color: TEAL_PDF },
+              { text: `Historial de Clases — ${nombre}`, fontSize: 12, bold: true, margin: [0,3,0,0] }
+            ]},
+            { stack: [
+              { text: `${clases.length} clases registradas`, fontSize: 9, color: '#888', alignment: 'right' },
+              { text: `Generado: ${new Date().toLocaleDateString('es-CO')}`, fontSize: 9, color: '#888', alignment: 'right', margin: [0,3,0,0] }
+            ]}
+          ], margin: [0,0,0,10]
+        },
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 782, y2: 0, lineWidth: 2, lineColor: TEAL_PDF }], margin: [0,0,0,14] },
+        {
+          table: {
+            headerRows: 1,
+            widths: [50, 32, 32, 74, 90, 52, 64, 32, '*'],
+            body: [
+              [
+                { text: 'FECHA', style: 'th' }, { text: 'HORA', style: 'th' },
+                { text: 'DUR.', style: 'th' }, { text: 'INSTRUMENTO', style: 'th' },
+                { text: 'PROFESOR', style: 'th' }, { text: 'SEDE', style: 'th' },
+                { text: 'TIPO', style: 'th' }, { text: '#', style: 'th' },
+                { text: 'RESUMEN / OBSERVACIONES', style: 'th' }
+              ],
+              ...(filasPdf.length > 0 ? filasPdf : [[
+                { text: 'Sin clases registradas', colSpan: 9, alignment: 'center', color: '#aaa', fontSize: 10 },
+                {},{},{},{},{},{},{},{}
+              ]])
+            ]
+          },
+          layout: {
+            fillColor: (i: number) => i === 0 ? TEAL_LIGHT_PDF : i % 2 === 0 ? '#fafbfc' : null,
+            hLineWidth: () => 0.5, vLineWidth: () => 0,
+            hLineColor: () => '#e8edf2',
+            paddingLeft: () => 5, paddingRight: () => 5,
+            paddingTop: () => 4, paddingBottom: () => 4
+          }
+        }
+      ],
+      styles: { th: { fontSize: 8, bold: true, color: TEAL_PDF } },
+      footer: (page: number, pages: number) => ({
+        columns: [
+          { text: `Academia Ruby Salamanca · Historial de Clases · ${nombre}`, fontSize: 8, color: '#aaa', margin: [30,0,0,0] },
+          { text: `${page} / ${pages}`, fontSize: 8, color: '#aaa', alignment: 'right', margin: [0,0,30,0] }
+        ], margin: [0,8,0,0]
+      })
+    }
+    pdfMake.createPdf(docDef).open()
   }
 
   async function abrirModalTaller() {
