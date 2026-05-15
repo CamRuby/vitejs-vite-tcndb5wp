@@ -870,20 +870,51 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     if (contrIds.length === 0) { alert('Sin planes registrados'); return }
     const { data: todasClases } = await supabase
       .from('clases_con_numero')
-      .select('id, fecha, hora, duracion_min, estado, es_cortesia, cancelado_por_academia, inasistencia_perdonada, numero_calculado, observaciones, contrato_id, contratos(instrumentos(nombre), total_clases, duracion_min), profesores(nombre), salones(nombre, sedes(nombre))')
+      .select('id, fecha, hora, duracion_min, estado, es_cortesia, cancelado_por_academia, cancelado_tarde, inasistencia_perdonada, numero_calculado, observaciones, contrato_id, contratos(instrumentos(nombre), total_clases, duracion_min), profesores(nombre), salones(nombre, sedes(nombre))')
       .in('contrato_id', contrIds)
       .in('estado', ['dada', 'cancelada'])
       .order('fecha', { ascending: true })
       .order('hora', { ascending: true })
-    const clases = todasClases || []
+    // Also load taller sesiones dadas
+    const { data: tallerSes } = await supabase
+      .from('taller_sesiones')
+      .select('id, fecha, estado, observaciones, taller_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)), profesores(nombre))')
+      .eq('estado', 'dada')
+      .in('taller_id', (await supabase.from('talleres').select('id').in('id',
+        planes.flatMap((p: any) => []) // talleres linked to client via inscripciones
+      )).data?.map((t:any) => t.id) || [])
+    // Simpler: load via inscripciones
+    const { data: inscT } = await supabase.from('taller_inscripciones').select('taller_id').eq('cliente_id', clienteSeleccionado.id)
+    const tallerIds = (inscT || []).map((i: any) => i.taller_id)
+    let tallerClasesHist: any[] = []
+    if (tallerIds.length > 0) {
+      const { data: ts } = await supabase.from('taller_sesiones')
+        .select('id, fecha, estado, observaciones, taller_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)), profesores(nombre))')
+        .eq('estado', 'dada').in('taller_id', tallerIds)
+        .order('fecha', { ascending: true })
+      tallerClasesHist = (ts || []).map((s: any) => ({
+        id: s.id, fecha: s.fecha, hora: s.talleres?.hora,
+        duracion_min: s.talleres?.duracion_min,
+        estado: 'dada', es_cortesia: false, cancelado_por_academia: false, cancelado_tarde: false,
+        numero_calculado: null, observaciones: s.observaciones,
+        contratos: { instrumentos: { nombre: `🎸 ${s.talleres?.nombre}` }, total_clases: null },
+        profesores: s.talleres?.profesores,
+        salones: s.talleres?.salones,
+        esTaller: true
+      }))
+    }
+    const clases = [...(todasClases || []), ...tallerClasesHist]
+      .sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.hora||'').localeCompare(b.hora||''))
     const nombre = clienteSeleccionado?.nombre || clienteSeleccionado?.nombres || '—'
     const filas = clases.map((cl: any) => {
       const esCortesia = cl.es_cortesia
       const esInasistencia = cl.estado === 'cancelada' && !cl.cancelado_por_academia
-      const tipo = esCortesia ? 'Cortesía' : esInasistencia ? 'Inasistencia' : 'Dada'
-      const colorTipo = esCortesia ? '#0369a1' : esInasistencia ? '#c2410c' : '#854d0e'
-      const bgTipo = esCortesia ? '#e0f2fe' : esInasistencia ? '#fff7ed' : '#fefce8'
-      const num = cl.numero_calculado ? Math.round(cl.numero_calculado) : '—'
+      const esCancelada = cl.estado === 'cancelada' && cl.cancelado_por_academia
+      const esCancelTardia = esCancelada && cl.cancelado_tarde
+      const tipo = esCortesia ? 'Cortesía' : esInasistencia ? 'Inasistencia' : esCancelTardia ? 'Cancelada (tarde)' : esCancelada ? 'Cancelada' : 'Dada'
+      const colorTipo = esCortesia ? '#0369a1' : esInasistencia ? '#c2410c' : esCancelada ? '#7c3aed' : '#854d0e'
+      const bgTipo = esCortesia ? '#e0f2fe' : esInasistencia ? '#fff7ed' : esCancelada ? '#f3e8ff' : '#fefce8'
+      const num = cl.numero_calculado ? cl.numero_calculado : '—'
       const totalClases = cl.contratos?.total_clases || '?'
       const instrumento = cl.contratos?.instrumentos?.nombre || '—'
       return `<tr>
@@ -894,7 +925,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
         <td>${cl.profesores?.nombre || '—'}</td>
         <td>${cl.salones?.sedes?.nombre || '—'}</td>
         <td style="text-align:center"><span style="background:${bgTipo};color:${colorTipo};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${tipo}</span></td>
-        <td style="color:#aaa;text-align:center">${num}/${totalClases}</td>
+        <td style="color:#aaa;text-align:center">${cl.esTaller ? '—' : `${num}/${totalClases}`}</td>
         <td style="color:#555;font-size:12px;line-height:1.5">${cl.observaciones ? cl.observaciones.replace(/\n/g,'<br>') : '<span style="color:#ccc">—</span>'}</td>
       </tr>`
     }).join('')
