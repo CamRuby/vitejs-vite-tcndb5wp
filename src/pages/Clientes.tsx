@@ -401,7 +401,7 @@ function ModalHistorialPlanes({ planes, onCerrar, onVerClases, clasesArchivadasM
                               {esCortesia ? 'Cortesía' : esInasistencia ? 'Inasistencia' : cl.estado}
                             </span>
                           </td>
-                          <td style={{ padding: '6px 10px', color: '#666', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cl.observaciones || '—'}</td>
+                          <td style={{ padding: '6px 10px', color: '#666', maxWidth: '300px', wordBreak: 'break-word', whiteSpace: 'normal', lineHeight: '1.4' }}>{cl.observaciones || '—'}</td>
                         </tr>
                       )
                     })}
@@ -862,6 +862,81 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     if (error) { alert('Error al renovar: ' + error.message); return }
     await supabase.from('taller_inscripciones').update({ estado: 'archivado' }).eq('id', inscripcion.id)
     await cargarDatosCliente(clienteSeleccionado)
+  }
+
+  async function generarPDFTrazabilidad() {
+    // Load all classes for this client across all plans, ordered by date
+    const contrIds = planes.map((p: any) => p.id)
+    if (contrIds.length === 0) { alert('Sin planes registrados'); return }
+    const { data: todasClases } = await supabase
+      .from('clases_con_numero')
+      .select('id, fecha, hora, duracion_min, estado, es_cortesia, cancelado_por_academia, inasistencia_perdonada, numero_calculado, observaciones, contrato_id, contratos(instrumentos(nombre), total_clases, duracion_min), profesores(nombre), salones(nombre, sedes(nombre))')
+      .in('contrato_id', contrIds)
+      .in('estado', ['dada', 'cancelada'])
+      .order('fecha', { ascending: true })
+      .order('hora', { ascending: true })
+    const clases = todasClases || []
+    const nombre = clienteSeleccionado?.nombre || clienteSeleccionado?.nombres || '—'
+    const filas = clases.map((cl: any) => {
+      const esCortesia = cl.es_cortesia
+      const esInasistencia = cl.estado === 'cancelada' && !cl.cancelado_por_academia
+      const tipo = esCortesia ? 'Cortesía' : esInasistencia ? 'Inasistencia' : 'Dada'
+      const colorTipo = esCortesia ? '#0369a1' : esInasistencia ? '#c2410c' : '#854d0e'
+      const bgTipo = esCortesia ? '#e0f2fe' : esInasistencia ? '#fff7ed' : '#fefce8'
+      const num = cl.numero_calculado ? Math.round(cl.numero_calculado) : '—'
+      const totalClases = cl.contratos?.total_clases || '?'
+      const instrumento = cl.contratos?.instrumentos?.nombre || '—'
+      return `<tr>
+        <td style="color:#aaa">${cl.fecha?.substring(8,10)}/${cl.fecha?.substring(5,7)}/${cl.fecha?.substring(0,4)}</td>
+        <td>${cl.hora?.substring(0,5) || '—'}</td>
+        <td>${cl.duracion_min} min</td>
+        <td>${instrumento}</td>
+        <td>${cl.profesores?.nombre || '—'}</td>
+        <td>${cl.salones?.sedes?.nombre || '—'}</td>
+        <td style="text-align:center"><span style="background:${bgTipo};color:${colorTipo};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${tipo}</span></td>
+        <td style="color:#aaa;text-align:center">${num}/${totalClases}</td>
+        <td style="color:#555;font-size:12px;line-height:1.5">${cl.observaciones ? cl.observaciones.replace(/
+/g,'<br>') : '<span style="color:#ccc">—</span>'}</td>
+      </tr>`
+    }).join('')
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Trazabilidad — ${nombre}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;padding:32px;color:#1a1a1a;font-size:12px}
+.header{border-bottom:3px solid #1a8a8a;padding-bottom:16px;margin-bottom:24px;display:flex;justify-content:space-between}
+h1{font-size:20px;color:#1a8a8a;font-weight:800}
+h2{font-size:15px;font-weight:700;margin-top:4px}
+table{width:100%;border-collapse:collapse}
+thead tr{background:#e8f5f5}
+th{padding:8px 10px;text-align:left;font-size:10px;color:#1a8a8a;font-weight:700;text-transform:uppercase;border-bottom:2px solid #1a8a8a}
+td{padding:8px 10px;vertical-align:top;border-bottom:1px solid #f1f5f9}
+tr:nth-child(even){background:#fafbfc}
+.footer{margin-top:32px;font-size:10px;color:#aaa;text-align:center;border-top:1px solid #e2e8f0;padding-top:12px}
+@media print{@page{margin:15mm}body{padding:0}}
+</style></head><body>
+<div class="header">
+  <div><h1>Academia Ruby Salamanca</h1><h2>Trazabilidad — ${nombre}</h2></div>
+  <div style="text-align:right;font-size:11px;color:#888">
+    <p>${clases.length} clases</p>
+    <p>Generado: ${new Date().toLocaleDateString('es-CO')}</p>
+  </div>
+</div>
+<table>
+  <thead><tr>
+    <th>Fecha</th><th>Hora</th><th>Dur.</th><th>Instrumento</th><th>Profesor</th><th>Sede</th><th>Tipo</th><th>#</th><th>Resumen / Observaciones</th>
+  </tr></thead>
+  <tbody>${filas || '<tr><td colspan="9" style="text-align:center;color:#aaa;padding:24px">Sin clases registradas</td></tr>'}</tbody>
+</table>
+<div class="footer">Academia Ruby Salamanca · Portal administrativo · ${nombre}</div>
+</body></html>`
+    const blob = new Blob([html], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Trazabilidad_${nombre.replace(/ /g,'_')}.html`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   async function abrirModalTaller() {
@@ -1371,6 +1446,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <h3 style={{ margin: 0, fontSize: '20px', color: '#1a1a1a' }}>Planes activos <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({planesActivos.length})</span></h3>
               {planesArchivados.length > 0 && <button onClick={() => setModalHistorial(true)} style={{ padding: '5px 14px', background: '#f1f5f9', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>📋 Ver historial ({planesArchivados.length} archivados)</button>}
+              <button onClick={generarPDFTrazabilidad} style={{ padding: '5px 14px', background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>📄 PDF trazabilidad</button>
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button onClick={() => { setEsRenovacion(false); setModalPlan({}) }} style={{ padding: '8px 18px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>+ Crear plan</button>
