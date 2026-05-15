@@ -919,11 +919,16 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       const esCancelTardia = esCancelada && cl.cancelado_tarde
       const tipo = esCortesia ? 'Cortesía' : esInasistencia ? 'Inasistencia'
         : esCancelTardia ? 'Cancelada (tarde)' : esCancelada ? 'Cancelada'
-        : cl.esTaller ? 'Taller dado' : 'Dada'
-      const colorTipo = colores[tipo] || '#333'
+        : cl.esTaller ? 'Taller dado' : null
+      const colorTipo = colores[tipo||''] || '#333'
       const fecha = cl.fecha ? `${cl.fecha.substring(8,10)}/${cl.fecha.substring(5,7)}/${cl.fecha.substring(0,4)}` : '—'
       const num = cl.esTaller ? 'Taller' : cl.numero_calculado ? `${cl.numero_calculado}/${cl.contratos?.total_clases||'?'}` : '—'
       const instrumento = cl.contratos?.instrumentos?.nombre || '—'
+      // Build resumen cell: show tipo badge when no observations, or prepend tipo to observations
+      const resumenStack: any[] = []
+      if (tipo) resumenStack.push({ text: tipo, fontSize: 7, bold: true, color: colorTipo, italics: true, margin: [0,0,0,cl.observaciones?3:0] })
+      if (cl.observaciones) resumenStack.push({ text: cl.observaciones, fontSize: 8, color: '#444', lineHeight: 1.4 })
+      const resumenCell = resumenStack.length > 0 ? { stack: resumenStack } : { text: '—', fontSize: 8, color: '#ccc' }
       return [
         { text: fecha, fontSize: 9, color: '#555' },
         { text: cl.hora?.substring(0,5)||'—', fontSize: 9 },
@@ -931,13 +936,12 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
         { text: instrumento, fontSize: 9 },
         { text: cl.profesores?.nombre||'—', fontSize: 9 },
         { text: cl.salones?.sedes?.nombre||'—', fontSize: 9 },
-        { text: tipo, fontSize: 8, bold: true, color: colorTipo },
         { text: num, fontSize: 9, color: '#888', alignment: 'center' },
-        { text: cl.observaciones || '—', fontSize: 8, color: '#444', lineHeight: 1.4 }
+        resumenCell
       ]
     })
     const docDef: any = {
-      pageSize: 'A4', pageOrientation: 'landscape',
+      pageSize: 'A4', pageOrientation: 'portrait',
       pageMargins: [30, 45, 30, 40],
       info: { title: `Historial de Clases - ${nombre}`, author: 'Academia Ruby Salamanca' },
       content: [
@@ -953,22 +957,22 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
             ]}
           ], margin: [0,0,0,10]
         },
-        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 782, y2: 0, lineWidth: 2, lineColor: TEAL_PDF }], margin: [0,0,0,14] },
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 535, y2: 0, lineWidth: 2, lineColor: TEAL_PDF }], margin: [0,0,0,14] },
         {
           table: {
             headerRows: 1,
-            widths: [50, 32, 32, 74, 90, 52, 64, 32, '*'],
+            widths: [48, 30, 30, 70, 80, 46, 28, '*'],
             body: [
               [
                 { text: 'FECHA', style: 'th' }, { text: 'HORA', style: 'th' },
                 { text: 'DUR.', style: 'th' }, { text: 'INSTRUMENTO', style: 'th' },
                 { text: 'PROFESOR', style: 'th' }, { text: 'SEDE', style: 'th' },
-                { text: 'TIPO', style: 'th' }, { text: '#', style: 'th' },
+                { text: '#', style: 'th' },
                 { text: 'RESUMEN / OBSERVACIONES', style: 'th' }
               ],
               ...(filasPdf.length > 0 ? filasPdf : [[
-                { text: 'Sin clases registradas', colSpan: 9, alignment: 'center', color: '#aaa', fontSize: 10 },
-                {},{},{},{},{},{},{},{}
+                { text: 'Sin clases registradas', colSpan: 8, alignment: 'center', color: '#aaa', fontSize: 10 },
+                {},{},{},{},{},{},{}
               ]])
             ]
           },
