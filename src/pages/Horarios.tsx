@@ -470,6 +470,8 @@ export default function Horarios() {
     setModalidadClase('presencial')
     setTallerNombre('')
     setTallerProfesorId('')
+    setTallerVacacional(false)
+    setTallerFechaFin('')
     setTallerDuracion('60')
     setTallerValor('')
     setTallerError('')
@@ -738,15 +740,40 @@ export default function Horarios() {
   async function crearTaller() {
     if (!tallerNombre.trim()) { setTallerError('El nombre es obligatorio'); return }
     if (!tallerProfesorId) { setTallerError('Selecciona un profesor'); return }
+    if (tallerVacacional && !tallerFechaFin) { setTallerError('Selecciona la fecha fin del taller vacacional'); return }
     setTallerGuardando(true); setTallerError('')
-    const diaSemana = DIAS_LARGO[parseFechaLocal(slotSeleccionado.fecha).getDay()]
-    const { error } = await supabase.from('talleres').insert({
-      nombre: tallerNombre.trim(), profesor_id: tallerProfesorId,
-      salon_id: slotSeleccionado.salon.id, dia_semana: diaSemana,
-      hora: slotSeleccionado.hora + ':00', duracion_min: parseInt(tallerDuracion),
-      valor_mensual: tallerValor !== '' ? Number(tallerValor) : null
-    })
-    if (error) { setTallerError('Error: ' + error.message); setTallerGuardando(false); return }
+    const diasSem = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
+    if (tallerVacacional) {
+      const fechaIni = parseFechaLocal(slotSeleccionado.fecha)
+      const fechaFin2 = parseFechaLocal(tallerFechaFin)
+      let errores = 0
+      let cur = new Date(fechaIni)
+      while (cur <= fechaFin2) {
+        const diaCur = diasSem[cur.getDay()]
+        const fechaCur = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`
+        const { error } = await supabase.from('talleres').insert({
+          nombre: tallerNombre.trim(), profesor_id: tallerProfesorId,
+          salon_id: slotSeleccionado.salon.id, dia_semana: diaCur,
+          hora: slotSeleccionado.hora + ':00', duracion_min: parseInt(tallerDuracion),
+          valor_mensual: tallerValor !== '' ? Number(tallerValor) : null,
+          tipo: 'vacacional'
+        })
+        if (error) errores++
+        cur.setDate(cur.getDate() + 1)
+      }
+      if (errores > 0) { setTallerError(`${errores} día(s) no se pudieron crear`); setTallerGuardando(false); return }
+      auditar('crear_taller_vacacional', 'talleres', undefined, { nombre: tallerNombre.trim(), desde: slotSeleccionado.fecha, hasta: tallerFechaFin })
+    } else {
+      const diaSemana = diasSem[parseFechaLocal(slotSeleccionado.fecha).getDay()]
+      auditar('crear_taller', 'talleres', undefined, { nombre: tallerNombre.trim() })
+      const { error } = await supabase.from('talleres').insert({
+        nombre: tallerNombre.trim(), profesor_id: tallerProfesorId,
+        salon_id: slotSeleccionado.salon.id, dia_semana: diaSemana,
+        hora: slotSeleccionado.hora + ':00', duracion_min: parseInt(tallerDuracion),
+        valor_mensual: tallerValor !== '' ? Number(tallerValor) : null
+      })
+      if (error) { setTallerError('Error: ' + error.message); setTallerGuardando(false); return }
+    }
     setTallerGuardando(false)
     setModalAbierto(false)
     await cargarTalleres()
@@ -1329,7 +1356,10 @@ export default function Horarios() {
               {tipoModal === 'taller' && (
                 <>
                   <div style={{ background: TALLER_BG, borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: TALLER_COLOR }}>
-                    Se repetirá cada <strong>{DIAS_LARGO[parseFechaLocal(slotSeleccionado.fecha).getDay()]}</strong> a las <strong>{slotSeleccionado.hora}</strong> en <strong>{slotSeleccionado.salon.nombre}</strong>
+                    {tallerVacacional
+                      ? <>☀️ Taller vacacional · <strong>{slotSeleccionado.hora}</strong> en <strong>{slotSeleccionado.salon.nombre}</strong> · del <strong>{slotSeleccionado.fecha}</strong> al <strong>{tallerFechaFin || '?'}</strong></>
+                      : <>Se repetirá cada <strong>{DIAS_LARGO[parseFechaLocal(slotSeleccionado.fecha).getDay()]}</strong> a las <strong>{slotSeleccionado.hora}</strong> en <strong>{slotSeleccionado.salon.nombre}</strong></>
+                    }
                   </div>
                   {/* Tipo de taller */}
                   <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
