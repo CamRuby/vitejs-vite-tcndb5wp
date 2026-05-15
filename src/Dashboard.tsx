@@ -6,6 +6,7 @@ import Profesores from './pages/Profesores'
 import Horarios from './pages/Horarios'
 import Reportes from './pages/Reportes'
 import Importar from './pages/Importar'
+import Auditoria from './pages/Auditoria'
 
 const MENU = [
   { id: 'inicio',     label: 'Inicio',     icon: '⊞' },
@@ -14,17 +15,18 @@ const MENU = [
   { id: 'horarios',   label: 'Horarios',   icon: '📅' },
   { id: 'reportes',   label: 'Reportes',   icon: '📊' },
   { id: 'importar',   label: 'Importar',   icon: '📥' },
+  { id: 'auditoria',  label: 'Auditoría',  icon: '🔍' },
 ]
 
 export default function Dashboard({ usuario }: { usuario: any }) {
-  const [seccion, setSeccion]           = useState(() => sessionStorage.getItem('seccion') || 'inicio')
-  const [inicioKey, setInicioKey]       = useState(0)
-  const [clientesKey, setClientesKey]   = useState(0)
+  const [seccion, setSeccion]             = useState(() => sessionStorage.getItem('seccion') || 'inicio')
+  const [inicioKey, setInicioKey]         = useState(0)
+  const [clientesKey, setClientesKey]     = useState(0)
   const [profesoresKey, setProfesoresKey] = useState(0)
-  const [noLeidas, setNoLeidas]         = useState(0)
-  const [verNotif, setVerNotif]         = useState(false)
+  const [noLeidas, setNoLeidas]           = useState(0)
+  const [verNotif, setVerNotif]           = useState(false)
   const [notificaciones, setNotificaciones] = useState<any[]>([])
-  const [verMenu, setVerMenu]           = useState(false)
+  const [verMenu, setVerMenu]             = useState(false)
 
   useEffect(() => { cargarNoLeidas() }, [seccion])
 
@@ -66,8 +68,8 @@ export default function Dashboard({ usuario }: { usuario: any }) {
 
   function tiempoRelativo(fecha: string) {
     const diff = Math.floor((Date.now() - new Date(fecha).getTime()) / 1000)
-    if (diff < 60)   return 'ahora'
-    if (diff < 3600) return `${Math.floor(diff/60)} min`
+    if (diff < 60)    return 'ahora'
+    if (diff < 3600)  return `${Math.floor(diff/60)} min`
     if (diff < 86400) return `${Math.floor(diff/3600)} h`
     return `${Math.floor(diff/86400)} d`
   }
@@ -87,7 +89,7 @@ export default function Dashboard({ usuario }: { usuario: any }) {
         <div style={{ padding: '0 24px 24px', borderBottom: '1px solid #334155' }}>
           <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca" style={{ width: '100%', maxWidth: '152px', display: 'block', marginBottom: '8px' }} />
         </div>
-        <nav style={{ flex: 1, padding: '16px 0' }}>
+        <nav style={{ flex: 1, padding: '16px 0', overflowY: 'auto' }}>
           {MENU.map(item => (
             <button key={item.id} onClick={() => navegar(item.id)}
               style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '12px 24px', textAlign: 'left', background: seccion === item.id ? '#2563eb' : 'transparent', color: 'white', border: 'none', cursor: 'pointer', fontSize: '15px', borderLeft: seccion === item.id ? '3px solid #60a5fa' : '3px solid transparent' }}>
@@ -135,7 +137,7 @@ export default function Dashboard({ usuario }: { usuario: any }) {
         </div>
       </div>
 
-      {/* Contenido principal — overflow-y auto, overflow-x hidden evita scroll horizontal de página */}
+      {/* Contenido principal */}
       <div style={{ flex: 1, minWidth: 0, background: '#f8fafc', overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
         {seccion === 'inicio'     && <Inicio key={inicioKey} onNavegar={navegar} onNuevaNotificacion={cargarNoLeidas} />}
         {seccion === 'clientes'   && <Clientes key={clientesKey} />}
@@ -143,6 +145,7 @@ export default function Dashboard({ usuario }: { usuario: any }) {
         {seccion === 'horarios'   && <Horarios />}
         {seccion === 'reportes'   && <Reportes />}
         {seccion === 'importar'   && <Importar />}
+        {seccion === 'auditoria'  && <Auditoria />}
       </div>
 
       {/* Panel de notificaciones */}
@@ -167,7 +170,7 @@ export default function Dashboard({ usuario }: { usuario: any }) {
                 <p style={{ textAlign: 'center', color: '#aaa', padding: '32px 20px', fontSize: '14px' }}>Sin novedades</p>
               )}
               {notificaciones.map(n => {
-                const { emoji, color, bg } = iconoTipo(n.tipo)
+                const { emoji, bg } = iconoTipo(n.tipo)
                 return (
                   <div key={n.id} onClick={() => !n.leida && marcarLeida(n.id)}
                     style={{ padding: '14px 20px', borderBottom: '1px solid #f8fafc', background: n.leida ? 'white' : '#eff6ff', display: 'flex', gap: '12px', alignItems: 'flex-start', cursor: n.leida ? 'default' : 'pointer' }}>
