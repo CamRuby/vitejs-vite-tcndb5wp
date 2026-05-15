@@ -341,8 +341,7 @@ function ModalHistorialPlanes({ planes, onCerrar, onVerClases, clasesArchivadasM
               {planes.map((p: any, i) => {
                 const est = colorEstadoPlan(p.estado || 'activo')
                 return (
-                  <React.Fragment key={p.id}>
-                  <tr style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc' }}>
+                  <tr key={p.id} style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc' }}>
                     <td style={{ ...tdS, color: '#aaa' }}>{planes.length - i}</td>
                     <td style={{ ...tdS, fontWeight: '500' }}>{p.instrumentos?.nombre || '—'}</td>
                     <td style={tdS}>{p.sedes?.nombre || '—'}</td>
@@ -354,62 +353,63 @@ function ModalHistorialPlanes({ planes, onCerrar, onVerClases, clasesArchivadasM
                     <td style={{ ...tdS, color: '#888' }}>{p.fecha_fin || '—'}</td>
                     <td style={tdS}>
                       <button onClick={() => onVerClases(p.id)}
-                        style={{ padding: '4px 12px', background: expandido === p.id ? TEAL : 'white', color: expandido === p.id ? 'white' : TEAL, border: `1px solid ${TEAL}`, borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600' }}>
+                        style={{ padding: '4px 12px', background: planExpandido === p.id ? TEAL : 'white', color: planExpandido === p.id ? 'white' : TEAL, border: `1px solid ${TEAL}`, borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600' }}>
                         {planExpandido === p.id ? '▲ Ocultar' : '▼ Ver clases'}
                       </button>
                     </td>
                   </tr>
-                  {planExpandido === p.id && (
-                    <tr style={{ background: '#f8fafc' }}>
-                      <td colSpan={10} style={{ padding: '0' }}>
-                        <div style={{ padding: '12px 16px' }}>
-                          {!clasesArchivadasMap[p.id] || clasesArchivadasMap[p.id].length === 0
-                            ? <p style={{ margin: 0, color: '#aaa', fontSize: '13px', textAlign: 'center' }}>Sin clases registradas</p>
-                            : <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                                <thead><tr style={{ background: TEAL_LIGHT }}>
-                                  {['#', 'Fecha', 'Hora', 'Profesor', 'Sede', 'Estado', 'Resumen'].map(hh => (
-                                    <th key={hh} style={{ padding: '6px 10px', textAlign: 'left', color: TEAL, fontWeight: '600' }}>{hh}</th>
-                                  ))}
-                                </tr></thead>
-                                <tbody>
-                                  {clasesArchivadasMap[p.id].map((cl: any, ci) => {
-                                    const esCortesia = cl.es_cortesia
-                                    const esInasistencia = cl.estado === 'cancelada' && !cl.cancelado_por_academia && !cl.inasistencia_perdonada
-                                    const colCl = esCortesia ? { bg: '#e0f2fe', color: '#0369a1' }
-                                      : cl.estado === 'dada' ? { bg: '#fefce8', color: '#854d0e' }
-                                      : esInasistencia ? { bg: '#fff7ed', color: '#c2410c' }
-                                      : cl.estado === 'cancelada' ? { bg: '#f1f5f9', color: '#64748b' }
-                                      : cl.estado === 'confirmada' ? { bg: '#dcfce7', color: '#166534' }
-                                      : { bg: '#eff6ff', color: '#1d4ed8' }
-                                    return (
-                                      <tr key={cl.id} style={{ borderTop: '1px solid #f1f5f9', background: ci % 2 === 0 ? 'white' : '#fafbfc' }}>
-                                        <td style={{ padding: '6px 10px', color: '#aaa' }}>{cl.numero_calculado ? Math.round(cl.numero_calculado) : '—'}</td>
-                                        <td style={{ padding: '6px 10px' }}>{cl.fecha}</td>
-                                        <td style={{ padding: '6px 10px' }}>{cl.hora?.substring(0,5)}</td>
-                                        <td style={{ padding: '6px 10px' }}>{cl.profesores?.nombre || '—'}</td>
-                                        <td style={{ padding: '6px 10px' }}>{cl.salones?.sedes?.nombre || '—'}</td>
-                                        <td style={{ padding: '6px 10px' }}>
-                                          <span style={{ ...colCl, padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: '600' }}>
-                                            {esCortesia ? 'Cortesía' : esInasistencia ? 'Inasistencia' : cl.estado}
-                                          </span>
-                                        </td>
-                                        <td style={{ padding: '6px 10px', color: '#666', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cl.observaciones || '—'}</td>
-                                      </tr>
-                                    )
-                                  })}
-                                </tbody>
-                              </table>
-                          }
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                  </React.Fragment>
+
                 )
               })}
             </tbody>
           </table>
         </div>
+        {/* Expanded classes panel - below the table */}
+        {planExpandido && clasesArchivadasMap[planExpandido] !== undefined && (
+          <div style={{ borderTop: '1px solid #eef2f7', padding: '16px 24px', background: '#f8fafc' }}>
+            <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: '700', color: TEAL }}>
+              Clases del plan archivado
+              <button onClick={() => onVerClases(planExpandido)} style={{ marginLeft: '10px', background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '12px' }}>✕ Cerrar</button>
+            </p>
+            {clasesArchivadasMap[planExpandido].length === 0
+              ? <p style={{ margin: 0, color: '#aaa', fontSize: '13px' }}>Sin clases registradas</p>
+              : <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead><tr style={{ background: TEAL_LIGHT }}>
+                    {['#', 'Fecha', 'Hora', 'Profesor', 'Sede', 'Estado', 'Resumen'].map(hh => (
+                      <th key={hh} style={{ padding: '6px 10px', textAlign: 'left', color: TEAL, fontWeight: '600' }}>{hh}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {clasesArchivadasMap[planExpandido].map((cl: any, ci) => {
+                      const esCortesia = cl.es_cortesia
+                      const esInasistencia = cl.estado === 'cancelada' && !cl.cancelado_por_academia && !cl.inasistencia_perdonada
+                      const colCl = esCortesia ? { background: '#e0f2fe', color: '#0369a1' }
+                        : cl.estado === 'dada' ? { background: '#fefce8', color: '#854d0e' }
+                        : esInasistencia ? { background: '#fff7ed', color: '#c2410c' }
+                        : cl.estado === 'cancelada' ? { background: '#f1f5f9', color: '#64748b' }
+                        : cl.estado === 'confirmada' ? { background: '#dcfce7', color: '#166534' }
+                        : { background: '#eff6ff', color: '#1d4ed8' }
+                      return (
+                        <tr key={cl.id} style={{ borderTop: '1px solid #f1f5f9', background: ci % 2 === 0 ? 'white' : '#fafbfc' }}>
+                          <td style={{ padding: '6px 10px', color: '#aaa' }}>{cl.numero_calculado ? Math.round(cl.numero_calculado) : '—'}</td>
+                          <td style={{ padding: '6px 10px' }}>{cl.fecha}</td>
+                          <td style={{ padding: '6px 10px' }}>{cl.hora?.substring(0,5)}</td>
+                          <td style={{ padding: '6px 10px' }}>{cl.profesores?.nombre || '—'}</td>
+                          <td style={{ padding: '6px 10px' }}>{cl.salones?.sedes?.nombre || '—'}</td>
+                          <td style={{ padding: '6px 10px' }}>
+                            <span style={{ ...colCl, padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: '600' }}>
+                              {esCortesia ? 'Cortesía' : esInasistencia ? 'Inasistencia' : cl.estado}
+                            </span>
+                          </td>
+                          <td style={{ padding: '6px 10px', color: '#666', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cl.observaciones || '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+            }
+          </div>
+        )}
       </div>
     </div>
   )
