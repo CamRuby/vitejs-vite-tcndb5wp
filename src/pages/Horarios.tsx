@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../supabase'
+import { auditar } from '../auditoria'
 
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
@@ -900,7 +901,8 @@ export default function Horarios() {
     if (alcance === 'futuras' && claseEditando.patron_id) {
       await supabase.from('clases').delete().eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
     } else {
-      await supabase.from('clases').delete().eq('id', claseEditando.id)
+      auditar('borrar_clase', 'clases', claseEditando.id, { fecha: claseEditando.fecha })
+    await supabase.from('clases').delete().eq('id', claseEditando.id)
     }
     setModalEditar(false)
     cargarClases()
