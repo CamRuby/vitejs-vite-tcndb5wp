@@ -387,9 +387,11 @@ export default function ProfesorApp() {
       observaciones: resumen.trim() || claseActiva.observaciones || null
     }).eq('id', claseActiva.id)
     if (contrato) {
-      await supabase.from('contratos').update({
-        clases_tomadas: parseFloat((tomadas + fraccion).toFixed(4))
-      }).eq('id', contrato.id)
+      const nuevasTomadas = parseFloat((tomadas + fraccion).toFixed(4))
+      const totalClases = Number(claseActiva.contratos?.total_clases || 0)
+      const updateContrato: any = { clases_tomadas: nuevasTomadas }
+      if (totalClases > 0 && nuevasTomadas >= totalClases) updateContrato.estado = 'completado'
+      await supabase.from('contratos').update(updateContrato).eq('id', contrato.id)
     }
     setExito('¡Clase marcada como dada!')
     cerrarModal()
@@ -406,9 +408,11 @@ export default function ProfesorApp() {
     const fraccion = parseFloat((durClase / durPlan).toFixed(4))
     const tomadas  = parseFloat(Number(contrato?.clases_tomadas || 0).toFixed(4))
     if (contrato) {
-      await supabase.from('contratos').update({
-        clases_tomadas: parseFloat((tomadas + fraccion).toFixed(4))
-      }).eq('id', contrato.id)
+      const nuevasTomadas2 = parseFloat((tomadas + fraccion).toFixed(4))
+      const totalClases2 = Number(claseActiva.contratos?.total_clases || 0)
+      const updateContrato2: any = { clases_tomadas: nuevasTomadas2 }
+      if (totalClases2 > 0 && nuevasTomadas2 >= totalClases2) updateContrato2.estado = 'completado'
+      await supabase.from('contratos').update(updateContrato2).eq('id', contrato.id)
     }
     const modalidad = (claseActiva.modalidad || 'presencial').toLowerCase()
     const baseHon   = getValorTarifa(Number(claseActiva.duracion_min), modalidad)
