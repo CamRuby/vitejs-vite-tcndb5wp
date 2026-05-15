@@ -864,26 +864,17 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     await cargarDatosCliente(clienteSeleccionado)
   }
 
-  async function generarPDFTrazabilidad() {
-    // Load all classes for this client across all plans, ordered by date
+  async function generarHistorialClases() {
     const contrIds = planes.map((p: any) => p.id)
     if (contrIds.length === 0) { alert('Sin planes registrados'); return }
+    // Step 1: clases regulares
     const { data: todasClases } = await supabase
       .from('clases_con_numero')
-      .select('id, fecha, hora, duracion_min, estado, es_cortesia, cancelado_por_academia, cancelado_tarde, inasistencia_perdonada, numero_calculado, observaciones, contrato_id, contratos(instrumentos(nombre), total_clases, duracion_min), profesores(nombre), salones(nombre, sedes(nombre))')
+      .select('id, fecha, hora, duracion_min, estado, es_cortesia, cancelado_por_academia, cancelado_tarde, inasistencia_perdonada, numero_calculado, observaciones, contratos(instrumentos(nombre), total_clases), profesores(nombre), salones(nombre, sedes(nombre))')
       .in('contrato_id', contrIds)
       .in('estado', ['dada', 'cancelada'])
-      .order('fecha', { ascending: true })
-      .order('hora', { ascending: true })
-    // Also load taller sesiones dadas
-    const { data: tallerSes } = await supabase
-      .from('taller_sesiones')
-      .select('id, fecha, estado, observaciones, taller_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)), profesores(nombre))')
-      .eq('estado', 'dada')
-      .in('taller_id', (await supabase.from('talleres').select('id').in('id',
-        planes.flatMap((p: any) => []) // talleres linked to client via inscripciones
-      )).data?.map((t:any) => t.id) || [])
-    // Simpler: load via inscripciones
+      .order('fecha', { ascending: true }).order('hora', { ascending: true })
+    // Step 2: talleres via inscripciones
     const { data: inscT } = await supabase.from('taller_inscripciones').select('taller_id').eq('cliente_id', clienteSeleccionado.id)
     const tallerIds = (inscT || []).map((i: any) => i.taller_id)
     let tallerClasesHist: any[] = []
@@ -893,80 +884,72 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
         .eq('estado', 'dada').in('taller_id', tallerIds)
         .order('fecha', { ascending: true })
       tallerClasesHist = (ts || []).map((s: any) => ({
-        id: s.id, fecha: s.fecha, hora: s.talleres?.hora,
-        duracion_min: s.talleres?.duracion_min,
+        id: s.id, fecha: s.fecha, hora: s.talleres?.hora, duracion_min: s.talleres?.duracion_min,
         estado: 'dada', es_cortesia: false, cancelado_por_academia: false, cancelado_tarde: false,
         numero_calculado: null, observaciones: s.observaciones,
-        contratos: { instrumentos: { nombre: `🎸 ${s.talleres?.nombre}` }, total_clases: null },
-        profesores: s.talleres?.profesores,
-        salones: s.talleres?.salones,
-        esTaller: true
+        contratos: { instrumentos: { nombre: s.talleres?.nombre }, total_clases: null },
+        profesores: s.talleres?.profesores, salones: s.talleres?.salones, esTaller: true
       }))
     }
     const clases = [...(todasClases || []), ...tallerClasesHist]
       .sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.hora||'').localeCompare(b.hora||''))
-    const nombre = clienteSeleccionado?.nombre || clienteSeleccionado?.nombres || '—'
+    const nombre = clienteSeleccionado?.nombre || `${clienteSeleccionado?.nombres||''} ${clienteSeleccionado?.apellidos||''}`.trim() || '—'
     const filas = clases.map((cl: any) => {
       const esCortesia = cl.es_cortesia
       const esInasistencia = cl.estado === 'cancelada' && !cl.cancelado_por_academia
       const esCancelada = cl.estado === 'cancelada' && cl.cancelado_por_academia
       const esCancelTardia = esCancelada && cl.cancelado_tarde
-      const tipo = esCortesia ? 'Cortesía' : esInasistencia ? 'Inasistencia' : esCancelTardia ? 'Cancelada (tarde)' : esCancelada ? 'Cancelada' : 'Dada'
-      const colorTipo = esCortesia ? '#0369a1' : esInasistencia ? '#c2410c' : esCancelada ? '#7c3aed' : '#854d0e'
-      const bgTipo = esCortesia ? '#e0f2fe' : esInasistencia ? '#fff7ed' : esCancelada ? '#f3e8ff' : '#fefce8'
-      const num = cl.numero_calculado ? cl.numero_calculado : '—'
-      const totalClases = cl.contratos?.total_clases || '?'
+      const tipo = esCortesia ? 'Cortesía' : esInasistencia ? 'Inasistencia' : esCancelTardia ? 'Cancelada (tarde)' : esCancelada ? 'Cancelada' : cl.esTaller ? 'Taller dado' : 'Dada'
+      const colors: Record<string,string> = { 'Dada':'#854d0e', 'Taller dado':'#7c3aed', 'Cortesía':'#0369a1', 'Inasistencia':'#c2410c', 'Cancelada (tarde)':'#92400e', 'Cancelada':'#475569' }
+      const bgs: Record<string,string> = { 'Dada':'#fefce8', 'Taller dado':'#f3e8ff', 'Cortesía':'#e0f2fe', 'Inasistencia':'#fff7ed', 'Cancelada (tarde)':'#fff7ed', 'Cancelada':'#f8fafc' }
+      const num = cl.esTaller ? '🎸' : cl.numero_calculado ? `${cl.numero_calculado}/${cl.contratos?.total_clases||'?'}` : '—'
       const instrumento = cl.contratos?.instrumentos?.nombre || '—'
+      const resumen = cl.observaciones ? cl.observaciones.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>') : '<span style="color:#ccc">—</span>'
       return `<tr>
-        <td style="color:#aaa">${cl.fecha?.substring(8,10)}/${cl.fecha?.substring(5,7)}/${cl.fecha?.substring(0,4)}</td>
-        <td>${cl.hora?.substring(0,5) || '—'}</td>
-        <td>${cl.duracion_min} min</td>
+        <td>${cl.fecha?.substring(8,10)}/${cl.fecha?.substring(5,7)}/${cl.fecha?.substring(0,4)}</td>
+        <td>${cl.hora?.substring(0,5)||'—'}</td>
+        <td>${cl.duracion_min||'—'} min</td>
         <td>${instrumento}</td>
-        <td>${cl.profesores?.nombre || '—'}</td>
-        <td>${cl.salones?.sedes?.nombre || '—'}</td>
-        <td style="text-align:center"><span style="background:${bgTipo};color:${colorTipo};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${tipo}</span></td>
-        <td style="color:#aaa;text-align:center">${cl.esTaller ? '—' : `${num}/${totalClases}`}</td>
-        <td style="color:#555;font-size:12px;line-height:1.5">${cl.observaciones ? cl.observaciones.replace(/\n/g,'<br>') : '<span style="color:#ccc">—</span>'}</td>
+        <td>${cl.profesores?.nombre||'—'}</td>
+        <td>${cl.salones?.sedes?.nombre||'—'}</td>
+        <td><span style="background:${bgs[tipo]||'#f1f5f9'};color:${colors[tipo]||'#333'};padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap">${tipo}</span></td>
+        <td style="color:#888;font-size:11px;white-space:nowrap">${num}</td>
+        <td style="color:#444;font-size:11px;line-height:1.6">${resumen}</td>
       </tr>`
     }).join('')
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-<title>Trazabilidad — ${nombre}</title>
+<title>Historial de Clases — ${nombre}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Segoe UI',Arial,sans-serif;padding:32px;color:#1a1a1a;font-size:12px}
-.header{border-bottom:3px solid #1a8a8a;padding-bottom:16px;margin-bottom:24px;display:flex;justify-content:space-between}
-h1{font-size:20px;color:#1a8a8a;font-weight:800}
-h2{font-size:15px;font-weight:700;margin-top:4px}
+body{font-family:'Segoe UI',Arial,sans-serif;padding:24px 32px;color:#1a1a1a;font-size:12px}
+.header{border-bottom:3px solid #1a8a8a;padding-bottom:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end}
+h1{font-size:18px;color:#1a8a8a;font-weight:800;margin-bottom:3px}
+h2{font-size:14px;font-weight:700}
 table{width:100%;border-collapse:collapse}
 thead tr{background:#e8f5f5}
-th{padding:8px 10px;text-align:left;font-size:10px;color:#1a8a8a;font-weight:700;text-transform:uppercase;border-bottom:2px solid #1a8a8a}
-td{padding:8px 10px;vertical-align:top;border-bottom:1px solid #f1f5f9}
-tr:nth-child(even){background:#fafbfc}
-.footer{margin-top:32px;font-size:10px;color:#aaa;text-align:center;border-top:1px solid #e2e8f0;padding-top:12px}
-@media print{@page{margin:15mm}body{padding:0}}
+th{padding:7px 8px;text-align:left;font-size:9px;color:#1a8a8a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid #1a8a8a}
+td{padding:7px 8px;vertical-align:top;border-bottom:1px solid #f0f4f8}
+tr:nth-child(even) td{background:#fafbfc}
+.footer{margin-top:24px;font-size:9px;color:#aaa;text-align:center;border-top:1px solid #e2e8f0;padding-top:10px}
+@media print{@page{size:A4 landscape;margin:12mm}body{padding:0}button{display:none}}
 </style></head><body>
 <div class="header">
-  <div><h1>Academia Ruby Salamanca</h1><h2>Trazabilidad — ${nombre}</h2></div>
-  <div style="text-align:right;font-size:11px;color:#888">
-    <p>${clases.length} clases</p>
-    <p>Generado: ${new Date().toLocaleDateString('es-CO')}</p>
+  <div><h1>Academia Ruby Salamanca</h1><h2>Historial de Clases — ${nombre}</h2></div>
+  <div style="text-align:right;font-size:11px;color:#888;line-height:1.6">
+    <div>${clases.length} clases registradas</div>
+    <div>Generado: ${new Date().toLocaleDateString('es-CO')}</div>
   </div>
 </div>
 <table>
-  <thead><tr>
-    <th>Fecha</th><th>Hora</th><th>Dur.</th><th>Instrumento</th><th>Profesor</th><th>Sede</th><th>Tipo</th><th>#</th><th>Resumen / Observaciones</th>
-  </tr></thead>
-  <tbody>${filas || '<tr><td colspan="9" style="text-align:center;color:#aaa;padding:24px">Sin clases registradas</td></tr>'}</tbody>
+  <thead><tr><th>Fecha</th><th>Hora</th><th>Dur.</th><th>Instrumento / Taller</th><th>Profesor</th><th>Sede</th><th>Tipo</th><th>#</th><th>Resumen / Observaciones</th></tr></thead>
+  <tbody>${filas||'<tr><td colspan="9" style="text-align:center;color:#aaa;padding:20px">Sin clases registradas</td></tr>'}</tbody>
 </table>
+<div class="footer">Academia Ruby Salamanca · Historial de Clases · ${nombre}</div>
+<script>window.onload = function(){ window.print() }</script>
 <div class="footer">Academia Ruby Salamanca · Portal administrativo · ${nombre}</div>
 </body></html>`
-    const blob = new Blob([html], { type: 'text/html' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `Trazabilidad_${nombre.replace(/ /g,'_')}.html`
-    a.click()
-    URL.revokeObjectURL(url)
+    const win = window.open('', '_blank')
+    if (win) { win.document.write(html + '</body></html>'); win.document.close() }
   }
 
   async function abrirModalTaller() {
@@ -1476,7 +1459,7 @@ tr:nth-child(even){background:#fafbfc}
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <h3 style={{ margin: 0, fontSize: '20px', color: '#1a1a1a' }}>Planes activos <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({planesActivos.length})</span></h3>
               {planesArchivados.length > 0 && <button onClick={() => setModalHistorial(true)} style={{ padding: '5px 14px', background: '#f1f5f9', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>📋 Ver historial ({planesArchivados.length} archivados)</button>}
-              <button onClick={generarPDFTrazabilidad} style={{ padding: '5px 14px', background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>📄 PDF trazabilidad</button>
+              <button onClick={generarHistorialClases} style={{ padding: '5px 14px', background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>📄 Historial de clases</button>
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button onClick={() => { setEsRenovacion(false); setModalPlan({}) }} style={{ padding: '8px 18px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>+ Crear plan</button>
