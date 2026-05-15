@@ -321,9 +321,19 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar,
   )
 }
 
-function ModalHistorialPlanes({ planes, onCerrar }) {
+function ModalHistorialPlanes({ planes, onCerrar, supabase: sb }) {
   const thS: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }
   const tdS: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#333', whiteSpace: 'nowrap' }
+  const [expandido, setExpandido] = React.useState<string | null>(null)
+  const [clasesMap, setClasesMap] = React.useState<Record<string, any[]>>({})
+  async function cargarClasesPlan(planId: string) {
+    if (clasesMap[planId]) { setExpandido(prev => prev === planId ? null : planId); return }
+    const { data } = await sb.from('clases_con_numero')
+      .select('id, fecha, hora, estado, numero_calculado, es_cortesia, cancelado_por_academia, inasistencia_perdonada, observaciones, profesores(nombre), salones(nombre, sedes(nombre))')
+      .eq('contrato_id', planId).order('fecha', { ascending: false }).order('hora', { ascending: false })
+    setClasesMap(prev => ({ ...prev, [planId]: data || [] }))
+    setExpandido(planId)
+  }
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
       <div style={{ background: 'white', borderRadius: '16px', width: '95%', maxWidth: '900px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
@@ -334,14 +344,15 @@ function ModalHistorialPlanes({ planes, onCerrar }) {
         <div style={{ overflowY: 'auto', flex: 1 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ position: 'sticky', top: 0, background: TEAL_LIGHT, zIndex: 1 }}>
-              <tr>{['#', 'Instrumento', 'Sede', 'Profesor', 'Clases', 'Duración', 'Valor', 'Fecha inicio', 'Estado'].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
+              <tr>{['#', 'Instrumento', 'Sede', 'Profesor', 'Clases', 'Duración', 'Valor', 'Fecha inicio', 'Fecha fin', ''].map(h => <th key={h} style={thS}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {planes.length === 0 && <tr><td colSpan={9} style={{ padding: '32px', textAlign: 'center', color: '#aaa' }}>Sin planes</td></tr>}
               {planes.map((p: any, i) => {
                 const est = colorEstadoPlan(p.estado || 'activo')
                 return (
-                  <tr key={p.id} style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc' }}>
+                  <React.Fragment key={p.id}>
+                  <tr style={{ borderTop: '1px solid #f8fafc', background: i % 2 === 0 ? 'white' : '#fafbfc' }}>
                     <td style={{ ...tdS, color: '#aaa' }}>{planes.length - i}</td>
                     <td style={{ ...tdS, fontWeight: '500' }}>{p.instrumentos?.nombre || '—'}</td>
                     <td style={tdS}>{p.sedes?.nombre || '—'}</td>
@@ -350,8 +361,60 @@ function ModalHistorialPlanes({ planes, onCerrar }) {
                     <td style={{ ...tdS, textAlign: 'center' }}>{p.duracion_min} min</td>
                     <td style={tdS}>{p.valor_plan ? `$${Number(p.valor_plan).toLocaleString()}` : '—'}</td>
                     <td style={{ ...tdS, color: '#888' }}>{p.fecha_inicio || '—'}</td>
-                    <td style={tdS}><span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '600', background: est.bg, color: est.color }}>{p.estado || 'activo'}</span></td>
+                    <td style={{ ...tdS, color: '#888' }}>{p.fecha_fin || '—'}</td>
+                    <td style={tdS}>
+                      <button onClick={() => cargarClasesPlan(p.id)}
+                        style={{ padding: '4px 12px', background: expandido === p.id ? TEAL : 'white', color: expandido === p.id ? 'white' : TEAL, border: `1px solid ${TEAL}`, borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: '600' }}>
+                        {expandido === p.id ? '▲ Ocultar' : '▼ Ver clases'}
+                      </button>
+                    </td>
                   </tr>
+                  {expandido === p.id && (
+                    <tr style={{ background: '#f8fafc' }}>
+                      <td colSpan={10} style={{ padding: '0' }}>
+                        <div style={{ padding: '12px 16px' }}>
+                          {!clasesMap[p.id] || clasesMap[p.id].length === 0
+                            ? <p style={{ margin: 0, color: '#aaa', fontSize: '13px', textAlign: 'center' }}>Sin clases registradas</p>
+                            : <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                                <thead><tr style={{ background: TEAL_LIGHT }}>
+                                  {['#', 'Fecha', 'Hora', 'Profesor', 'Sede', 'Estado', 'Resumen'].map(hh => (
+                                    <th key={hh} style={{ padding: '6px 10px', textAlign: 'left', color: TEAL, fontWeight: '600' }}>{hh}</th>
+                                  ))}
+                                </tr></thead>
+                                <tbody>
+                                  {clasesMap[p.id].map((cl: any, ci) => {
+                                    const esCortesia = cl.es_cortesia
+                                    const esInasistencia = cl.estado === 'cancelada' && !cl.cancelado_por_academia && !cl.inasistencia_perdonada
+                                    const colCl = esCortesia ? { bg: '#e0f2fe', color: '#0369a1' }
+                                      : cl.estado === 'dada' ? { bg: '#fefce8', color: '#854d0e' }
+                                      : esInasistencia ? { bg: '#fff7ed', color: '#c2410c' }
+                                      : cl.estado === 'cancelada' ? { bg: '#f1f5f9', color: '#64748b' }
+                                      : cl.estado === 'confirmada' ? { bg: '#dcfce7', color: '#166534' }
+                                      : { bg: '#eff6ff', color: '#1d4ed8' }
+                                    return (
+                                      <tr key={cl.id} style={{ borderTop: '1px solid #f1f5f9', background: ci % 2 === 0 ? 'white' : '#fafbfc' }}>
+                                        <td style={{ padding: '6px 10px', color: '#aaa' }}>{cl.numero_calculado ? Math.round(cl.numero_calculado) : '—'}</td>
+                                        <td style={{ padding: '6px 10px' }}>{cl.fecha}</td>
+                                        <td style={{ padding: '6px 10px' }}>{cl.hora?.substring(0,5)}</td>
+                                        <td style={{ padding: '6px 10px' }}>{cl.profesores?.nombre || '—'}</td>
+                                        <td style={{ padding: '6px 10px' }}>{cl.salones?.sedes?.nombre || '—'}</td>
+                                        <td style={{ padding: '6px 10px' }}>
+                                          <span style={{ ...colCl, padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: '600' }}>
+                                            {esCortesia ? 'Cortesía' : esInasistencia ? 'Inasistencia' : cl.estado}
+                                          </span>
+                                        </td>
+                                        <td style={{ padding: '6px 10px', color: '#666', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cl.observaciones || '—'}</td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                          }
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 )
               })}
             </tbody>
@@ -546,6 +609,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [profesoresFiltro, setProfesoresFiltro] = useState<any[]>([])
   // ── Historial por plan: qué planes están expandidos ──
   const [planesExpandidos, setPlanesExpandidos] = useState<Set<string>>(new Set())
+  const [filtroHistorialPlan, setFiltroHistorialPlan] = useState<Record<string, 'historial' | 'programadas'>>({})
+  const [planArchivatoExpandido, setPlanArchivadoExpandido] = useState<string | null>(null)
+  const [clasesArchivatosPlan, setClasesArchivadosPlan] = useState<Record<string, any[]>>({})
 
   const [pagosPlanes, setPagosPlanes]       = useState<Record<string, any[]>>({})
   const [pagosTalleres, setPagosTalleres]   = useState<Record<string, any[]>>({})
@@ -1406,9 +1472,26 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
 
                   {estaExpandido && (
                     <div style={{ background: '#fafbfc', borderRadius: '10px', overflow: 'hidden', border: '1px solid #f1f5f9' }}>
-                      {clasesDelPlan.length === 0 ? (
-                        <p style={{ margin: 0, padding: '16px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin clases registradas en este plan aún</p>
-                      ) : (
+                      {/* Tabs */}
+                      <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid #f1f5f9' }}>
+                        {(['historial', 'programadas'] as const).map(tab => (
+                          <button key={tab} onClick={() => setFiltroHistorialPlan(prev => ({ ...prev, [p.id]: tab }))}
+                            style={{ padding: '8px 16px', border: 'none', background: (filtroHistorialPlan[p.id] || 'historial') === tab ? 'white' : '#f8fafc',
+                              color: (filtroHistorialPlan[p.id] || 'historial') === tab ? TEAL : '#888',
+                              fontWeight: (filtroHistorialPlan[p.id] || 'historial') === tab ? '700' : '400',
+                              fontSize: '12px', cursor: 'pointer', borderBottom: (filtroHistorialPlan[p.id] || 'historial') === tab ? `2px solid ${TEAL}` : '2px solid transparent' }}>
+                            {tab === 'historial' ? '📋 Historial' : '📅 Programadas'}
+                          </button>
+                        ))}
+                      </div>
+                      {(() => {
+                        const tabActual = filtroHistorialPlan[p.id] || 'historial'
+                        const clasesFiltradas2 = tabActual === 'programadas'
+                          ? clasesDelPlan.filter((cl: any) => cl.estado === 'programada' || cl.estado === 'confirmada')
+                          : clasesDelPlan.filter((cl: any) => cl.estado !== 'programada' && cl.estado !== 'confirmada')
+                        return clasesFiltradas2.length === 0 ? (
+                          <p style={{ margin: 0, padding: '16px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin clases en esta sección</p>
+                        ) : (
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                           <thead>
                             <tr style={{ background: TEAL_LIGHT }}>
@@ -1418,7 +1501,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                             </tr>
                           </thead>
                           <tbody>
-                            {clasesDelPlan.map((c: any, i) => {
+                            {clasesFiltradas2.map((c: any, i) => {
                               const esPerdonada = c.estado === 'cancelada' && c.inasistencia_perdonada
                               const esCanceladaAcademia = c.estado === 'cancelada' && c.cancelado_por_academia
                               const esInasistencia = c.estado === 'cancelada' && !c.cancelado_por_academia && !c.inasistencia_perdonada
@@ -1478,7 +1561,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                             })}
                           </tbody>
                         </table>
-                      )}
+                        )
+                      })()}
                     </div>
                   )}
                 </div>
@@ -1759,7 +1843,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
           esRenovacion={esRenovacion} onGuardar={guardarPlan} onCerrar={() => { setModalPlan(null); setEsRenovacion(false) }} />
       )}
 
-      {modalHistorial && <ModalHistorialPlanes planes={planesArchivados} onCerrar={() => setModalHistorial(false)} />}
+      {modalHistorial && <ModalHistorialPlanes planes={planesArchivados} onCerrar={() => setModalHistorial(false)} supabase={supabase} />}
 
       {/* ── Modal de clase: ver resumen + observaciones + opción cortesía ── */}
       {modalCortesia && (
