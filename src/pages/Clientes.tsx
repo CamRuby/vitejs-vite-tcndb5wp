@@ -773,7 +773,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     setCargando(true)
     const payload = { ...form, nombre: `${form.nombres.trim()} ${form.apellidos.trim()}`.trim(), fecha_nacimiento: form.fecha_nacimiento && form.fecha_nacimiento.trim() !== '' ? form.fecha_nacimiento : null, inasistencia_perdonada: form.inasistencia_perdonada || false }
     if (modo === 'nuevo') {
-      const { data, error } = await supabase.from('clientes').insert(payload).select().single()
+      auditar('crear_cliente', 'clientes', undefined, { nombre: payload.nombre || payload.nombres })
+        const { data, error } = await supabase.from('clientes').insert(payload).select().single()
       if (!error && data) { setClienteSeleccionado(data); await cargarDatosCliente(data); setModo('ver'); cargarVista(vistaActual) }
       else if (error) alert('Error al crear cliente: ' + error.message)
     } else {
@@ -1114,7 +1115,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       const { error } = await supabase.from('contratos').update(registro).eq('id', planId)
       if (error) { alert('Error al actualizar plan: ' + error.message); return }
     } else {
-      const { data: nuevoPlan, error } = await supabase.from('contratos').insert(registro).select().single()
+      auditar('crear_plan', 'contratos', undefined, { cliente_id: clienteSeleccionado?.id })
+            const { data: nuevoPlan, error } = await supabase.from('contratos').insert(registro).select().single()
       if (error) { alert('Error al crear plan: ' + error.message); return }
       if (esRenovacion && modalPlan?.id && nuevoPlan) {
         const hoy = new Date().toISOString().split('T')[0]
