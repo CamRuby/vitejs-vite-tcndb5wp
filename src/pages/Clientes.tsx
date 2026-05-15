@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
 const TEAL = '#1a8a8a'
@@ -1489,8 +1489,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
                       {(() => {
                         const tabActual = filtroHistorialPlan[p.id] || 'historial'
                         const clasesFiltradas2 = tabActual === 'programadas'
-                          ? clasesDelPlan.filter((cl: any) => cl.estado === 'programada' || cl.estado === 'confirmada')
-                          : clasesDelPlan.filter((cl: any) => cl.estado !== 'programada' && cl.estado !== 'confirmada')
+                          ? clasesDelPlan.filter((cl: any) => cl.estado === 'programada')
+                          : clasesDelPlan.filter((cl: any) => cl.estado !== 'programada')
                         return clasesFiltradas2.length === 0 ? (
                           <p style={{ margin: 0, padding: '16px', textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Sin clases en esta sección</p>
                         ) : (
