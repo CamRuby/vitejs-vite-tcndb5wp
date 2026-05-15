@@ -36,31 +36,22 @@ export default function Login() {
         .login-btn:active { transform: scale(0.99); }
       `}</style>
 
-      <div style={{ width: '100%', maxWidth: '380px', animation: 'fadeUp 0.4s ease' }}>
-
-        <div style={{ textAlign: 'center', marginBottom: '36px' }}>
-          <img
-            src="/Logo_RubySalamanca.png"
-            alt="Academia Ruby Salamanca"
-            style={{
-              width: '100px', height: '100px', objectFit: 'contain',
-              background: 'white', borderRadius: '28px', padding: '10px',
-              boxSizing: 'border-box', display: 'block', margin: '0 auto 18px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
-            }}
-          />
-          <h1 style={{ margin: 0, color: 'white', fontSize: '26px', fontWeight: '800', letterSpacing: '-0.5px' }}>
-            Academia Ruby Salamanca
-          </h1>
-          <p style={{ margin: '8px 0 0', color: 'rgba(255,255,255,0.65)', fontSize: '13px', fontWeight: '500', letterSpacing: '0.5px' }}>
-            PORTAL ADMINISTRATIVO
-          </p>
-        </div>
+      <div style={{ width: '100%', maxWidth: '400px', animation: 'fadeUp 0.4s ease' }}>
 
         <div style={{
-          background: 'white', borderRadius: '24px', padding: '32px',
+          background: 'white', borderRadius: '28px', padding: '40px 36px',
           boxShadow: '0 24px 80px rgba(0,0,0,0.25)'
         }}>
+          <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+            <img
+              src="/Logo_RubySalamanca.png"
+              alt="Academia Ruby Salamanca"
+              style={{ height: '80px', objectFit: 'contain', display: 'block', margin: '0 auto 14px' }}
+            />
+            <p style={{ margin: 0, color: '#9ca3af', fontSize: '11px', fontWeight: '700', letterSpacing: '1.5px' }}>
+              PORTAL ADMINISTRATIVO
+            </p>
+          </div>
           <form onSubmit={handleLogin}>
             <div style={{ marginBottom: '18px' }}>
               <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#6b7280', marginBottom: '8px', letterSpacing: '1px' }}>
