@@ -1329,6 +1329,30 @@ export default function Horarios() {
                   <div style={{ background: TALLER_BG, borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: TALLER_COLOR }}>
                     Se repetirá cada <strong>{DIAS_LARGO[parseFechaLocal(slotSeleccionado.fecha).getDay()]}</strong> a las <strong>{slotSeleccionado.hora}</strong> en <strong>{slotSeleccionado.salon.nombre}</strong>
                   </div>
+                  {/* Tipo de taller */}
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                    {(['regular', 'vacacional'] as const).map(tipo => (
+                      <button key={tipo} type="button" onClick={() => setTallerVacacional(tipo === 'vacacional')}
+                        style={{ flex: 1, padding: '9px', borderRadius: '8px',
+                          border: `2px solid ${tallerVacacional === (tipo === 'vacacional') ? TALLER_COLOR : '#e2e8f0'}`,
+                          background: tallerVacacional === (tipo === 'vacacional') ? '#f3e8ff' : 'white',
+                          color: tallerVacacional === (tipo === 'vacacional') ? TALLER_COLOR : '#888',
+                          cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                        {tipo === 'regular' ? '📅 Semanal' : '☀️ Vacacional'}
+                      </button>
+                    ))}
+                  </div>
+                  {tallerVacacional && (
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={labelStyle}>Fecha fin del taller ☀️ *</label>
+                      <input type="date" value={tallerFechaFin} onChange={e => setTallerFechaFin(e.target.value)}
+                        min={slotSeleccionado?.fecha}
+                        style={{ ...fieldStyle, boxSizing: 'border-box' as const }} />
+                      <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#888' }}>
+                        Se creará un taller para cada día desde {slotSeleccionado?.fecha} hasta la fecha fin.
+                      </p>
+                    </div>
+                  )}
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Nombre del taller *</label>
                     <input value={tallerNombre} onChange={e => setTallerNombre(e.target.value)} placeholder="Ej: Taller de guitarra eléctrica" style={fieldStyle} />
