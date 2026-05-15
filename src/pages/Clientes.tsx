@@ -989,7 +989,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
         ], margin: [0,8,0,0]
       })
     }
-    pdfMake.createPdf(docDef).open()
+    const fechaHoy = new Date().toLocaleDateString('es-CO').replace(/\//g,'-')
+    pdfMake.createPdf(docDef).download(`Historial de clases - ${nombre} (${fechaHoy}).pdf`)
   }
 
   async function abrirModalTaller() {
