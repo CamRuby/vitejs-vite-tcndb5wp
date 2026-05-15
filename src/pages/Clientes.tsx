@@ -867,13 +867,22 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   async function generarHistorialClases() {
     const contrIds = planes.map((p: any) => p.id)
     if (contrIds.length === 0) { alert('Sin planes registrados'); return }
-    // Step 1: clases regulares
+    // Step 1: clases regulares — query clases directly (not view) to get cancelado fields
     const { data: todasClases } = await supabase
-      .from('clases_con_numero')
-      .select('id, fecha, hora, duracion_min, estado, es_cortesia, cancelado_por_academia, cancelado_tarde, inasistencia_perdonada, numero_calculado, observaciones, contratos(instrumentos(nombre), total_clases), profesores(nombre), salones(nombre, sedes(nombre))')
+      .from('clases')
+      .select('id, fecha, hora, duracion_min, estado, es_cortesia, cancelado_por_academia, cancelado_tarde, inasistencia_perdonada, observaciones, contrato_id, contratos(instrumentos(nombre), total_clases), profesores(nombre), salones(nombre, sedes(nombre))')
       .in('contrato_id', contrIds)
       .in('estado', ['dada', 'cancelada'])
       .order('fecha', { ascending: true }).order('hora', { ascending: true })
+    // Get numero_calculado from view separately
+    const { data: numerosData } = await supabase
+      .from('clases_con_numero')
+      .select('id, numero_calculado')
+      .in('contrato_id', contrIds)
+      .in('estado', ['dada', 'cancelada'])
+    const numerosMap: Record<string, number> = {}
+    ;(numerosData || []).forEach((n: any) => { if (n.numero_calculado) numerosMap[n.id] = n.numero_calculado })
+    const todasClasesConNumero = (todasClases || []).map((cl: any) => ({ ...cl, numero_calculado: numerosMap[cl.id] || null }))
     // Step 2: talleres via inscripciones
     const { data: inscT } = await supabase.from('taller_inscripciones').select('taller_id').eq('cliente_id', clienteSeleccionado.id)
     const tallerIds = (inscT || []).map((i: any) => i.taller_id)
@@ -891,7 +900,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
         profesores: s.talleres?.profesores, salones: s.talleres?.salones, esTaller: true
       }))
     }
-    const clases = [...(todasClases || []), ...tallerClasesHist]
+    const clases = [...todasClasesConNumero, ...tallerClasesHist]
       .sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.hora||'').localeCompare(b.hora||''))
     const nombre = clienteSeleccionado?.nombre || `${clienteSeleccionado?.nombres||''} ${clienteSeleccionado?.apellidos||''}`.trim() || '—'
     const filas = clases.map((cl: any) => {
