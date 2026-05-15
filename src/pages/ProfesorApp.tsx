@@ -1078,8 +1078,8 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
                       </p>
                       <p style={{ margin:0, fontSize:'13px', color: esTardia ? '#92400e' : '#166634' }}>
                         {esTardia
-                          ? `Faltan menos de 3 horas. Quedará una nota de posible clase de cortesía.`
-                          : 'Faltan más de 3 horas. Sin consecuencias.'}
+                          ? `Quedará una nota de posible clase de cortesía.`
+                          : 'Se requiere reasignar esta clase a otro profesor. Avisar a la administración'}
                       </p>
                     </div>
                   )
