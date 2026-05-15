@@ -1682,8 +1682,28 @@ export default function Horarios() {
                     <label style={labelStyle}>Estado</label>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       {claseEditando.estado === 'cancelada' ? (
-                        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '10px 14px', fontSize: '13px', color: '#c2410c', fontWeight: '600' }}>
-                          ⚠️ Clase cancelada — solo puede borrarse
+                        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '10px 14px', fontSize: '13px', color: '#c2410c', width: '100%' }}>
+                          <p style={{ margin: '0 0 10px', fontWeight: '600' }}>⚠️ Clase cancelada</p>
+                          <label style={{ display: 'block', fontSize: '12px', color: '#555', fontWeight: '600', marginBottom: '4px' }}>Reasignar a otro profesor</label>
+                          <select
+                            defaultValue={claseEditando.profesor_id || ''}
+                            onChange={async e => {
+                              const nuevoProf = e.target.value
+                              if (!nuevoProf) return
+                              await supabase.from('clases').update({
+                                profesor_id: nuevoProf,
+                                estado: 'confirmada',
+                                cancelado_por_academia: null,
+                                cancelado_tarde: false
+                              }).eq('id', claseEditando.id)
+                              setClaseEditando((prev: any) => ({ ...prev, profesor_id: nuevoProf, estado: 'confirmada' }))
+                              await cargarClases()
+                            }}
+                            style={{ width: '100%', padding: '7px 10px', border: '1px solid #fed7aa', borderRadius: '8px', fontSize: '13px', marginBottom: '8px' }}>
+                            <option value="">— Seleccionar nuevo profesor —</option>
+                            {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                          </select>
+                          <p style={{ margin: 0, fontSize: '11px', color: '#888' }}>Al seleccionar, la clase vuelve a confirmada con el nuevo profesor.</p>
                         </div>
                       ) : (
                         ['programada', 'confirmada', 'dada', 'cancelada'].map(est => {
