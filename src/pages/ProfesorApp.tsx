@@ -451,7 +451,7 @@ export default function ProfesorApp() {
       claseActiva.id
     )
     if (esTardia) {
-      setAvisoCancelacion(`La clase fue cancelada. Como faltaban menos de 3 horas, la asistente revisará si corresponde una clase de cortesía para ${nombreCliente(claseActiva)}.`)
+      setAvisoCancelacion(`La cancelación tardía perjudica es una situación negativa que afecta el servicio. La administración decidirá la acción a seguir de acuerdo a los términos del contrato`)
       setPantallaModal('avisoTardia')
       setGuardando(false)
     } else {
