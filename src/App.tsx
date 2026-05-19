@@ -4,7 +4,6 @@ import Login from './Login'
 import Dashboard from './Dashboard'
 import ProfesorApp from './pages/ProfesorApp'
 
-// Se calcula UNA vez fuera del componente, no dentro
 const esProfesor = window.location.pathname.startsWith('/profesor')
 
 export default function App() {
@@ -19,22 +18,24 @@ export default function App() {
     })
     supabase.auth.onAuthStateChange((_event, session) => {
       setSesion(session)
+      // Registrar inicio de sesión en auditoría
+      if (_event === 'SIGNED_IN' && session?.user?.email) {
+        supabase.from('auditoria').insert({
+          usuario_email: session.user.email,
+          accion: 'inicio_sesion',
+          entidad: 'auth',
+          detalle: { portal: 'administrativo' }
+        })
+      }
     })
   }, [])
 
   if (esProfesor) return <ProfesorApp />
-
   if (cargando) return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p>Cargando...</p>
     </div>
   )
-
   if (!sesion) return <Login />
   return <Dashboard usuario={sesion.user} />
 }
