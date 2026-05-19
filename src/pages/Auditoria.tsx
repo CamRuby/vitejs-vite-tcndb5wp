@@ -20,6 +20,7 @@ const LABELS: Record<string, string> = {
   sesion_taller_confirmada:   '✅ Confirmar sesión taller',
   sesion_taller_dada:         '✓ Sesión taller dada',
   sesion_taller_cancelada:    '✗ Sesión taller cancelada',
+  inicio_sesion:               '🔑 Inicio de sesión',
 }
 
 export default function Auditoria() {
