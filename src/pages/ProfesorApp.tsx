@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import pdfMake from 'pdfmake/build/pdfmake'
+import pdfFonts from 'pdfmake/build/vfs_fonts'
+pdfMake.vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs
 
 const TEAL       = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
@@ -84,7 +87,6 @@ const SELECT_CLASES = [
   'salones(nombre, sedes(nombre))'
 ].join(', ')
 
-// Para historial: usa la view que incluye numero_calculado
 const SELECT_HISTORIAL = [
   'id', 'fecha', 'hora', 'duracion_min', 'estado', 'modalidad', 'cancelado_por_academia', 'es_cortesia',
   'observaciones', 'contrato_id', 'honorario_valor', 'motivo_cancelacion', 'numero_calculado',
@@ -96,12 +98,10 @@ export default function ProfesorApp() {
   const [sesion, setSesion]               = useState<any>(null)
   const [profesor, setProfesor]           = useState<any>(null)
   const [cargandoAuth, setCargandoAuth]   = useState(true)
-
   const [loginEmail, setLoginEmail]       = useState('')
   const [loginPass, setLoginPass]         = useState('')
   const [loginError, setLoginError]       = useState('')
   const [loginCargando, setLoginCargando] = useState(false)
-
   const [vista, setVista]                 = useState<'hoy' | 'historial'>('hoy')
   const [clases, setClases]               = useState<any[]>([])
   const [cargandoClases, setCargandoClases] = useState(false)
@@ -110,7 +110,6 @@ export default function ProfesorApp() {
     const h = new Date()
     return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`
   })
-
   const [claseActiva, setClaseActiva]     = useState<any>(null)
   const [resumen, setResumen]             = useState('')
   const [guardando, setGuardando]         = useState(false)
@@ -118,7 +117,6 @@ export default function ProfesorApp() {
   const [resumenExpandido, setResumenExpandido] = useState<string | null>(null)
   const [pantallaModal, setPantallaModal] = useState<'acciones' | 'inasistencia' | 'cancelar' | 'avisoTardia'>('acciones')
   const [avisoCancelacion, setAvisoCancelacion] = useState('')
-
   const [tallerModal, setTallerModal]         = useState<any>(null)
   const [inscritosTaller, setInscritosTaller] = useState<any[]>([])
   const [sesionHoy, setSesionHoy]             = useState<any>(null)
@@ -126,6 +124,7 @@ export default function ProfesorApp() {
   const [resumenTaller, setResumenTaller] = useState('')
   const [guardandoAsistTaller, setGuardandoAsistTaller] = useState(false)
   const [guardandoSesion, setGuardandoSesion] = useState(false)
+  const [eligiendoHonorarioTaller, setEligiendoHonorarioTaller] = useState(false)
 
   useEffect(() => {
     document.body.style.background = '#f8fafc'
@@ -230,30 +229,24 @@ export default function ProfesorApp() {
     const sabado = new Date(hoy); sabado.setDate(hoy.getDate() + diasHastaSabado)
     const fi = fechaHoyLocal()
     const ff = fechaLocal(sabado)
-
-    // ── FIX 1: solo traer programadas/confirmadas en la cola ──
     const { data } = await supabase.from('clases').select(SELECT_CLASES)
       .eq('profesor_id', profesor.id)
       .gte('fecha', fi).lte('fecha', ff)
       .in('estado', ['programada', 'confirmada'])
       .order('fecha').order('hora')
-
     const { data: dataAtrasadas } = await supabase.from('clases').select(SELECT_CLASES)
       .eq('profesor_id', profesor.id)
       .eq('estado', 'confirmada')
       .lt('fecha', fi)
       .order('fecha').order('hora')
-
     const mesT = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`
     const { data: talleresData } = await supabase.from('talleres')
       .select('id, nombre, dia_semana, hora, duracion_min, salones(nombre, sedes(nombre))')
       .eq('profesor_id', profesor.id)
-
     const ids = (talleresData || []).map((t: any) => t.id)
     let talleresConfirmados: any[] = []
     if (ids.length > 0) {
       const hoyStr2 = fechaLocal(new Date())
-      // Use fecha_fin if available, fallback to mes for old records
       const { data: inscrip } = await supabase.from('taller_inscripciones')
         .select('taller_id, mes, fecha_inicio, fecha_fin')
         .in('taller_id', ids).eq('estado', 'activo')
@@ -264,11 +257,7 @@ export default function ProfesorApp() {
           return true
         }).map((i: any) => i.taller_id)
       )
-      // Show ALL talleres the professor has — even without active inscriptions (so programada ones appear)
       const talleresConInscritos = talleresData || []
-      // Load sesion estado for each taller for this week
-      const hoyStr = fechaLocal(new Date())
-      const finSemana = fechaLocal(new Date(new Date().setDate(new Date().getDate() + 6)))
       if (talleresConInscritos.length > 0) {
         const { data: sesiones } = await supabase.from('taller_sesiones')
           .select('taller_id, fecha, estado')
@@ -276,25 +265,19 @@ export default function ProfesorApp() {
         const sesionMap: Record<string, string> = {}
         ;(sesiones || []).forEach((s: any) => { sesionMap[`${s.taller_id}-${s.fecha}`] = s.estado })
         talleresConfirmados = talleresConInscritos.map((t: any) => ({ ...t, _sesionMap: sesionMap }))
-      } else {
-        talleresConfirmados = []
       }
     }
-
     const clasesFinales = [
       ...(dataAtrasadas || []).map((c: any) => ({ ...c, esAtrasada: true })),
       ...(data || [])
     ]
-
     for (let offset = 0; offset <= diasHastaSabado; offset++) {
       const dia = new Date(hoy); dia.setDate(hoy.getDate() + offset)
       const fechaStr = fechaLocal(dia)
       talleresConfirmados.forEach((t: any) => {
         if (DIAS_SEMANA[t.dia_semana] === dia.getDay()) {
           const sesionEstadoHoy = t._sesionMap?.[`${t.id}-${fechaStr}`] || null
-          // Use sesionEstado as the card estado so all downstream logic works
           const estadoTaller = sesionEstadoHoy || 'programada'
-          // Don't show talleres that are already 'dada' in today's list
           if (estadoTaller === 'dada') { /* skip */ } else
           clasesFinales.push({
             id: `taller-${t.id}-${fechaStr}`,
@@ -309,7 +292,6 @@ export default function ProfesorApp() {
         }
       })
     }
-
     clasesFinales.sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`))
     setClases(clasesFinales)
     setCargandoClases(false)
@@ -322,16 +304,12 @@ export default function ProfesorApp() {
     const [a, m] = mes.split('-')
     const ul = new Date(parseInt(a), parseInt(m), 0).getDate()
     const ff = `${mes}-${String(ul).padStart(2,'0')}`
-
-    // Historial: dadas + canceladas — usa clases_con_numero para obtener numero_calculado
     const { data } = await supabase.from('clases_con_numero').select(SELECT_HISTORIAL)
       .eq('profesor_id', profesor.id)
       .gte('fecha', fi).lte('fecha', ff)
       .in('estado', ['dada', 'cancelada'])
       .order('fecha', { ascending: false })
       .order('hora', { ascending: false })
-
-    // Also load talleres dadas for this month
     const { data: talleresProfIds } = await supabase.from('talleres').select('id').eq('profesor_id', profesor.id)
     const tallerIds = (talleresProfIds || []).map((t: any) => t.id)
     let tallerSesiones: any[] = []
@@ -345,7 +323,6 @@ export default function ProfesorApp() {
         .order('fecha', { ascending: false })
       tallerSesiones = ts || []
     }
-
     const tallerClases = tallerSesiones.map((s: any) => ({
       id: `taller-sesion-${s.id}`,
       fecha: s.fecha,
@@ -360,15 +337,12 @@ export default function ProfesorApp() {
       contratos: null, cancelado_por_academia: false, es_cortesia: false,
       honorario_valor: s.honorario_valor ?? null, modalidad: 'taller'
     }))
-
-    // Merge and sort by fecha DESC, hora DESC
     const merged = [...(data || []), ...tallerClases]
       .sort((a, b) => {
         const fechaDiff = b.fecha.localeCompare(a.fecha)
         if (fechaDiff !== 0) return fechaDiff
         return (b.hora || '').localeCompare(a.hora || '')
       })
-
     setClases(merged)
     setCargandoClases(false)
   }
@@ -417,7 +391,6 @@ export default function ProfesorApp() {
     const modalidad = (claseActiva.modalidad || 'presencial').toLowerCase()
     const baseHon   = getValorTarifa(Number(claseActiva.duracion_min), modalidad)
     const honorario = Math.round(baseHon * pct / 100)
-    // Inasistencia: estado='cancelada' + cancelado_por_academia=false
     await supabase.from('clases').update({
       estado: 'cancelada',
       cancelado_por_academia: false,
@@ -489,16 +462,13 @@ export default function ProfesorApp() {
     const { data: sesion } = await supabase.from('taller_sesiones').select('id, fecha, estado, observaciones')
       .eq('taller_id', c.tallerRealId).eq('fecha', c.fecha).maybeSingle()
     setSesionHoy(sesion || null)
-    // If sesion is confirmada or dada, only show confirmed students
     let inscFiltrados = inscFiltradosFecha
     if (sesion?.id && (sesion.estado === 'confirmada' || sesion.estado === 'dada')) {
       const { data: confs } = await supabase.from('taller_confirmaciones')
         .select('inscripcion_id').eq('sesion_id', sesion.id)
-      // Always filter by confirmaciones — if none exist, show empty list
       const confIds = new Set((confs || []).map((c: any) => c.inscripcion_id))
       inscFiltrados = inscFiltradosFecha.filter((ins: any) => confIds.has(ins.id))
     }
-    // Load asistencias first, then set everything together
     let asisMap: Record<string, boolean | null> = {}
     if (sesion?.id) {
       const { data: asis } = await supabase.from('taller_asistencias')
@@ -511,7 +481,6 @@ export default function ProfesorApp() {
   }
 
   async function toggleAsistTaller(inscripcionId: string, asistio: boolean | null) {
-    // Only allowed when session is confirmada or dada
     if (!sesionHoy?.id || (sesionHoy.estado !== 'confirmada' && sesionHoy.estado !== 'dada')) return
     setGuardandoAsistTaller(true)
     const yaExiste = inscripcionId in asistenciasTaller
@@ -533,7 +502,6 @@ export default function ProfesorApp() {
   }
 
   async function marcarSesionTaller(nuevoEstado: string) {
-    // Never allow a professor to confirm — only admins can do that
     if (!tallerModal || nuevoEstado === 'confirmada') return
     setGuardandoSesion(true)
     if (sesionHoy) {
@@ -546,7 +514,6 @@ export default function ProfesorApp() {
       if (data) setSesionHoy(data)
     }
     setGuardandoSesion(false)
-    // If marked as dada, close modal and refresh list so it disappears from hoy
     if (nuevoEstado === 'dada') {
       setTallerModal(null)
       setExito('¡Taller marcado como dado!')
@@ -556,7 +523,7 @@ export default function ProfesorApp() {
 
   function abrirModal(clase: any) {
     if (clase.esTaller) {
-      if (clase.estado === 'programada') return  // blocked — not yet confirmed by admin
+      if (clase.estado === 'programada') return
       abrirTaller(clase); return
     }
     setClaseActiva(clase)
@@ -569,86 +536,96 @@ export default function ProfesorApp() {
     if (vista === 'hoy') cargarHoy(); else cargarHistorial()
   }
 
-  function buildDocContent() {
+  function descargarHonorariosPDF() {
     const [anio, mesNum] = mes.split('-')
     const mesLabel = `${MESES_NOMBRE[parseInt(mesNum)-1]} ${anio}`
+    const mesLabelCap = mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1)
+    const T = '#1a8a8a'
+    const TL = '#e8f5f5'
     const clasesDadas = clases.filter(c => (c.estado === 'dada' && !c.es_cortesia) || (c.estado === 'cancelada' && !c.cancelado_por_academia))
     const totalHon = clasesDadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
-    const filas = clasesDadas.map(c => {
+    const filasPdf: any[] = []
+    clasesDadas.forEach(c => {
       const hon = getHonorario(c)
-      const honLabel = hon === 'pendiente' ? 'Pendiente' : `$${Number(hon).toLocaleString('es-CO')}`
-      const tipoLabel = (c.estado === 'cancelada' && !c.cancelado_por_academia) ? 'Inasistencia' : 'Dada'
-      const numLabel = c.numero_calculado && c.contratos?.total_clases ? ` (${c.numero_calculado}/${c.contratos.total_clases})` : ''
-      return `
-        <tr>
-          <td>${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}</td>
-          <td>${formatHoraAmPm(c.hora)}</td>
-          <td>${nombreCliente(c)}${numLabel}</td>
-          <td>${c.contratos?.instrumentos?.nombre || '—'}</td>
-          <td>${c.duracion_min} min</td>
-          <td>${tipoLabel}</td>
-          <td style="font-weight:600">${honLabel}</td>
-        </tr>
-        ${c.observaciones ? `<tr><td colspan="7" style="padding:0 12px 10px"><div style="background:#f8fafc;border-left:3px solid #b2d8d8;padding:8px 12px;font-size:12px;color:#555;line-height:1.6">📝 ${c.observaciones.replace(/\n/g,' | ')}</div></td></tr>` : ''}
-      `
-    }).join('')
-    return { mesLabel, totalHon, filas, clasesDadas }
-  }
-
-  function descargarPDF() {
-    const { mesLabel, totalHon, filas } = buildDocContent()
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Honorarios ${mesLabel}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;padding:40px;color:#1a1a1a;font-size:13px}
-.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;border-bottom:3px solid #1a8a8a;padding-bottom:20px}
-.logo h1{font-size:22px;color:#1a8a8a;font-weight:800}.logo p{color:#666;font-size:12px;margin-top:4px}
-.info{text-align:right}.info h2{font-size:16px;font-weight:700}.info p{color:#555;font-size:12px;margin-top:3px}
-table{width:100%;border-collapse:collapse;margin-top:20px}thead tr{background:#e8f5f5}
-th{padding:10px 12px;text-align:left;font-size:11px;color:#1a8a8a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}
-td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:top}
-.total{background:#e8f5f5;font-weight:700}.total td{padding:14px 12px;font-size:15px;color:#1a8a8a;border-top:2px solid #1a8a8a}
-.footer{margin-top:40px;border-top:1px solid #e2e8f0;padding-top:16px;font-size:11px;color:#aaa;display:flex;justify-content:space-between}
-@media print{@page{margin:20mm}body{padding:0}}</style>
-</head><body>
-<div class="header"><div class="logo"><h1>Academia Ruby Salamanca</h1><p>Cuenta de cobro de honorarios</p></div>
-<div class="info"><h2>${profesor?.nombre}</h2><p>${mesLabel.charAt(0).toUpperCase()+mesLabel.slice(1)}</p><p>Generado: ${new Date().toLocaleDateString('es-CO')}</p></div></div>
-<table><thead><tr><th>Fecha</th><th>Hora</th><th>Estudiante</th><th>Instrumento</th><th>Duración</th><th>Tipo</th><th>Honorario</th></tr></thead>
-<tbody>${filas||'<tr><td colspan="7" style="text-align:center;color:#aaa;padding:24px">Sin clases este mes</td></tr>'}
-<tr class="total"><td colspan="6">TOTAL HONORARIOS ${mesLabel.toUpperCase()}</td><td>$${totalHon.toLocaleString('es-CO')}</td></tr></tbody></table>
-<div class="footer"><span>Academia Ruby Salamanca</span><span>Portal del profesor</span></div>
-</body></html>`
-    const blob = new Blob([html], { type: 'text/html' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `Honorarios_${profesor?.nombre?.replace(/ /g,'_')}_${mes}.html`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  function descargarWord() {
-    const { mesLabel, totalHon, filas } = buildDocContent()
-    const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-<head><meta charset='UTF-8'><title>Honorarios ${mesLabel}</title>
-<style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#1a1a1a}
-h1{font-size:18pt;color:#1a8a8a}h2{font-size:14pt}
-table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6pt 8pt;font-size:10pt}
-thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:uppercase;font-size:8pt}
-.total{background:#e8f5f5;font-weight:bold;color:#1a8a8a;font-size:12pt}</style></head>
-<body>
-<h1>Academia Ruby Salamanca</h1><p>Cuenta de cobro de honorarios</p><br>
-<h2>${profesor?.nombre}</h2>
-<p>${mesLabel.charAt(0).toUpperCase()+mesLabel.slice(1)} &nbsp;·&nbsp; Generado: ${new Date().toLocaleDateString('es-CO')}</p><br>
-<table><thead><tr><th>Fecha</th><th>Hora</th><th>Estudiante</th><th>Instrumento</th><th>Duración</th><th>Tipo</th><th>Honorario</th></tr></thead>
-<tbody>${filas||'<tr><td colspan="7">Sin clases este mes</td></tr>'}
-<tr class="total"><td colspan="6">TOTAL HONORARIOS ${mesLabel.toUpperCase()}</td><td>$${totalHon.toLocaleString('es-CO')}</td></tr></tbody></table>
-</body></html>`
-    const blob = new Blob(['﻿', html], { type: 'application/msword' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `Honorarios_${profesor?.nombre?.replace(/ /g,'_')}_${mes}.doc`
-    a.click()
-    URL.revokeObjectURL(url)
+      const honStr = hon === 'pendiente' ? 'Pendiente' : `$${Number(hon).toLocaleString('es-CO')}`
+      const tipo = (c.estado === 'cancelada' && !c.cancelado_por_academia) ? 'Inasistencia' : c.esTaller ? 'Taller' : 'Dada'
+      const colorTipo = tipo === 'Inasistencia' ? '#c2410c' : tipo === 'Taller' ? '#7c3aed' : '#854d0e'
+      const num = c.numero_calculado && c.contratos?.total_clases ? `${c.numero_calculado}/${c.contratos.total_clases}` : ''
+      filasPdf.push([
+        { text: `${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}`, fontSize: 9 },
+        { text: formatHoraAmPm(c.hora), fontSize: 9 },
+        { stack: [
+          { text: c.esTaller ? `🎸 ${c.nombreTaller||'Taller'}` : nombreCliente(c), fontSize: 9, bold: true },
+          num ? { text: num, fontSize: 8, color: '#888' } : {}
+        ]},
+        { text: c.contratos?.instrumentos?.nombre || '—', fontSize: 9 },
+        { text: `${c.duracion_min} min`, fontSize: 9 },
+        { text: tipo, fontSize: 8, bold: true, color: colorTipo },
+        { text: honStr, fontSize: 9, bold: true, color: T, alignment: 'right' }
+      ])
+      if (c.observaciones) {
+        filasPdf.push([{
+          text: `📝 ${c.observaciones}`, fontSize: 8, color: '#555',
+          colSpan: 7, fillColor: '#f8fafc', italics: true
+        },{},{},{},{},{},{}])
+      }
+    })
+    const docDef: any = {
+      pageSize: 'A4', pageOrientation: 'portrait',
+      pageMargins: [30, 45, 30, 40],
+      info: { title: `Honorarios ${mesLabelCap} - ${profesor?.nombre}` },
+      content: [
+        { columns: [
+          { stack: [
+            { text: 'Academia Ruby Salamanca', fontSize: 16, bold: true, color: T },
+            { text: 'Cuenta de cobro de honorarios', fontSize: 10, color: '#888', margin: [0,3,0,0] }
+          ]},
+          { stack: [
+            { text: profesor?.nombre || '', fontSize: 12, bold: true, alignment: 'right' },
+            { text: mesLabelCap, fontSize: 10, color: '#888', alignment: 'right', margin: [0,3,0,0] },
+            { text: `Generado: ${new Date().toLocaleDateString('es-CO')}`, fontSize: 9, color: '#aaa', alignment: 'right', margin: [0,2,0,0] }
+          ]}
+        ], margin: [0,0,0,10] },
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 535, y2: 0, lineWidth: 2, lineColor: T }], margin: [0,0,0,14] },
+        { table: {
+            headerRows: 1,
+            widths: [34, 50, '*', 68, 34, 52, 56],
+            body: [
+              [
+                { text: 'FECHA', style: 'th' }, { text: 'HORA', style: 'th' },
+                { text: 'ESTUDIANTE', style: 'th' }, { text: 'INSTRUMENTO', style: 'th' },
+                { text: 'DUR.', style: 'th' }, { text: 'TIPO', style: 'th' },
+                { text: 'HONORARIO', style: 'th' }
+              ],
+              ...(filasPdf.length > 0 ? filasPdf : [[
+                { text: 'Sin clases este mes', colSpan: 7, alignment: 'center', color: '#aaa', fontSize: 10 },
+                {},{},{},{},{},{}
+              ]]),
+              [
+                { text: `TOTAL — ${mesLabel.toUpperCase()}`, colSpan: 6, bold: true, fontSize: 10, color: T, fillColor: TL },
+                {},{},{},{},{},
+                { text: `$${totalHon.toLocaleString('es-CO')}`, bold: true, fontSize: 11, color: T, fillColor: TL, alignment: 'right' }
+              ]
+            ]
+          },
+          layout: {
+            fillColor: (i: number) => i === 0 ? TL : null,
+            hLineWidth: () => 0.5, vLineWidth: () => 0,
+            hLineColor: () => '#e8edf2',
+            paddingLeft: () => 6, paddingRight: () => 6,
+            paddingTop: () => 5, paddingBottom: () => 5
+          }
+        }
+      ],
+      styles: { th: { fontSize: 8, bold: true, color: T } },
+      footer: (page: number, pages: number) => ({
+        columns: [
+          { text: 'Academia Ruby Salamanca · Portal del Profesor', fontSize: 8, color: '#aaa', margin: [30,0,0,0] },
+          { text: `${page} / ${pages}`, fontSize: 8, color: '#aaa', alignment: 'right', margin: [0,0,30,0] }
+        ], margin: [0,8,0,0]
+      })
+    }
+    pdfMake.createPdf(docDef).download(`Honorarios_${profesor?.nombre?.replace(/ /g,'_')}_${mes}.pdf`)
   }
 
   if (cargandoAuth) return (
@@ -716,15 +693,11 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
         .ba:active{transform:scale(0.97);}
         textarea:focus{border-color:${TEAL}!important;outline:none!important;box-shadow:0 0 0 3px ${TEAL}22!important;}
       `}</style>
-
       <div style={{ width:'100%', maxWidth:'480px', height:'100%', display:'flex', flexDirection:'column', background:'#f8fafc' }}>
-
         <div style={{ background:TEAL, padding:'18px 20px 0', flexShrink:0 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-              <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca"
-                style={{ height:'36px', objectFit:'contain', filter:'brightness(0) invert(1)', opacity:0.9 }} />
-            </div>
+            <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca"
+              style={{ height:'36px', objectFit:'contain', filter:'brightness(0) invert(1)', opacity:0.9 }} />
             <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
               <span style={{ color:'rgba(255,255,255,0.8)', fontSize:'14px', fontWeight:'600' }}>{profesor.nombre.split(' ')[0]}</span>
               <button onClick={() => supabase.auth.signOut()}
@@ -747,7 +720,6 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
         </div>
 
         <div style={{ flex:1, overflow:'auto', padding:'16px' }}>
-
           {exito && (
             <div style={{ background:'#dcfce7', border:'1px solid #86efac', borderRadius:'14px', padding:'13px 16px', marginBottom:'14px', color:'#166534', fontSize:'14px', fontWeight:'700', textAlign:'center', animation:'fadeUp 0.3s ease' }}>
               ✓ {exito}
@@ -813,14 +785,10 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
                 </div>
               )}
               {!cargandoClases && clases.length > 0 && (
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'16px' }}>
-                  <button onClick={descargarPDF}
-                    style={{ padding:'13px', background:TEAL, color:'white', border:'none', borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
-                    🖨️ Descargar PDF
-                  </button>
-                  <button onClick={descargarWord}
-                    style={{ padding:'13px', background:'#1d4ed8', color:'white', border:'none', borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
-                    📄 Descargar Word
+                <div style={{ marginBottom:'16px' }}>
+                  <button onClick={descargarHonorariosPDF}
+                    style={{ width:'100%', padding:'13px', background:TEAL, color:'white', border:'none', borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
+                    🖨️ Descargar PDF de honorarios
                   </button>
                 </div>
               )}
@@ -861,7 +829,7 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
             </div>
             <div style={{ background:'#fafbfc', borderRadius:'14px', padding:'14px', marginBottom:'20px', border:'1px solid #f1f5f9' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
-                <p style={{ margin:0, fontSize:'13px', fontWeight:'700', color:'#555' }}>Sesión de hoy</p>
+                <p style={{ margin:0, fontSize:'13px', fontWeight:'700', color:'#555' }}>Sesión del {tallerModal?.fecha || ''}</p>
                 <span style={{ padding:'3px 10px', borderRadius:'20px', fontSize:'11px', fontWeight:'700',
                   background: sesionHoy?.estado === 'dada' ? '#fefce8' : sesionHoy?.estado === 'cancelada' ? '#fee2e2' : sesionHoy?.estado === 'confirmada' ? '#dcfce7' : '#f3f4f6',
                   color: sesionHoy?.estado === 'dada' ? '#854d0e' : sesionHoy?.estado === 'cancelada' ? '#991b1b' : sesionHoy?.estado === 'confirmada' ? '#166534' : '#6b7280' }}>
@@ -879,7 +847,6 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
                     const hay = Object.values(asistenciasTaller).some(v => v === true)
                     if (!hay) { alert('Selecciona al menos un asistente antes de marcar el taller como dado'); return }
                     await marcarSesionTaller('dada')
-                    // Auto-save honorario based on attendee count
                     const sid = sesionHoy?.id
                     if (sid) {
                       const numAsis = Object.values(asistenciasTaller).filter(v => v === true).length
@@ -1081,9 +1048,7 @@ thead{background:#e8f5f5}th{color:#1a8a8a;font-weight:bold;text-transform:upperc
                         {esTardia ? '⚠️ Cancelación tardía' : '✓ Cancelación a tiempo'}
                       </p>
                       <p style={{ margin:0, fontSize:'13px', color: esTardia ? '#92400e' : '#166634' }}>
-                        {esTardia
-                          ? `Avisar a la administración urgentemente`
-                          : 'Se requiere reasignar esta clase a otro profesor. Avisar a la administración'}
+                        {esTardia ? 'Avisar a la administración urgentemente' : 'Se requiere reasignar esta clase a otro profesor. Avisar a la administración'}
                       </p>
                     </div>
                   )
@@ -1274,13 +1239,12 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
           <span style={{ padding:'4px 10px', borderRadius:'20px', fontSize:'11px', fontWeight:'700', background:badge.bg, color:badge.color, whiteSpace:'nowrap' }}>
             {badge.label}
           </span>
-          {/* Conteo x/y — solo en historial (mostrarFecha=true) para clases dadas reales */}
           {mostrarFecha && !c.esTaller && !c.es_cortesia && c.numero_calculado && c.contratos?.total_clases && (
             <span style={{ fontSize:'12px', fontWeight:'800', color:TEAL, background:'#e8f5f5', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
               {c.numero_calculado}/{c.contratos.total_clases}
             </span>
           )}
-          {mostrarHonorario && !c.esTaller && (
+          {mostrarHonorario && (
             honorario === 'pendiente'
               ? <span style={{ fontSize:'11px', fontWeight:'700', color:'#c2410c', background:'#fff7ed', padding:'3px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>⏳ Pendiente</span>
               : (honorario as number) > 0
