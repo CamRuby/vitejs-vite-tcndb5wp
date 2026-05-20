@@ -211,7 +211,9 @@ export default function Importar() {
         const fechaInicio = filasOrdenadas[0].fecha
         const fechaFin = filasOrdenadas[filasOrdenadas.length - 1].fecha
         const duracionComun = filasBloque[0].duracion
-        const clasesDadas = filasBloque.filter(f => !esInasistencia(f.obs) && !esCortesiaObs(f.numClase, f.obs))
+        const clasesDadas = estado === 'archivado'
+          ? filasBloque  // all count as dadas for archivo
+          : filasBloque.filter(f => !esInasistencia(f.obs) && !(f.numClase === '0' || f.numClase === '0.0' || /prueba|cortesia/i.test(f.obs || '')))
         const clasesTomadas = clasesDadas.length
 
         // Buscar sede más frecuente → salon_id
@@ -239,8 +241,11 @@ export default function Importar() {
 
         // Insertar clases
         for (const fila of filasBloque) {
-          const cortesia = esCortesiaObs(fila.numClase, fila.obs)
-          const inasist = esInasistencia(fila.obs)
+          // Archivo: all dada, no cortesia/inasistencia distinction
+          // Activo/Activo2: apply cortesia (numClase=0, 'prueba', 'cortesia') and inasistencia logic
+          const esArchivo = estado === 'archivado'
+          const cortesia = esArchivo ? false : (fila.numClase === '0' || fila.numClase === '0.0' || /prueba|cortesia/i.test(fila.obs || ''))
+          const inasist  = esArchivo ? false : esInasistencia(fila.obs)
           const { error: clErr } = await supabase.from('clases').insert({
             contrato_id: (ct as any).id,
             profesor_id: profesorId,
@@ -250,7 +255,7 @@ export default function Importar() {
             estado: inasist ? 'cancelada' : 'dada',
             es_cortesia: cortesia,
             cancelado_por_academia: inasist ? false : null,
-            observaciones: fila.obs && !inasist ? fila.obs : null,
+            observaciones: fila.obs ? fila.obs : null,
             modalidad: fila.sede.toLowerCase().includes('domicilio') ? 'domicilio' : 'presencial',
           })
           if (clErr) { errores.push(`${fila.fecha} ${fila.grupo}: ${clErr.message}`); saltadas++ }
@@ -469,17 +474,17 @@ export default function Importar() {
                       <td style={{ padding: '10px 14px', fontSize: '13px', fontWeight: '600' }}>{g.clienteNombre}</td>
                       <td style={{ padding: '10px 14px', fontSize: '12px', color: '#92400e' }}>
                         {g.filasArchivo.length > 0
-                          ? <>{g.filasArchivo.length} clases · {g.filasArchivo.filter(f => !esInasistencia(f.obs) && !esCortesiaObs(f.numClase, f.obs)).length} dadas</>
+                          ? <>{g.filasArchivo.length} clases · {g.filasArchivo.length} dadas</>
                           : <span style={{ color: '#ccc' }}>—</span>}
                       </td>
                       <td style={{ padding: '10px 14px', fontSize: '12px', color: TEAL }}>
                         {g.filasActivo.length > 0
-                          ? <>{g.filasActivo.length} clases · {g.filasActivo.filter(f => !esInasistencia(f.obs) && !esCortesiaObs(f.numClase, f.obs)).length} dadas</>
+                          ? <>{g.filasActivo.length} clases · {g.filasActivo.filter(f => !esInasistencia(f.obs) && !(f.numClase === '0' || f.numClase === '0.0' || /prueba|cortesia/i.test(f.obs || ''))).length} dadas</>
                           : <span style={{ color: '#ccc' }}>—</span>}
                       </td>
                       <td style={{ padding: '10px 14px', fontSize: '12px', color: '#7c3aed' }}>
                         {g.filasActivo2.length > 0
-                          ? <>{g.filasActivo2.length} clases · {g.filasActivo2.filter(f => !esInasistencia(f.obs) && !esCortesiaObs(f.numClase, f.obs)).length} dadas</>
+                          ? <>{g.filasActivo2.length} clases · {g.filasActivo2.filter(f => !esInasistencia(f.obs) && !(f.numClase === '0' || f.numClase === '0.0' || /prueba|cortesia/i.test(f.obs || ''))).length} dadas</>
                           : <span style={{ color: '#ccc' }}>—</span>}
                       </td>
                     </tr>
