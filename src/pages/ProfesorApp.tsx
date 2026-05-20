@@ -943,16 +943,10 @@ export default function ProfesorApp() {
               )}
               {!cargandoClases && clases.length > 0 && (
                 <div style={{ marginBottom:'16px' }}>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-                    <button onClick={descargarHonorariosPDF}
-                      style={{ padding:'13px', background:TEAL, color:'white', border:'none', borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
-                      🖨️ PDF honorarios
-                    </button>
-                    <button onClick={descargarCuentaCobro}
-                      style={{ padding:'13px', background:'#1d4ed8', color:'white', border:'none', borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
-                      📄 Cuenta de cobro
-                    </button>
-                  </div>
+                  <button onClick={descargarCuentaCobro}
+                    style={{ width:'100%', padding:'13px', background:TEAL, color:'white', border:'none', borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
+                    📄 Descargar cuenta de cobro
+                  </button>
                 </div>
               )}
               {cargandoClases && <p style={{ textAlign:'center', color:'#9ca3af', padding:'50px 0' }}>Cargando...</p>}
