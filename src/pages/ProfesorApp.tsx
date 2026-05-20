@@ -182,6 +182,11 @@ export default function ProfesorApp() {
     const { data } = await supabase.from('profesor_tarifas').select('*')
       .eq('profesor_id', profesor.id).eq('taller_grupal', false)
     setTarifas(data || [])
+    // Also refresh professor data to get banking info
+    const { data: profData } = await supabase.from('profesores')
+      .select('id, nombre, ciudad, email, cc, banco, tipo_cuenta, numero_cuenta')
+      .eq('id', profesor.id).single()
+    if (profData) setProfesor((prev: any) => ({ ...prev, ...profData }))
   }
 
   function getHonorario(c: any): number | 'pendiente' {
@@ -536,6 +541,158 @@ export default function ProfesorApp() {
     if (vista === 'hoy') cargarHoy(); else cargarHistorial()
   }
 
+  function numerosALetras(n: number): string {
+    const unidades = ['','un','dos','tres','cuatro','cinco','seis','siete','ocho','nueve',
+      'diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve']
+    const decenas = ['','diez','veinte','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa']
+    const centenas = ['','ciento','doscientos','trescientos','cuatrocientos','quinientos',
+      'seiscientos','setecientos','ochocientos','novecientos']
+    if (n === 0) return 'cero'
+    if (n === 100) return 'cien'
+    if (n < 20) return unidades[n]
+    if (n < 100) return decenas[Math.floor(n/10)] + (n%10 ? ' y ' + unidades[n%10] : '')
+    if (n < 1000) return centenas[Math.floor(n/100)] + (n%100 ? ' ' + numerosALetras(n%100) : '')
+    if (n < 1000000) {
+      const miles = Math.floor(n/1000)
+      const resto = n%1000
+      return (miles === 1 ? 'mil' : numerosALetras(miles) + ' mil') + (resto ? ' ' + numerosALetras(resto) : '')
+    }
+    return n.toLocaleString('es-CO')
+  }
+
+  function descargarCuentaCobro() {
+    const [anio, mesNum] = mes.split('-')
+    const mesLabel = `${MESES_NOMBRE[parseInt(mesNum)-1]} ${anio}`
+    const mesLabelCap = mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1)
+    const primerDia = `01 de ${MESES_NOMBRE[parseInt(mesNum)-1]} de ${anio}`
+    const ultimoDia = new Date(parseInt(anio), parseInt(mesNum), 0).getDate()
+    const ultimoDiaLabel = `${ultimoDia} de ${MESES_NOMBRE[parseInt(mesNum)-1]} de ${anio}`
+    const fechaHoy = new Date()
+    const fechaEmision = `${fechaHoy.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}`
+
+    const T = '#1a1a1a'
+    const clasesDadas = clases.filter(c => (c.estado === 'dada' && !c.es_cortesia) || (c.estado === 'cancelada' && !c.cancelado_por_academia))
+    const totalHon = clasesDadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
+    const totalEnLetras = numerosALetras(totalHon)
+
+    // Resumen de clases por duración
+    const porDuracion: Record<number, number> = {}
+    clasesDadas.filter(c => c.estado === 'dada' && !c.es_cortesia && !c.esTaller).forEach(c => {
+      const d = Number(c.duracion_min) || 60
+      porDuracion[d] = (porDuracion[d] || 0) + 1
+    })
+    const resumenClases = Object.entries(porDuracion)
+      .sort(([a],[b]) => Number(b)-Number(a))
+      .map(([dur, qty]) => `${qty} clase${qty>1?'s':''} de (${dur} minutos)`)
+      .join(', ')
+    const talleresDados = clasesDadas.filter(c => c.esTaller)
+    const tallerStr = talleresDados.length > 0 ? ` y ${talleresDados.length} sesión${talleresDados.length>1?'es':''} de taller` : ''
+
+    // Rows for class detail
+    const filaDetalle: any[] = []
+    clasesDadas.forEach(c => {
+      const hon = getHonorario(c)
+      const honStr = hon === 'pendiente' ? '—' : `$${Number(hon).toLocaleString('es-CO')}`
+      const tipo = c.esTaller ? 'Taller' : (c.estado === 'cancelada' && !c.cancelado_por_academia) ? 'Inasistencia' : 'Dada'
+      const nombre = c.esTaller ? `🎸 ${c.nombreTaller||'Taller'}` : nombreCliente(c)
+      const num = c.numero_calculado && c.contratos?.total_clases ? `${c.numero_calculado}/${c.contratos.total_clases}` : ''
+      filaDetalle.push([
+        { text: `${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}`, fontSize: 8 },
+        { stack: [
+          { text: nombre, fontSize: 8, bold: true },
+          num ? { text: num, fontSize: 7, color: '#888' } : {}
+        ]},
+        { text: c.contratos?.instrumentos?.nombre || '—', fontSize: 8 },
+        { text: `${c.duracion_min} min`, fontSize: 8, alignment: 'center' },
+        { text: tipo, fontSize: 7, color: tipo === 'Inasistencia' ? '#c2410c' : tipo === 'Taller' ? '#7c3aed' : '#666' },
+        { text: honStr, fontSize: 8, alignment: 'right', bold: true }
+      ])
+      if (c.observaciones) {
+        filaDetalle.push([{
+          text: `    📝 ${c.observaciones}`, fontSize: 7, color: '#555',
+          colSpan: 6, fillColor: '#f8fafc', italics: true
+        },{},{},{},{},{}])
+      }
+    })
+
+    const nombre = profesor?.nombre || '—'
+    const cc = profesor?.cc || '—'
+    const ciudad = profesor?.ciudad || 'Bogotá'
+    const banco = profesor?.banco || '—'
+    const tipoCuenta = profesor?.tipo_cuenta || 'Ahorros'
+    const numCuenta = profesor?.numero_cuenta || '—'
+
+    const docDef: any = {
+      pageSize: 'A4',
+      pageMargins: [60, 60, 60, 60],
+      info: { title: `Cuenta de Cobro ${mesLabelCap} - ${nombre}` },
+      content: [
+        // Fecha y ciudad
+        { text: `${ciudad}, ${fechaEmision}`, fontSize: 10, margin: [0,0,0,20] },
+        // Destinatario
+        { text: 'IDEAL BUSSINESS S.A.S.', fontSize: 11, bold: true, alignment: 'center' },
+        { text: 'N.I.T. 901.257.419-4', fontSize: 10, alignment: 'center', margin: [0,2,0,2] },
+        { text: 'Debe a:', fontSize: 10, alignment: 'center', margin: [0,10,0,4] },
+        { text: nombre, fontSize: 11, bold: true, alignment: 'center' },
+        { text: `C.C. No. ${cc} de ${ciudad}.`, fontSize: 10, alignment: 'center', margin: [0,2,0,20] },
+        // Valor
+        { text: 'La Suma de:', fontSize: 10, alignment: 'center', margin: [0,0,0,6] },
+        { text: `$${totalHon.toLocaleString('es-CO')} (${totalEnLetras} pesos.)`, fontSize: 12, bold: true, alignment: 'center', margin: [0,0,0,20] },
+        // Concepto header
+        { text: 'Por concepto de:', fontSize: 10, alignment: 'center', margin: [0,0,0,8] },
+        {
+          text: `Clases dictadas (${resumenClases}${tallerStr}) individual en modalidad presencial durante el periodo comprendido entre el `,
+          fontSize: 10, alignment: 'center', margin: [0,0,0,4]
+        },
+        {
+          text: `${primerDia} al ${ultimoDiaLabel} del año ${anio}.`,
+          fontSize: 10, bold: true, alignment: 'center', margin: [0,0,0,16]
+        },
+        // Detalle de clases
+        filaDetalle.length > 0 ? {
+          table: {
+            headerRows: 1,
+            widths: [34, '*', 70, 34, 54, 52],
+            body: [
+              [
+                { text: 'FECHA', style: 'dth' }, { text: 'ESTUDIANTE', style: 'dth' },
+                { text: 'INSTRUMENTO', style: 'dth' }, { text: 'DUR.', style: 'dth' },
+                { text: 'TIPO', style: 'dth' }, { text: 'HONORARIO', style: 'dth' }
+              ],
+              ...filaDetalle,
+              [
+                { text: 'TOTAL', colSpan: 5, bold: true, fontSize: 9, fillColor: '#f1f5f9', alignment: 'right' },
+                {},{},{},{},
+                { text: `$${totalHon.toLocaleString('es-CO')}`, bold: true, fontSize: 10, fillColor: '#f1f5f9', alignment: 'right' }
+              ]
+            ]
+          },
+          layout: {
+            fillColor: (i: number) => i === 0 ? '#f1f5f9' : null,
+            hLineWidth: () => 0.5, vLineWidth: () => 0,
+            hLineColor: () => '#e0e0e0',
+            paddingLeft: () => 5, paddingRight: () => 5,
+            paddingTop: () => 4, paddingBottom: () => 4
+          },
+          margin: [0, 0, 0, 20]
+        } : {},
+        // Datos bancarios
+        {
+          text: `Favor efectuar el pago a nombre de ${nombre} C.C. ${cc} a la cuenta de ${tipoCuenta.toLowerCase()} No. ${numCuenta} de ${banco}`,
+          fontSize: 10, margin: [0, 0, 0, 40]
+        },
+        // Firma
+        { text: 'Cordialmente', fontSize: 10, margin: [0,0,0,50] },
+        { text: nombre, fontSize: 10 },
+        { text: `C.C. ${cc}`, fontSize: 10, margin: [0,2,0,0] }
+      ],
+      styles: {
+        dth: { fontSize: 8, bold: true, fillColor: '#f1f5f9', color: '#333' }
+      }
+    }
+    pdfMake.createPdf(docDef).download(`CuentaCobro_${nombre.replace(/ /g,'_')}_${mes}.pdf`)
+  }
+
   function descargarHonorariosPDF() {
     const [anio, mesNum] = mes.split('-')
     const mesLabel = `${MESES_NOMBRE[parseInt(mesNum)-1]} ${anio}`
@@ -786,10 +943,16 @@ export default function ProfesorApp() {
               )}
               {!cargandoClases && clases.length > 0 && (
                 <div style={{ marginBottom:'16px' }}>
-                  <button onClick={descargarHonorariosPDF}
-                    style={{ width:'100%', padding:'13px', background:TEAL, color:'white', border:'none', borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
-                    🖨️ Descargar PDF de honorarios
-                  </button>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                    <button onClick={descargarHonorariosPDF}
+                      style={{ padding:'13px', background:TEAL, color:'white', border:'none', borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
+                      🖨️ PDF honorarios
+                    </button>
+                    <button onClick={descargarCuentaCobro}
+                      style={{ padding:'13px', background:'#1d4ed8', color:'white', border:'none', borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
+                      📄 Cuenta de cobro
+                    </button>
+                  </div>
                 </div>
               )}
               {cargandoClases && <p style={{ textAlign:'center', color:'#9ca3af', padding:'50px 0' }}>Cargando...</p>}
