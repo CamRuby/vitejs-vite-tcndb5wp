@@ -378,6 +378,8 @@ export default function Profesores() {
                   <select value={form.tipo_cuenta} onChange={e => setForm({ ...form, tipo_cuenta: e.target.value })} style={fS}>
                     <option value="Ahorros">Ahorros</option>
                     <option value="Corriente">Corriente</option>
+                    <option value="Nequi">Nequi</option>
+                    <option value="Daviplata">Daviplata</option>
                   </select>
                 </div>
               </div>
@@ -452,6 +454,8 @@ export default function Profesores() {
                     <select value={form.tipo_cuenta} onChange={e => setForm({ ...form, tipo_cuenta: e.target.value })} style={fS}>
                       <option value="Ahorros">Ahorros</option>
                       <option value="Corriente">Corriente</option>
+                      <option value="Nequi">Nequi</option>
+                      <option value="Daviplata">Daviplata</option>
                     </select>
                   </div>
                 </div>
