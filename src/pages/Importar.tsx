@@ -32,8 +32,7 @@ type GrupoCliente = {
   filasArchivo: FilaExcel[]
   filasActivo: FilaExcel[]
   filasActivo2: FilaExcel[]
-  // contratos a crear/vincular
-  contratoArchivoId: string | null  // existente o a crear
+  contratoArchivoId: string | null
   contratoActivoId: string | null
   contratoActivo2Id: string | null
 }
@@ -103,13 +102,29 @@ export default function Importar() {
   const [clientesDB, setClientesDB] = useState<any[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Cache de salon_id por nombre de sede para no repetir consultas
+  const salonCache = useRef<Record<string, string | null>>({})
+
+  async function buscarSalonPorSede(sede: string): Promise<string | null> {
+    const key = normalizar(sede.split(' ')[0])
+    if (key in salonCache.current) return salonCache.current[key]
+    const { data } = await supabase
+      .from('salones')
+      .select('id, sedes(nombre)')
+      .ilike('sedes.nombre', `%${sede.split(' ')[0]}%`)
+      .limit(1)
+    const id = (data?.[0] as any)?.id || null
+    salonCache.current[key] = id
+    return id
+  }
+
   async function handleFile(file: File) {
     setError(''); setCargando(true)
+    salonCache.current = {}
     try {
       const ab = await file.arrayBuffer()
       const wb = XLSX.read(ab, { type: 'array', cellDates: true, UTC: true })
       const ws = wb.Sheets[wb.SheetNames[0]]
-      // Use raw:true to avoid stopping at empty rows, handle dates manually
       const raw: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
 
       const profNombre = raw[1]?.[1] ? String(raw[1][1]).trim() : ''
@@ -119,7 +134,6 @@ export default function Importar() {
       for (let i = 3; i < raw.length; i++) {
         const r = raw[i]
         if (!r) continue
-        // Skip rows with no date AND no group (truly empty rows)
         if (!r[0] && !r[1]) continue
         const fecha = excelDateToISO(r[0])
         if (!fecha) continue
@@ -148,7 +162,6 @@ export default function Importar() {
       )
       setProfesorId(prof?.id || null)
 
-      // Mapear grupos únicos a clientes
       const gruposUnicos = [...new Set(parsed.map(f => f.grupo))]
       const nuevosMapeos: Mapeo[] = gruposUnicos.map(grupo => {
         const normGrupo = normalizar(grupo)
@@ -175,7 +188,6 @@ export default function Importar() {
   async function generarPreview() {
     setCargando(true)
     const mapPorGrupo = Object.fromEntries(mapeos.map(m => [m.grupo, m]))
-    // Agrupar filas por cliente
     const porCliente: Record<string, GrupoCliente> = {}
     for (const fila of filas) {
       const mapeo = mapPorGrupo[fila.grupo]
@@ -201,10 +213,11 @@ export default function Importar() {
 
   async function importar() {
     setCargando(true)
+    salonCache.current = {}
     let insertadas = 0; let saltadas = 0; const errores: string[] = []
 
     for (const gc of grupos) {
-      // Helper: crear contrato y sus clases
+
       async function procesarBloque(filasBloque: FilaExcel[], estado: 'archivado' | 'activo') {
         if (filasBloque.length === 0) return
         const filasOrdenadas = [...filasBloque].sort((a, b) => a.fecha.localeCompare(b.fecha))
@@ -212,26 +225,17 @@ export default function Importar() {
         const fechaFin = filasOrdenadas[filasOrdenadas.length - 1].fecha
         const duracionComun = filasBloque[0].duracion
         const clasesDadas = estado === 'archivado'
-          ? filasBloque  // all count as dadas for archivo
+          ? filasBloque
           : filasBloque.filter(f => !esInasistencia(f.obs) && !(f.numClase === '0' || f.numClase === '0.0' || /prueba|cortesia/i.test(f.obs || '')))
         const clasesTomadas = clasesDadas.length
 
-        // Buscar sede más frecuente → salon_id
-        const sedes: Record<string, number> = {}
-        filasBloque.forEach(f => { if (f.sede) sedes[f.sede] = (sedes[f.sede] || 0) + 1 })
-        const sedeNombre = Object.entries(sedes).sort((a,b) => b[1]-a[1])[0]?.[0] || ''
-        const { data: salonData } = await supabase.from('salones')
-          .select('id, sedes(nombre)').ilike('sedes.nombre', `%${sedeNombre.split(' ')[0]}%`).limit(1)
-        const salonId = (salonData?.[0] as any)?.id || null
-
-        // Crear contrato
+        // Crear contrato SIN salon_id (no aplica a nivel de contrato)
         const { data: ct, error: ctErr } = await supabase.from('contratos').insert({
           cliente_id: gc.clienteId,
           profesor_id: profesorId,
-          salon_id: salonId,
           estado,
           duracion_min: duracionComun,
-          total_clases: estado === 'activo' ? 0 : clasesTomadas, // admin completará total en activo
+          total_clases: estado === 'activo' ? 0 : clasesTomadas,
           clases_tomadas: clasesTomadas,
           fecha_inicio: fechaInicio,
           fecha_fin: estado === 'archivado' ? fechaFin : null,
@@ -239,16 +243,18 @@ export default function Importar() {
         }).select().single()
         if (ctErr || !ct) { errores.push(`Error creando contrato ${gc.clienteNombre}: ${ctErr?.message}`); return }
 
-        // Insertar clases
+        // Insertar clases con salon_id según la sede de cada fila
         for (const fila of filasBloque) {
-          // Archivo: all dada, no cortesia/inasistencia distinction
-          // Activo/Activo2: apply cortesia (numClase=0, 'prueba', 'cortesia') and inasistencia logic
+          const salonId = fila.sede ? await buscarSalonPorSede(fila.sede) : null
+
           const esArchivo = estado === 'archivado'
           const cortesia = esArchivo ? false : (fila.numClase === '0' || fila.numClase === '0.0' || /prueba|cortesia/i.test(fila.obs || ''))
           const inasist  = esArchivo ? false : esInasistencia(fila.obs)
+
           const { error: clErr } = await supabase.from('clases').insert({
             contrato_id: (ct as any).id,
             profesor_id: profesorId,
+            salon_id: salonId,
             fecha: fila.fecha,
             hora: '00:00:00',
             duracion_min: fila.duracion,
@@ -318,7 +324,6 @@ export default function Importar() {
         {/* PASO 1: Subir */}
         {paso === 'subir' && (
           <div>
-            {/* Instrucciones */}
             <div style={{ background: TEAL_LIGHT, borderRadius: '14px', padding: '20px 24px', marginBottom: '24px', maxWidth: '680px', border: `1px solid ${TEAL_MID}` }}>
               <p style={{ margin: '0 0 12px', fontSize: '14px', fontWeight: '700', color: TEAL }}>📋 Estructura requerida del Excel</p>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
