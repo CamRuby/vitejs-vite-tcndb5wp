@@ -161,7 +161,7 @@ export default function ProfesorApp() {
 
   async function buscarProfesor(email: string) {
     const { data } = await supabase.from('profesores')
-      .select('id, nombre, ciudad, email, cc, banco, tipo_cuenta, numero_cuenta')
+      .select('id, nombre, ciudad, ciudad_cc, email, cc, banco, tipo_cuenta, numero_cuenta')
       .ilike('email', email.trim()).single()
     setProfesor(data || null)
     setCargandoAuth(false)
@@ -614,6 +614,7 @@ export default function ProfesorApp() {
     const nombre = profesor?.nombre || '—'
     const cc = profesor?.cc || '—'
     const ciudad = profesor?.ciudad || 'Bogotá'
+    const ciudadCC = profesor?.ciudad_cc || ciudad
     const banco = profesor?.banco || '—'
     const tipoCuenta = profesor?.tipo_cuenta || 'Ahorros'
     const numCuenta = profesor?.numero_cuenta || '—'
@@ -630,7 +631,7 @@ export default function ProfesorApp() {
         { text: 'N.I.T. 901.257.419-4', fontSize: 10, alignment: 'center', margin: [0,2,0,2] },
         { text: 'Debe a:', fontSize: 10, alignment: 'center', margin: [0,10,0,4] },
         { text: nombre, fontSize: 11, bold: true, alignment: 'center' },
-        { text: `C.C. No. ${cc} de ${ciudad}.`, fontSize: 10, alignment: 'center', margin: [0,2,0,20] },
+        { text: `C.C. No. ${cc} de ${ciudadCC}.`, fontSize: 10, alignment: 'center', margin: [0,2,0,20] },
         // Valor
         { text: 'La Suma de:', fontSize: 10, alignment: 'center', margin: [0,0,0,6] },
         { text: `$${totalHon.toLocaleString('es-CO')} (${totalEnLetras} pesos.)`, fontSize: 12, bold: true, alignment: 'center', margin: [0,0,0,20] },
