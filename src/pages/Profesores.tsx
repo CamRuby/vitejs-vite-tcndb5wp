@@ -34,7 +34,7 @@ export default function Profesores() {
   const [prof, setProf] = useState<any>(null)
   const [cargando, setCargando] = useState(false)
 
-  const fVacio = { nombre: '', telefono: '', email: '', ciudad: 'Bogotá', activo: true, cedula: '', banco: '', tipo_cuenta: 'Ahorros', numero_cuenta: '' }
+  const fVacio = { nombre: '', telefono: '', email: '', ciudad: 'Bogotá', ciudad_cc: 'Bogotá', activo: true, cc: '', banco: '', tipo_cuenta: 'Ahorros', numero_cuenta: '' }
   const [form, setForm] = useState<any>(fVacio)
   const [guardando, setGuardando] = useState(false)
   const [errForm, setErrForm] = useState('')
@@ -69,7 +69,14 @@ export default function Profesores() {
 
   async function cargarProfesores() {
     setCargando(true)
-    const { data } = await supabase.from('profesores').select('id, nombre, telefono, email, ciudad, activo, cedula, banco, tipo_cuenta, numero_cuenta').order('nombre')
+    const { data, error } = await supabase.from('profesores').select('id, nombre, telefono, email, ciudad, ciudad_cc, activo, cc, banco, tipo_cuenta, numero_cuenta').order('nombre')
+    if (error) {
+      // Fallback: query without new columns in case they don't exist yet
+      const { data: data2 } = await supabase.from('profesores').select('id, nombre, telefono, email, ciudad, activo').order('nombre')
+      setProfesores(data2 || [])
+      setCargando(false)
+      return
+    }
     setProfesores(data || [])
     setCargando(false)
   }
@@ -79,7 +86,7 @@ export default function Profesores() {
     const { data: c } = await supabase.from('profesores').select('*').eq('id', p.id).single()
     const pr = c || p
     setProf(pr)
-    setForm({ nombre: pr.nombre || '', telefono: pr.telefono || '', email: pr.email || '', ciudad: pr.ciudad || 'Bogotá', activo: pr.activo !== false, cedula: pr.cedula || '', banco: pr.banco || '', tipo_cuenta: pr.tipo_cuenta || 'Ahorros', numero_cuenta: pr.numero_cuenta || '' })
+    setForm({ nombre: pr.nombre || '', telefono: pr.telefono || '', email: pr.email || '', ciudad: pr.ciudad || 'Bogotá', ciudad_cc: pr.ciudad_cc || 'Bogotá', activo: pr.activo !== false, cc: pr.cc || '', banco: pr.banco || '', tipo_cuenta: pr.tipo_cuenta || 'Ahorros', numero_cuenta: pr.numero_cuenta || '' })
     const { data: d } = await supabase.from('profesor_disponibilidad').select('*').eq('profesor_id', p.id).order('dia_semana')
     setDisponibilidad(d || [])
     const { data: t } = await supabase.from('profesor_tarifas').select('*').eq('profesor_id', p.id).order('modalidad').order('duracion_min')
@@ -157,7 +164,7 @@ export default function Profesores() {
   async function guardar() {
     if (!form.nombre.trim()) { setErrForm('El nombre es obligatorio'); return }
     setGuardando(true); setErrForm('')
-    const payload = { nombre: form.nombre.trim(), telefono: form.telefono || null, email: form.email || null, ciudad: form.ciudad, activo: form.activo, cedula: form.cedula || null, banco: form.banco || null, tipo_cuenta: form.tipo_cuenta || null, numero_cuenta: form.numero_cuenta || null }
+    const payload = { nombre: form.nombre.trim(), telefono: form.telefono || null, email: form.email || null, ciudad: form.ciudad, ciudad_cc: form.ciudad_cc || null, activo: form.activo, cc: form.cc || null, banco: form.banco || null, tipo_cuenta: form.tipo_cuenta || null, numero_cuenta: form.numero_cuenta || null }
     if (modo === 'nuevo') {
       const { data, error } = await supabase.from('profesores').insert(payload).select().single()
       if (error) { setErrForm('Error: ' + error.message); setGuardando(false); return }
@@ -362,7 +369,9 @@ export default function Profesores() {
               </div>
               <div><label style={lS}>Teléfono</label><input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={fS} /></div>
               <div><label style={lS}>Correo</label><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={fS} /></div>
-              <div><label style={lS}>Cédula</label><input value={form.cedula} onChange={e => setForm({ ...form, cedula: e.target.value })} style={fS} placeholder="Ej: 7.181.939" /></div>
+              <div><label style={lS}>Ciudad (sede)</label><input value={form.ciudad} onChange={e => setForm({ ...form, ciudad: e.target.value })} style={fS} placeholder="Ej: Tunja" /></div>
+              <div><label style={lS}>Cédula</label><input value={form.cc} onChange={e => setForm({ ...form, cc: e.target.value })} style={fS} placeholder="Ej: 7.181.939" /></div>
+              <div><label style={lS}>Ciudad de expedición CC</label><input value={form.ciudad_cc} onChange={e => setForm({ ...form, ciudad_cc: e.target.value })} style={fS} placeholder="Ej: Bogotá" /></div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
                 <div><label style={lS}>Banco</label><input value={form.banco} onChange={e => setForm({ ...form, banco: e.target.value })} style={fS} placeholder="Ej: BANCOLOMBIA" /></div>
                 <div><label style={lS}>Tipo de cuenta</label>
@@ -421,7 +430,7 @@ export default function Profesores() {
                     <button type="button" onClick={guardar} disabled={guardando} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', color: TEAL, borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
                       {guardando ? '...' : '✓ Guardar'}
                     </button>
-                    <button onClick={() => { setForm({ nombre: prof.nombre, telefono: prof.telefono || '', email: prof.email || '', ciudad: prof.ciudad || 'Bogotá', activo: prof.activo !== false, cedula: prof.cedula || '', banco: prof.banco || '', tipo_cuenta: prof.tipo_cuenta || 'Ahorros', numero_cuenta: prof.numero_cuenta || '' }); setEditando(false) }}
+                    <button onClick={() => { setForm({ nombre: prof.nombre, telefono: prof.telefono || '', email: prof.email || '', ciudad: prof.ciudad || 'Bogotá', ciudad_cc: prof.ciudad_cc || 'Bogotá', activo: prof.activo !== false, cc: prof.cc || '', banco: prof.banco || '', tipo_cuenta: prof.tipo_cuenta || 'Ahorros', numero_cuenta: prof.numero_cuenta || '' }); setEditando(false) }}
                       style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px' }}>
                       Cancelar
                     </button>
@@ -434,7 +443,7 @@ export default function Profesores() {
                 <div><label style={lS}>Nombre *</label><input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} style={fS} /></div>
                 <div><label style={lS}>Teléfono</label><input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={fS} /></div>
                 <div><label style={lS}>Correo</label><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={fS} /></div>
-                <div><label style={lS}>Cédula</label><input value={form.cedula} onChange={e => setForm({ ...form, cedula: e.target.value })} style={fS} placeholder="Ej: 7.181.939" /></div>
+                <div><label style={lS}>Cédula</label><input value={form.cc} onChange={e => setForm({ ...form, cc: e.target.value })} style={fS} placeholder="Ej: 7.181.939" /></div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
                   <div><label style={lS}>Banco</label><input value={form.banco} onChange={e => setForm({ ...form, banco: e.target.value })} style={fS} placeholder="Ej: BANCOLOMBIA" /></div>
                   <div><label style={lS}>Tipo de cuenta</label>
