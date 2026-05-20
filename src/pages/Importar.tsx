@@ -83,17 +83,12 @@ function esInasistencia(obs: string | null) {
   return /no asisti|inasist/i.test(obs)
 }
 
-function esCortesiaObs(numClase: string, obs: string | null) {
-  if (numClase === '0' || numClase === '0.0') return true
-  if (obs && /reemplaz|prueba|cortesia/i.test(obs)) return true
-  return false
-}
-
 export default function Importar() {
   const [paso, setPaso]             = useState<'subir'|'mapear'|'preview'|'listo'>('subir')
   const [filas, setFilas]           = useState<FilaExcel[]>([])
   const [profesorNombre, setProfesorNombre] = useState('')
   const [profesorId, setProfesorId] = useState<string|null>(null)
+  const [profesoresDB, setProfesoresDB] = useState<any[]>([])
   const [mapeos, setMapeos]         = useState<Mapeo[]>([])
   const [grupos, setGrupos]         = useState<GrupoCliente[]>([])
   const [resultado, setResultado]   = useState<Resultado|null>(null)
@@ -102,7 +97,6 @@ export default function Importar() {
   const [clientesDB, setClientesDB] = useState<any[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Cache de salon_id por nombre de sede para no repetir consultas
   const salonCache = useRef<Record<string, string | null>>({})
 
   async function buscarSalonPorSede(sede: string): Promise<string | null> {
@@ -151,16 +145,14 @@ export default function Importar() {
       }
       setFilas(parsed)
 
+      // Cargar TODOS los profesores y todos los clientes
       const [{ data: clientes }, { data: profesores }] = await Promise.all([
         supabase.from('clientes').select('id, nombre, grupo_whatsapp'),
-        supabase.from('profesores').select('id, nombre').ilike('nombre', `%${profNombre.split(' ')[0]}%`)
+        supabase.from('profesores').select('id, nombre').order('nombre')
       ])
       setClientesDB(clientes || [])
-
-      const prof = (profesores || []).find((p: any) =>
-        normalizar(p.nombre).includes(normalizar(profNombre.split(' ')[0]))
-      )
-      setProfesorId(prof?.id || null)
+      setProfesoresDB(profesores || [])
+      setProfesorId(null) // siempre requiere selección manual
 
       const gruposUnicos = [...new Set(parsed.map(f => f.grupo))]
       const nuevosMapeos: Mapeo[] = gruposUnicos.map(grupo => {
@@ -229,7 +221,6 @@ export default function Importar() {
           : filasBloque.filter(f => !esInasistencia(f.obs) && !(f.numClase === '0' || f.numClase === '0.0' || /prueba|cortesia/i.test(f.obs || '')))
         const clasesTomadas = clasesDadas.length
 
-        // Crear contrato SIN salon_id (no aplica a nivel de contrato)
         const { data: ct, error: ctErr } = await supabase.from('contratos').insert({
           cliente_id: gc.clienteId,
           profesor_id: profesorId,
@@ -243,14 +234,11 @@ export default function Importar() {
         }).select().single()
         if (ctErr || !ct) { errores.push(`Error creando contrato ${gc.clienteNombre}: ${ctErr?.message}`); return }
 
-        // Insertar clases con salon_id según la sede de cada fila
         for (const fila of filasBloque) {
           const salonId = fila.sede ? await buscarSalonPorSede(fila.sede) : null
-
           const esArchivo = estado === 'archivado'
           const cortesia = esArchivo ? false : (fila.numClase === '0' || fila.numClase === '0.0' || /prueba|cortesia/i.test(fila.obs || ''))
           const inasist  = esArchivo ? false : esInasistencia(fila.obs)
-
           const { error: clErr } = await supabase.from('clases').insert({
             contrato_id: (ct as any).id,
             profesor_id: profesorId,
@@ -376,9 +364,28 @@ export default function Importar() {
         {/* PASO 2: Mapear */}
         {paso === 'mapear' && (
           <div>
+            {/* Selector de profesor — confirmación manual obligatoria */}
+            <div style={{ background: 'white', borderRadius: '12px', border: `2px solid ${profesorId ? TEAL_MID : '#fca5a5'}`, padding: '16px 20px', marginBottom: '20px', maxWidth: '700px' }}>
+              <p style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: '700', color: profesorId ? TEAL : '#dc2626' }}>
+                {profesorId ? '✓ Profesor confirmado' : '⚠ Confirma el profesor antes de continuar'}
+              </p>
+              <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#666' }}>
+                El Excel indica: <strong>"{profesorNombre}"</strong> — selecciona el profesor correcto en la lista:
+              </p>
+              <select
+                value={profesorId || ''}
+                onChange={e => setProfesorId(e.target.value || null)}
+                style={{ width: '100%', padding: '9px 12px', border: `1px solid ${profesorId ? TEAL_MID : '#fca5a5'}`, borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }}
+              >
+                <option value="">— Selecciona el profesor —</option>
+                {profesoresDB.map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.nombre}</option>
+                ))}
+              </select>
+            </div>
+
             <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 16px', marginBottom: '16px', maxWidth: '700px', fontSize: '13px', color: '#374151' }}>
-              <strong>Profesor:</strong> {profesorNombre} {profesorId ? '✓' : <span style={{ color: '#dc2626' }}>⚠ No encontrado en BD</span>}
-              &nbsp;·&nbsp; <strong>{filas.length}</strong> filas leídas &nbsp;·&nbsp;
+              <strong>{filas.length}</strong> filas leídas &nbsp;·&nbsp;
               <strong style={{ color: '#854d0e' }}>{filas.filter(f=>f.plan==='archivo').length}</strong> archivo &nbsp;·&nbsp;
               <strong style={{ color: TEAL }}>{filas.filter(f=>f.plan==='activo').length}</strong> activo &nbsp;·&nbsp;
               <strong style={{ color: '#7c3aed' }}>{filas.filter(f=>f.plan==='activo2').length}</strong> activo 2
