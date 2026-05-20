@@ -160,7 +160,8 @@ export default function ProfesorApp() {
   }, [vista, mes, profesor])
 
   async function buscarProfesor(email: string) {
-    const { data } = await supabase.from('profesores').select('id, nombre, ciudad, email')
+    const { data } = await supabase.from('profesores')
+      .select('id, nombre, ciudad, email, cc, banco, tipo_cuenta, numero_cuenta')
       .ilike('email', email.trim()).single()
     setProfesor(data || null)
     setCargandoAuth(false)
@@ -182,11 +183,6 @@ export default function ProfesorApp() {
     const { data } = await supabase.from('profesor_tarifas').select('*')
       .eq('profesor_id', profesor.id).eq('taller_grupal', false)
     setTarifas(data || [])
-    // Also refresh professor data to get banking info
-    const { data: profData } = await supabase.from('profesores')
-      .select('id, nombre, ciudad, email, cc, banco, tipo_cuenta, numero_cuenta')
-      .eq('id', profesor.id).single()
-    if (profData) setProfesor((prev: any) => ({ ...prev, ...profData }))
   }
 
   function getHonorario(c: any): number | 'pendiente' {
