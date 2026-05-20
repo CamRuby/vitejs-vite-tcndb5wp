@@ -675,7 +675,9 @@ export default function ProfesorApp() {
         } : {},
         // Datos bancarios
         {
-          text: `Favor efectuar el pago a nombre de ${nombre} C.C. ${cc} a la cuenta de ${tipoCuenta.toLowerCase()} No. ${numCuenta} de ${banco}`,
+          text: (tipoCuenta === 'Nequi' || tipoCuenta === 'Daviplata')
+            ? `Favor efectuar el pago a nombre de ${nombre} C.C. ${cc} al número de ${tipoCuenta} ${numCuenta}`
+            : `Favor efectuar el pago a nombre de ${nombre} C.C. ${cc} a la cuenta de ${tipoCuenta.toLowerCase()} No. ${numCuenta} de ${banco}`,
           fontSize: 10, margin: [0, 0, 0, 40]
         },
         // Firma
