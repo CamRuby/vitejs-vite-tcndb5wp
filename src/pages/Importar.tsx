@@ -109,7 +109,8 @@ export default function Importar() {
       const ab = await file.arrayBuffer()
       const wb = XLSX.read(ab, { type: 'array', cellDates: true, UTC: true })
       const ws = wb.Sheets[wb.SheetNames[0]]
-      const raw: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: null })
+      // Use raw:true to avoid stopping at empty rows, handle dates manually
+      const raw: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
 
       const profNombre = raw[1]?.[1] ? String(raw[1][1]).trim() : ''
       setProfesorNombre(profNombre)
@@ -117,7 +118,9 @@ export default function Importar() {
       const parsed: FilaExcel[] = []
       for (let i = 3; i < raw.length; i++) {
         const r = raw[i]
-        if (!r || !r[0]) continue
+        if (!r) continue
+        // Skip rows with no date AND no group (truly empty rows)
+        if (!r[0] && !r[1]) continue
         const fecha = excelDateToISO(r[0])
         if (!fecha) continue
         const grupo = String(r[1] || '').trim()
