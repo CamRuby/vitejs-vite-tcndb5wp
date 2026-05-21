@@ -7,36 +7,36 @@ import ProfesorApp from './pages/ProfesorApp'
 const esProfesor = window.location.pathname.startsWith('/profesor')
 
 export default function App() {
+  console.log('App montando')
   const [sesion, setSesion] = useState<any>(null)
   const [rol, setRol] = useState<string | null>(null)
   const [listo, setListo] = useState(false)
 
   async function cargarRol(email: string) {
+    console.log('cargando rol para:', email)
     const { data } = await supabase
       .from('roles')
       .select('rol')
       .eq('email', email)
       .single()
+    console.log('rol obtenido:', data?.rol)
     setRol(data?.rol || 'sin_rol')
   }
-export default function App() {
-  console.log('App montando')  // ← agregar esta línea
-  const [sesion, setSesion] = useState<any>(null)
-  ...
+
   useEffect(() => {
     if (esProfesor) { setListo(true); return }
 
-   supabase.auth.getSession().then(async ({ data: { session } }) => {
-  console.log('session:', session?.user?.email)
-  setSesion(session)
-  if (session?.user?.email) {
-    console.log('cargando rol...')
-    await cargarRol(session.user.email)
-    console.log('rol cargado')
-  }
-  setListo(true)
-  console.log('listo!')
-})
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log('session:', session?.user?.email)
+      setSesion(session)
+      if (session?.user?.email) {
+        console.log('cargando rol...')
+        await cargarRol(session.user.email)
+        console.log('rol cargado')
+      }
+      setListo(true)
+      console.log('listo!')
+    })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (_event === 'SIGNED_IN') {
@@ -61,12 +61,15 @@ export default function App() {
   }, [])
 
   if (esProfesor) return <ProfesorApp />
+
   if (!listo) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p>Cargando...</p>
     </div>
   )
+
   if (!sesion) return <Login />
+
   if (rol === 'profesor') return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
       <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>No tienes acceso a esta sección.</p>
@@ -77,6 +80,7 @@ export default function App() {
       </button>
     </div>
   )
+
   if (rol === 'sin_rol') return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
       <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>Usuario sin rol asignado.</p>
@@ -87,10 +91,12 @@ export default function App() {
       </button>
     </div>
   )
+
   if (rol === null) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p>Cargando...</p>
     </div>
   )
+
   return <Dashboard usuario={sesion.user} />
 }
