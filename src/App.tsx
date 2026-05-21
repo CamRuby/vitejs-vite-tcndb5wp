@@ -17,14 +17,16 @@ export default function App() {
       .select('rol')
       .eq('email', email)
       .single()
-    setRol(data?.rol || null)
+    setRol(data?.rol || 'sin_rol')
   }
 
   useEffect(() => {
     if (esProfesor) return
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSesion(session)
-      if (session?.user?.email) await cargarRol(session.user.email)
+      if (session?.user?.email) {
+        await cargarRol(session.user.email)
+      }
       setCargando(false)
     })
     supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -38,19 +40,23 @@ export default function App() {
           detalle: { portal: 'administrativo' }
         })
       }
-      if (_event === 'SIGNED_OUT') setRol(null)
+      if (_event === 'SIGNED_OUT') {
+        setRol(null)
+        setCargando(false)
+      }
     })
   }, [])
 
   if (esProfesor) return <ProfesorApp />
+
   if (cargando) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p>Cargando...</p>
     </div>
   )
+
   if (!sesion) return <Login />
 
-  // Profesor intentando entrar al panel admin
   if (rol === 'profesor') return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
       <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>No tienes acceso a esta sección.</p>
@@ -62,8 +68,7 @@ export default function App() {
     </div>
   )
 
-  // Sin rol asignado
-  if (rol === null) return (
+  if (rol === 'sin_rol') return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
       <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>Usuario sin rol asignado.</p>
       <p style={{ fontSize: '14px', color: '#9ca3af' }}>Contacta al administrador.</p>
