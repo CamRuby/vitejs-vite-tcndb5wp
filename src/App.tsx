@@ -23,13 +23,17 @@ export default function App() {
   useEffect(() => {
     if (esProfesor) { setListo(true); return }
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSesion(session)
-      if (session?.user?.email) {
-        await cargarRol(session.user.email)
-      }
-      setListo(true)
-    })
+   supabase.auth.getSession().then(async ({ data: { session } }) => {
+  console.log('session:', session?.user?.email)
+  setSesion(session)
+  if (session?.user?.email) {
+    console.log('cargando rol...')
+    await cargarRol(session.user.email)
+    console.log('rol cargado')
+  }
+  setListo(true)
+  console.log('listo!')
+})
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (_event === 'SIGNED_IN') {
