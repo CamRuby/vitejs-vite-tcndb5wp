@@ -14,6 +14,8 @@ const HORAS = Array.from({ length: 29 }, (_, i) => {
   return `${String(h).padStart(2, '0')}:${m}`
 })
 
+const SUPABASE_URL = 'https://wvjohorkzmktthzjteci.supabase.co'
+
 const fS: React.CSSProperties = { width: '100%', padding: '9px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }
 const lS: React.CSSProperties = { display: 'block', fontWeight: '500', fontSize: '13px', marginBottom: '5px', color: '#555' }
 const thS: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL, fontWeight: '600', whiteSpace: 'nowrap' }
@@ -21,7 +23,7 @@ const tdS: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color
 
 function colEstado(e: string, canceladoTarde = false) {
   if (e === 'dada')      return { bg: '#fefce8', color: '#854d0e' }
-  if (e === 'cancelada' && canceladoTarde) return { bg: '#fef3c7', color: '#92400e' }  // naranja para fuera de tiempo
+  if (e === 'cancelada' && canceladoTarde) return { bg: '#fef3c7', color: '#92400e' }
   if (e === 'cancelada') return { bg: '#fee2e2', color: '#991b1b' }
   if (e === 'confirmada') return { bg: '#dcfce7', color: '#166534' }
   return { bg: '#eff6ff', color: '#1d4ed8' }
@@ -55,7 +57,6 @@ export default function Profesores() {
     const h = new Date()
     return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`
   })
-  // ── Punto 3: filtro de vista de clases ──
   const [filtroVista, setFiltroVista] = useState<'historial' | 'programadas'>('historial')
 
   const [claseModal, setClaseModal] = useState<any>(null)
@@ -64,6 +65,14 @@ export default function Profesores() {
   const [editObsAdmin, setEditObsAdmin] = useState('')
   const [guardandoH, setGuardandoH] = useState(false)
 
+  // ── Acceso app profesor ──
+  const [tieneAcceso, setTieneAcceso] = useState<boolean | null>(null)
+  const [nuevoEmail, setNuevoEmail] = useState('')
+  const [nuevaPassword, setNuevaPassword] = useState('')
+  const [creandoAcceso, setCreandoAcceso] = useState(false)
+  const [errAcceso, setErrAcceso] = useState('')
+  const [okAcceso, setOkAcceso] = useState('')
+
   useEffect(() => { cargarProfesores() }, [])
   useEffect(() => { if (prof) cargarClases(prof) }, [mes])
 
@@ -71,7 +80,6 @@ export default function Profesores() {
     setCargando(true)
     const { data, error } = await supabase.from('profesores').select('id, nombre, telefono, email, ciudad, ciudad_cc, activo, cc, banco, tipo_cuenta, numero_cuenta').order('nombre')
     if (error) {
-      // Fallback: query without new columns in case they don't exist yet
       const { data: data2 } = await supabase.from('profesores').select('id, nombre, telefono, email, ciudad, activo').order('nombre')
       setProfesores(data2 || [])
       setCargando(false)
@@ -79,6 +87,12 @@ export default function Profesores() {
     }
     setProfesores(data || [])
     setCargando(false)
+  }
+
+  async function verificarAcceso(email: string) {
+    if (!email) { setTieneAcceso(false); return }
+    const { data } = await supabase.from('roles').select('rol').eq('email', email).single()
+    setTieneAcceso(!!data)
   }
 
   async function seleccionar(p: any) {
@@ -92,10 +106,41 @@ export default function Profesores() {
     const { data: t } = await supabase.from('profesor_tarifas').select('*').eq('profesor_id', p.id).order('modalidad').order('duracion_min')
     setTarifas(t || [])
     await cargarClases(pr)
+    await verificarAcceso(pr.email || '')
+    setNuevoEmail(pr.email || '')
+    setNuevaPassword('')
+    setErrAcceso('')
+    setOkAcceso('')
     setEditando(false)
     setErrForm('')
     setCargando(false)
     setModo('ver')
+  }
+
+  async function crearAcceso() {
+    if (!nuevoEmail.trim()) { setErrAcceso('El correo es obligatorio'); return }
+    if (nuevaPassword.length < 6) { setErrAcceso('La contraseña debe tener al menos 6 caracteres'); return }
+    setCreandoAcceso(true); setErrAcceso(''); setOkAcceso('')
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/crear-usuario`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify({ email: nuevoEmail.trim(), password: nuevaPassword, rol: 'profesor' })
+      })
+      const json = await res.json()
+      if (json.error) { setErrAcceso(json.error); return }
+      setTieneAcceso(true)
+      setOkAcceso(`✓ Acceso creado para ${nuevoEmail.trim()}`)
+      setNuevaPassword('')
+    } catch (e: any) {
+      setErrAcceso('Error al crear acceso: ' + e.message)
+    } finally {
+      setCreandoAcceso(false)
+    }
   }
 
   async function cargarClases(p: any) {
@@ -115,7 +160,6 @@ export default function Profesores() {
       if (error) throw error
       result = d || []
     } catch {
-      // Fallback sin columnas nuevas (aún no migradas en Supabase)
       const { data: d } = await supabase
         .from('clases_con_numero')
         .select('id, fecha, hora, duracion_min, estado, es_cortesia, observaciones, honorario_valor, numero_calculado, contratos(clientes(nombre), instrumentos(nombre), total_clases), salones(nombre, sedes(nombre))')
@@ -125,7 +169,6 @@ export default function Profesores() {
         .order('fecha', { ascending: false })
       result = (d || []).map((c: any) => ({ ...c, cancelado_tarde: false, cancelado_por_academia: false, observaciones_admin: null }))
     }
-    // Load taller sesiones for this professor
     const { data: talleres } = await supabase.from('talleres')
       .select('id, nombre, hora, duracion_min, salones(nombre, sedes(nombre))').eq('profesor_id', p.id)
     if (talleres && talleres.length > 0) {
@@ -223,14 +266,12 @@ export default function Profesores() {
     setEditObsAdmin(c.observaciones_admin || '')
     setModalAsistentes([])
     if (c.esTaller) {
-      // Load attendees from taller_asistencias
       const sesionId = c.id.replace('taller-', '')
       const { data: asis } = await supabase.from('taller_asistencias')
         .select('inscripcion_id, asistio, taller_inscripciones(clientes(nombre))')
         .eq('sesion_id', sesionId)
       const asistentes = (asis || []).filter((a: any) => a.asistio)
       setModalAsistentes(asistentes)
-      // Auto-calculate honorario based on attendee count
       const numAsistentes = asistentes.length
       let autoHon = 0
       if (numAsistentes >= 3) {
@@ -240,7 +281,7 @@ export default function Profesores() {
         const tarReg = tarifas.find(x => x.modalidad === 'presencial' && x.duracion_min === c.duracion_min)
           || tarifas.find(x => !x.taller_grupal && x.duracion_min === c.duracion_min)
         autoHon = tarReg ? Number(tarReg.valor) : 0
-        if (numAsistentes === 0) autoHon = 0 // will show 50%/100% choice
+        if (numAsistentes === 0) autoHon = 0
       }
       if (numAsistentes > 0) setEditHon(String(autoHon))
     }
@@ -277,7 +318,6 @@ export default function Profesores() {
     setClaseModal((prev: any) => prev ? { ...prev, cancelado_tarde: valor } : prev)
   }
 
-  // ── Punto 2: getHon corregido — sin filtro por ciudad, busca por duracion_min ──
   function getHon(c: any) {
     if (c.honorario_valor !== null && c.honorario_valor !== undefined) return Number(c.honorario_valor)
     if (c.esTaller) return 0
@@ -287,13 +327,11 @@ export default function Profesores() {
     return cualquiera?.valor || 0
   }
 
-  // ── Clases filtradas según la vista activa ──
   const clasesFiltradas = filtroVista === 'programadas'
     ? clases.filter(c => c.estado === 'programada' || c.estado === 'confirmada')
     : clases.filter(c => c.estado === 'dada' || c.estado === 'cancelada')
 
   const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
-  // Incluir canceladas tarde en honorarios
   const canceladasTarde = clases.filter(c => c.estado === 'cancelada' && c.cancelado_tarde)
   const totalHon = [...dadas, ...canceladasTarde].reduce((s, c) => s + getHon(c), 0)
   const cnt = {
@@ -473,6 +511,40 @@ export default function Profesores() {
             )}
           </div>
 
+          {/* ── Acceso app profesor ── */}
+          {!editando && (
+            <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden', marginBottom: '20px' }}>
+              <div style={{ background: TEAL_LIGHT, padding: '12px 18px', borderBottom: '1px solid #eef2f7', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <p style={{ margin: 0, fontWeight: '700', fontSize: '13px', color: TEAL }}>📱 Acceso a la app</p>
+                {tieneAcceso === true && <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: '#dcfce7', color: '#166534' }}>✓ Activo</span>}
+                {tieneAcceso === false && <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: '#fee2e2', color: '#991b1b' }}>Sin acceso</span>}
+              </div>
+              <div style={{ padding: '16px 18px' }}>
+                {tieneAcceso === true
+                  ? <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>Este profesor ya tiene acceso a la app con el correo <strong>{prof.email}</strong>.</p>
+                  : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '12px', alignItems: 'end', maxWidth: '600px' }}>
+                      <div>
+                        <label style={lS}>Correo</label>
+                        <input type="email" value={nuevoEmail} onChange={e => setNuevoEmail(e.target.value)} style={fS} placeholder="correo@ejemplo.com" />
+                      </div>
+                      <div>
+                        <label style={lS}>Contraseña</label>
+                        <input type="password" value={nuevaPassword} onChange={e => setNuevaPassword(e.target.value)} style={fS} placeholder="Mínimo 6 caracteres" />
+                      </div>
+                      <button onClick={crearAcceso} disabled={creandoAcceso}
+                        style={{ padding: '9px 18px', background: creandoAcceso ? '#cbd5e1' : TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: creandoAcceso ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                        {creandoAcceso ? 'Creando...' : '+ Crear acceso'}
+                      </button>
+                    </div>
+                  )
+                }
+                {errAcceso && <p style={{ margin: '10px 0 0', color: '#dc2626', fontSize: '13px' }}>⚠ {errAcceso}</p>}
+                {okAcceso && <p style={{ margin: '10px 0 0', color: '#166534', fontSize: '13px', fontWeight: '600' }}>{okAcceso}</p>}
+              </div>
+            </div>
+          )}
+
           {/* Disponibilidad y Tarifas */}
           {editando && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
@@ -568,7 +640,6 @@ export default function Profesores() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                   <h3 style={{ margin: 0, fontSize: '17px', color: '#1a1a1a' }}>Clases del mes</h3>
-                  {/* ── Punto 3: selector programadas vs historial ── */}
                   <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '3px' }}>
                     {([
                       { key: 'historial', label: '📋 Historial' },
@@ -588,7 +659,6 @@ export default function Profesores() {
                   style={{ padding: '6px 10px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px' }} />
               </div>
 
-              {/* Contadores */}
               <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
                 {[
                   { label: 'Programadas', count: cnt.programada, bg: '#eff6ff', color: '#1d4ed8' },
@@ -609,7 +679,6 @@ export default function Profesores() {
                 </div>
               </div>
 
-              {/* Tabla */}
               <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead style={{ background: TEAL_LIGHT }}>
@@ -657,11 +726,8 @@ export default function Profesores() {
                             {(pagarHon || c.honorario_valor !== null) ? `$${hon.toLocaleString()}` : '—'}
                             {c.honorario_valor !== null && c.honorario_valor !== undefined && !c.esTaller && <span style={{ fontSize: '10px', color: '#f59e0b', marginLeft: '4px' }}>editado</span>}
                           </td>
-                          {/* Indicador de resumen */}
                           <td style={{ ...tdS, textAlign: 'center' }}>
-                            {c.observaciones
-                              ? <span title="Resumen registrado" style={{ fontSize: '14px', cursor: 'default' }}>📝</span>
-                              : null}
+                            {c.observaciones ? <span title="Resumen registrado" style={{ fontSize: '14px', cursor: 'default' }}>📝</span> : null}
                           </td>
                           <td style={{ ...tdS, textAlign: 'center' }}>
                             <button onClick={() => abrirClaseModal(c)}
@@ -687,10 +753,8 @@ export default function Profesores() {
       {claseModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
           <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '520px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', maxHeight: '92vh' }}>
-            {/* Cabecera */}
             <div style={{ background: TEAL, padding: '16px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
-                {/* Punto 5: "Detalle de la clase" */}
                 <h3 style={{ margin: 0, color: 'white', fontSize: '16px' }}>{claseModal.esTaller ? '🎸 Sesión de taller' : 'Detalle de la clase'}</h3>
                 <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
                   {claseModal.esTaller ? claseModal.nombreTaller : claseModal.contratos?.clientes?.nombre} · {claseModal.fecha} {claseModal.hora?.substring(0, 5)}
@@ -700,7 +764,6 @@ export default function Profesores() {
             </div>
 
             <div style={{ overflowY: 'auto', flex: 1, padding: '20px 28px' }}>
-              {/* Info de la clase */}
               <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 16px', marginBottom: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '13px' }}>
                 <div><span style={{ color: '#999' }}>Instrumento: </span><strong>{claseModal.contratos?.instrumentos?.nombre || '—'}</strong></div>
                 <div><span style={{ color: '#999' }}>Duración: </span><strong>{claseModal.duracion_min} min</strong></div>
@@ -715,7 +778,6 @@ export default function Profesores() {
                 </div>
               </div>
 
-              {/* Asistentes del taller */}
               {claseModal.esTaller && (
                 <div style={{ marginBottom: '16px' }}>
                   <p style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: '700', color: '#333' }}>
@@ -734,11 +796,9 @@ export default function Profesores() {
                         </div>
                       ))
                   }
-
                 </div>
               )}
 
-              {/* Aviso cancelada tarde — automático, sin toggle manual */}
               {claseModal.estado === 'cancelada' && claseModal.cancelado_tarde && (
                 <div style={{ marginBottom: '14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px 14px' }}>
                   <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#92400e' }}>⚠️ Cancelada fuera de tiempo</p>
@@ -752,7 +812,6 @@ export default function Profesores() {
                 </div>
               )}
 
-              {/* Resumen de la clase */}
               <div style={{ marginBottom: '16px' }}>
                 <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: '700', color: '#333' }}>
                   Resumen de la clase
@@ -768,7 +827,6 @@ export default function Profesores() {
                 }
               </div>
 
-              {/* Honorarios */}
               {(claseModal.estado === 'dada' || claseModal.cancelado_tarde) && (
                 <div style={{ marginBottom: '16px' }}>
                   <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: '700', color: '#333' }}>Honorarios ($)</p>
@@ -777,7 +835,6 @@ export default function Profesores() {
                 </div>
               )}
 
-              {/* Observaciones administrativas */}
               <div style={{ marginBottom: '20px' }}>
                 <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: '700', color: '#333' }}>Observaciones administrativas</p>
                 <textarea
