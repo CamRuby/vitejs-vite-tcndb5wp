@@ -19,7 +19,10 @@ export default function App() {
       .single()
     setRol(data?.rol || 'sin_rol')
   }
-
+export default function App() {
+  console.log('App montando')  // ← agregar esta línea
+  const [sesion, setSesion] = useState<any>(null)
+  ...
   useEffect(() => {
     if (esProfesor) { setListo(true); return }
 
