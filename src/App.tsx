@@ -9,7 +9,7 @@ const esProfesor = window.location.pathname.startsWith('/profesor')
 export default function App() {
   const [sesion, setSesion] = useState<any>(null)
   const [rol, setRol] = useState<string | null>(null)
-  const [cargando, setCargando] = useState(!esProfesor)
+  const [listo, setListo] = useState(false)
 
   async function cargarRol(email: string) {
     const { data } = await supabase
@@ -21,32 +21,32 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (esProfesor) return
+    if (esProfesor) { setListo(true); return }
 
-    // Primero verificar si ya hay sesión activa
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSesion(session)
       if (session?.user?.email) {
         await cargarRol(session.user.email)
       }
-      setCargando(false)
+      setListo(true)
     })
 
-    // Luego escuchar cambios (login / logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSesion(session)
-      if (session?.user?.email) {
-        await cargarRol(session.user.email)
-      } else {
-        setRol(null)
+      if (_event === 'SIGNED_IN') {
+        setSesion(session)
+        if (session?.user?.email) {
+          await cargarRol(session.user.email)
+          supabase.from('auditoria').insert({
+            usuario_email: session.user.email,
+            accion: 'inicio_sesion',
+            entidad: 'auth',
+            detalle: { portal: 'administrativo' }
+          })
+        }
       }
-      if (_event === 'SIGNED_IN' && session?.user?.email) {
-        supabase.from('auditoria').insert({
-          usuario_email: session.user.email,
-          accion: 'inicio_sesion',
-          entidad: 'auth',
-          detalle: { portal: 'administrativo' }
-        })
+      if (_event === 'SIGNED_OUT') {
+        setSesion(null)
+        setRol(null)
       }
     })
 
@@ -54,15 +54,12 @@ export default function App() {
   }, [])
 
   if (esProfesor) return <ProfesorApp />
-
-  if (cargando) return (
+  if (!listo) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p>Cargando...</p>
     </div>
   )
-
   if (!sesion) return <Login />
-
   if (rol === 'profesor') return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
       <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>No tienes acceso a esta sección.</p>
@@ -73,7 +70,6 @@ export default function App() {
       </button>
     </div>
   )
-
   if (rol === 'sin_rol') return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
       <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>Usuario sin rol asignado.</p>
@@ -84,13 +80,10 @@ export default function App() {
       </button>
     </div>
   )
-
-  // Sesión activa pero rol aún cargando
-  if (sesion && rol === null) return (
+  if (rol === null) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p>Cargando...</p>
     </div>
   )
-
   return <Dashboard usuario={sesion.user} />
 }
