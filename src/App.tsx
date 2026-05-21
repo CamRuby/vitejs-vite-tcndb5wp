@@ -23,15 +23,23 @@ export default function App() {
   useEffect(() => {
     if (esProfesor) return
 
-    supabase.auth.onAuthStateChange(async (_event, session) => {
+    // Primero verificar si ya hay sesión activa
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setSesion(session)
+      if (session?.user?.email) {
+        await cargarRol(session.user.email)
+      }
+      setCargando(false)
+    })
+
+    // Luego escuchar cambios (login / logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSesion(session)
       if (session?.user?.email) {
         await cargarRol(session.user.email)
       } else {
         setRol(null)
       }
-      setCargando(false)
-
       if (_event === 'SIGNED_IN' && session?.user?.email) {
         supabase.from('auditoria').insert({
           usuario_email: session.user.email,
@@ -41,6 +49,8 @@ export default function App() {
         })
       }
     })
+
+    return () => subscription.unsubscribe()
   }, [])
 
   if (esProfesor) return <ProfesorApp />
@@ -72,6 +82,13 @@ export default function App() {
         style={{ padding: '10px 24px', background: '#1a8a8a', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
         Cerrar sesión
       </button>
+    </div>
+  )
+
+  // Sesión activa pero rol aún cargando
+  if (sesion && rol === null) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p>Cargando...</p>
     </div>
   )
 
