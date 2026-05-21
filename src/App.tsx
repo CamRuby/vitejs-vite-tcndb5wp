@@ -22,27 +22,23 @@ export default function App() {
 
   useEffect(() => {
     if (esProfesor) return
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+
+    supabase.auth.onAuthStateChange(async (_event, session) => {
       setSesion(session)
       if (session?.user?.email) {
         await cargarRol(session.user.email)
+      } else {
+        setRol(null)
       }
       setCargando(false)
-    })
-    supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSesion(session)
+
       if (_event === 'SIGNED_IN' && session?.user?.email) {
-        await cargarRol(session.user.email)
         supabase.from('auditoria').insert({
           usuario_email: session.user.email,
           accion: 'inicio_sesion',
           entidad: 'auth',
           detalle: { portal: 'administrativo' }
         })
-      }
-      if (_event === 'SIGNED_OUT') {
-        setRol(null)
-        setCargando(false)
       }
     })
   }, [])
