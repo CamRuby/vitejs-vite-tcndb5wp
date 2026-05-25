@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from './supabase'
 import Login from './Login'
 import Dashboard from './Dashboard'
@@ -10,20 +10,6 @@ export default function App() {
   const [sesion, setSesion] = useState<any>(null)
   const [rol, setRol] = useState<string | null>(null)
   const [listo, setListo] = useState(false)
-  const cargandoRol = useRef(false)
-
-  async function cargarRol(email: string) {
-    if (cargandoRol.current) return
-    cargandoRol.current = true
-    const { data } = await supabase
-      .from('roles')
-      .select('rol')
-      .eq('email', email)
-      .single()
-    setRol(data?.rol || 'sin_rol')
-    setListo(true)
-    cargandoRol.current = false
-  }
 
   useEffect(() => {
     if (esProfesor) { setListo(true); return }
@@ -31,16 +17,34 @@ export default function App() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSesion(session)
       if (session?.user?.email) {
-        await cargarRol(session.user.email)
-      } else {
-        setListo(true)
+        try {
+          const { data } = await supabase
+            .from('roles')
+            .select('rol')
+            .eq('email', session.user.email)
+            .single()
+          setRol(data?.rol || 'sin_rol')
+        } catch {
+          setRol('sin_rol')
+        }
       }
+      setListo(true)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (_event === 'SIGNED_IN' && session?.user?.email) {
         setSesion(session)
-        await cargarRol(session.user.email)
+        try {
+          const { data } = await supabase
+            .from('roles')
+            .select('rol')
+            .eq('email', session.user.email)
+            .single()
+          setRol(data?.rol || 'sin_rol')
+        } catch {
+          setRol('sin_rol')
+        }
+        setListo(true)
         supabase.from('auditoria').insert({
           usuario_email: session.user.email,
           accion: 'inicio_sesion',
@@ -52,7 +56,6 @@ export default function App() {
         setSesion(null)
         setRol(null)
         setListo(true)
-        cargandoRol.current = false
       }
     })
 
@@ -80,7 +83,7 @@ export default function App() {
     </div>
   )
 
-  if (rol === 'sin_rol') return (
+  if (rol === 'sin_rol' || rol === null) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
       <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>Usuario sin rol asignado.</p>
       <p style={{ fontSize: '14px', color: '#9ca3af' }}>Contacta al administrador.</p>
@@ -88,12 +91,6 @@ export default function App() {
         style={{ padding: '10px 24px', background: '#1a8a8a', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
         Cerrar sesión
       </button>
-    </div>
-  )
-
-  if (rol === null) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <p>Cargando...</p>
     </div>
   )
 
