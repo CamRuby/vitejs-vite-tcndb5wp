@@ -173,7 +173,10 @@ export default function Horarios() {
   const [confirmarDada, setConfirmarDada] = useState(false)
   const [planCompleto, setPlanCompleto] = useState(false)
   const [procesandoRevision, setProcesandoRevision] = useState(false)
-
+  const [motivoCancelacion, setMotivoCancelacion] = useState<string>('academia')
+  const [honorarioCancelacion, setHonorarioCancelacion] = useState<number>(0)
+  const [tarifaBase, setTarifaBase] = useState<number>(0)
+  const [clienteInasistenciaPerdonada, setClienteInasistenciaPerdonada] = useState(false)
   const fechasSemana = getFechasSemana(fechaBase)
 
   const columns = useMemo(() => {
