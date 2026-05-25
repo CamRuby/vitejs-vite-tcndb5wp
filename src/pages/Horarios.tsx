@@ -810,11 +810,11 @@ async function verificarConflictosEnMemoria(
 
   async function guardarEdicion(alcance: 'esta' | 'futuras') {
     setEditGuardando(true); setEditError('')
-    const conflicto = await verificarTodos(
-      editSalonId, editProfesorId, claseEditando.contratos?.id || '',
-      editFecha, editHora, parseInt(editDuracion), claseEditando.id
-    )
-    if (conflicto) { setEditError(conflicto); setEditGuardando(false); return }
+   const conflictos = await verificarConflictosEnMemoria(
+  editSalonId, editProfesorId,
+  [editFecha], editHora, parseInt(editDuracion), claseEditando.id
+)
+if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardando(false); return }
 
     let numeroPlan: number | undefined = undefined
     if (editEstado === 'dada' && claseEditando.estado !== 'dada' && claseEditando.contratos?.id) {
