@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase'
 import Login from './Login'
 import Dashboard from './Dashboard'
@@ -7,53 +7,52 @@ import ProfesorApp from './pages/ProfesorApp'
 const esProfesor = window.location.pathname.startsWith('/profesor')
 
 export default function App() {
-  console.log('App montando')
   const [sesion, setSesion] = useState<any>(null)
   const [rol, setRol] = useState<string | null>(null)
   const [listo, setListo] = useState(false)
+  const cargandoRol = useRef(false)
 
   async function cargarRol(email: string) {
-    console.log('cargando rol para:', email)
+    if (cargandoRol.current) return
+    cargandoRol.current = true
     const { data } = await supabase
       .from('roles')
       .select('rol')
       .eq('email', email)
       .single()
-    console.log('rol obtenido:', data?.rol)
     setRol(data?.rol || 'sin_rol')
+    setListo(true)
+    cargandoRol.current = false
   }
 
   useEffect(() => {
     if (esProfesor) { setListo(true); return }
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      console.log('session:', session?.user?.email)
       setSesion(session)
       if (session?.user?.email) {
-        console.log('cargando rol...')
         await cargarRol(session.user.email)
-        console.log('rol cargado')
+      } else {
+        setListo(true)
       }
-      setListo(true)
-      console.log('listo!')
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (_event === 'SIGNED_IN') {
+      if (_event === 'SIGNED_IN' && session?.user?.email) {
         setSesion(session)
-        if (session?.user?.email) {
-          await cargarRol(session.user.email)
-          supabase.from('auditoria').insert({
-            usuario_email: session.user.email,
-            accion: 'inicio_sesion',
-            entidad: 'auth',
-            detalle: { portal: 'administrativo' }
-          })
-        }
+        await cargarRol(session.user.email)
+        supabase.from('auditoria').insert({
+          usuario_email: session.user.email,
+          accion: 'inicio_sesion',
+          entidad: 'auth',
+          detalle: { portal: 'administrativo' }
+        })
       }
       if (_event === 'SIGNED_OUT') {
         setSesion(null)
         setRol(null)
+        setListo(true)
+        cargandoRol.current = false
       }
     })
 
