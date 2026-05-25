@@ -293,110 +293,68 @@ export default function Horarios() {
       setSesionesEstadoMap(sMap)
     }
   }
+async function verificarConflictosEnMemoria(
+  salonId: string, profId: string,
+  fechas: string[], hora: string, durMin: number, excluirId?: string
+): Promise<Record<string, string>> {
+  const fechaMin = fechas[0]
+  const fechaMax = fechas[fechas.length - 1]
 
-  async function verificarConflictoSalon(salonId: string, fecha: string, hora: string, durMin: number, excluirId?: string): Promise<string | null> {
-    const inicio = horaAMinutos(hora)
-    const fin = inicio + durMin
-    const { data } = await supabase.from('clases').select('id, hora, duracion_min, contratos(clientes(nombre))')
-      .eq('salon_id', salonId).eq('fecha', fecha).neq('estado', 'cancelada')
-    if (!data) return null
-    for (const c of data) {
-      if (excluirId && c.id === excluirId) continue
+  const [{ data: clasesSalon }, { data: clasesProfesor }, { data: talleresProfesor }] = await Promise.all([
+    supabase.from('clases').select('id, fecha, hora, duracion_min, contratos(clientes(nombre))')
+      .eq('salon_id', salonId).neq('estado', 'cancelada').gte('fecha', fechaMin).lte('fecha', fechaMax),
+    profId ? supabase.from('clases').select('id, fecha, hora, duracion_min, contratos(clientes(nombre))')
+      .eq('profesor_id', profId).neq('estado', 'cancelada').gte('fecha', fechaMin).lte('fecha', fechaMax) : Promise.resolve({ data: [] }),
+    profId ? supabase.from('talleres').select('id, nombre, hora, duracion_min, dia_semana')
+      .eq('profesor_id', profId) : Promise.resolve({ data: [] })
+  ])
+
+  const inicio = horaAMinutos(hora)
+  const fin = inicio + durMin
+  const conflictos: Record<string, string> = {}
+
+  for (const fecha of fechas) {
+    // Verificar salón
+    for (const c of (clasesSalon || [])) {
+      if (c.fecha !== fecha || (excluirId && c.id === excluirId)) continue
       const cI = horaAMinutos((c.hora || '').substring(0, 5))
       const cF = cI + ((c as any).duracion_min || 60)
       if (inicio < cF && fin > cI) {
-        const nombre = (c as any).contratos?.clientes?.nombre || 'otra clase'
-        return `Conflicto de salón con ${nombre} (${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}–${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')})`
+        conflictos[fecha] = `Conflicto de salón con ${(c as any).contratos?.clientes?.nombre || 'otra clase'}`
+        break
       }
     }
-    return null
-  }
+    if (conflictos[fecha]) continue
 
-  async function verificarConflictoProfesor(profId: string, fecha: string, hora: string, durMin: number, excluirId?: string): Promise<string | null> {
-    if (!profId) return null
-    const inicio = horaAMinutos(hora)
-    const fin = inicio + durMin
-    const diaSemana = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
-    const { data } = await supabase.from('clases').select('id, hora, duracion_min, salones(nombre), contratos(clientes(nombre))')
-      .eq('profesor_id', profId).eq('fecha', fecha).neq('estado', 'cancelada')
-    if (data) {
-      for (const c of data) {
-        if (excluirId && c.id === excluirId) continue
+    // Verificar profesor en clases
+    if (profId) {
+      for (const c of (clasesProfesor || [])) {
+        if (c.fecha !== fecha || (excluirId && c.id === excluirId)) continue
         const cI = horaAMinutos((c.hora || '').substring(0, 5))
         const cF = cI + ((c as any).duracion_min || 60)
         if (inicio < cF && fin > cI) {
-          const cliente = (c as any).contratos?.clientes?.nombre || 'otro cliente'
-          const salon = (c as any).salones?.nombre || 'otro salón'
-          return `Profesor ya tiene clase con ${cliente} en ${salon} (${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}–${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')})`
+          conflictos[fecha] = `Profesor ya tiene clase con ${(c as any).contratos?.clientes?.nombre || 'otro cliente'}`
+          break
         }
       }
-    }
-    const { data: talleresPro } = await supabase.from('talleres')
-      .select('id, nombre, hora, duracion_min').eq('profesor_id', profId).eq('dia_semana', diaSemana)
-    if (talleresPro) {
-      for (const t of talleresPro) {
-        const tI = horaAMinutos((t.hora || '').substring(0, 5))
-        const tF = tI + (t.duracion_min || 60)
+      if (conflictos[fecha]) continue
+
+      // Verificar profesor en talleres
+      const diaSemana = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
+      for (const t of (talleresProfesor || [])) {
+        if ((t as any).dia_semana !== diaSemana) continue
+        const tI = horaAMinutos(((t as any).hora || '').substring(0, 5))
+        const tF = tI + ((t as any).duracion_min || 60)
         if (inicio < tF && fin > tI) {
-          return `Profesor tiene taller "${t.nombre}" ese día (${String(Math.floor(tI/60)).padStart(2,'0')}:${String(tI%60).padStart(2,'0')}–${String(Math.floor(tF/60)).padStart(2,'0')}:${String(tF%60).padStart(2,'0')})`
+          conflictos[fecha] = `Profesor tiene taller "${(t as any).nombre}" ese día`
+          break
         }
       }
     }
-    return null
   }
-
-  async function verificarConflictoCliente(contratoId: string, fecha: string, hora: string, durMin: number, excluirId?: string): Promise<string | null> {
-    if (!contratoId) return null
-    const inicio = horaAMinutos(hora)
-    const fin = inicio + durMin
-    const { data: ct } = await supabase.from('contratos').select('cliente_id').eq('id', contratoId).single()
-    if (!ct) return null
-    const { data: otrosContratos } = await supabase.from('contratos').select('id').eq('cliente_id', ct.cliente_id)
-    if (!otrosContratos) return null
-    const ids = otrosContratos.map((c: any) => c.id)
-    const { data } = await supabase.from('clases').select('id, hora, duracion_min, salones(nombre), profesores(nombre)')
-      .in('contrato_id', ids).eq('fecha', fecha).neq('estado', 'cancelada')
-    if (!data) return null
-    for (const c of data) {
-      if (excluirId && c.id === excluirId) continue
-      const cI = horaAMinutos((c.hora || '').substring(0, 5))
-      const cF = cI + ((c as any).duracion_min || 60)
-      if (inicio < cF && fin > cI) {
-        const salon = (c as any).salones?.nombre || 'otro salón'
-        const prof = (c as any).profesores?.nombre || 'otro profesor'
-        return `Cliente ya tiene clase con ${prof} en ${salon} (${String(Math.floor(cI/60)).padStart(2,'0')}:${String(cI%60).padStart(2,'0')}–${String(Math.floor(cF/60)).padStart(2,'0')}:${String(cF%60).padStart(2,'0')})`
-      }
-    }
-    const diaSemanaCliente = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
-    const { data: inscripciones } = await supabase
-      .from('taller_inscripciones')
-      .select('taller_id, talleres(nombre, hora, duracion_min, dia_semana)')
-      .eq('cliente_id', ct.cliente_id)
-      .eq('estado', 'activo')
-    if (inscripciones) {
-      for (const ins of inscripciones) {
-        const t = (ins as any).talleres
-        if (!t || t.dia_semana !== diaSemanaCliente) continue
-        const tI = horaAMinutos((t.hora || '').substring(0, 5))
-        const tF = tI + (t.duracion_min || 60)
-        if (inicio < tF && fin > tI) {
-          return `Cliente tiene taller "${t.nombre}" ese día (${String(Math.floor(tI/60)).padStart(2,'0')}:${String(tI%60).padStart(2,'0')}–${String(Math.floor(tF/60)).padStart(2,'0')}:${String(tF%60).padStart(2,'0')})`
-        }
-      }
-    }
-    return null
-  }
-
-  async function verificarTodos(salonId: string, profId: string, contratoId: string, fecha: string, hora: string, durMin: number, excluirId?: string): Promise<string | null> {
-    const c1 = await verificarConflictoSalon(salonId, fecha, hora, durMin, excluirId)
-    if (c1) return c1
-    const c2 = await verificarConflictoProfesor(profId, fecha, hora, durMin, excluirId)
-    if (c2) return c2
-    const c3 = await verificarConflictoCliente(contratoId, fecha, hora, durMin, excluirId)
-    if (c3) return c3
-    return null
-  }
-
+  return conflictos
+}
+  
   function calcularAvisosCrear(contrato: any, profIdActual: string, durActual: string, salonSede: string) {
     if (!contrato) { setAvisoCrear([]); return }
     const avisos: string[] = []
