@@ -751,58 +751,55 @@ async function verificarConflictosEnMemoria(
     setGuardando(true); setError('')
 
     if (recurrente) {
-      const patronId = crypto.randomUUID()
-      const batch: any[] = []
+      const fechas: string[] = []
       const fechaFin = parseFechaLocal(fechaFinRecurrencia)
       let i = 0
       while (true) {
         const d = parseFechaLocal(slotSeleccionado.fecha)
         d.setDate(d.getDate() + i * 7)
         if (d > fechaFin) break
-        const fechaStr = formatFecha(d)
-        const conflicto = await verificarTodos(slotSeleccionado.salon.id, profesorId, (contratoSeleccionado as any).id, fechaStr, slotSeleccionado.hora, parseInt(duracion))
-        if (conflicto) {
-          if (batch.length === 0) { setError(`${conflicto} — semana 1. No se creó ninguna clase.`) }
-          else {
-            const { error: err } = await supabase.from('clases').insert(batch)
-            if (err) setError('Error: ' + err.message)
-            else { setError(`${conflicto} — semana ${i + 1}. Se crearon ${batch.length} clases.`); cargarClases() }
-          }
+        fechas.push(formatFecha(d))
+        i++
+      }
+      const conflictos = await verificarConflictosEnMemoria(
+        slotSeleccionado.salon.id, profesorId,
+        fechas, slotSeleccionado.hora, parseInt(duracion)
+      )
+      const patronId = crypto.randomUUID()
+      const batch: any[] = []
+      for (let j = 0; j < fechas.length; j++) {
+        const fechaStr = fechas[j]
+        if (conflictos[fechaStr]) {
+          if (batch.length === 0) { setError(`${conflictos[fechaStr]} — semana 1. No se creó ninguna clase.`); setGuardando(false); return }
+          const { error: err } = await supabase.from('clases').insert(batch)
+          if (err) setError('Error: ' + err.message)
+          else { setError(`${conflictos[fechaStr]} — semana ${j + 1}. Se crearon ${batch.length} clases.`); cargarClases() }
           setGuardando(false); return
         }
         batch.push({
-          contrato_id: (contratoSeleccionado as any).id,
-          salon_id: slotSeleccionado.salon.id,
-          profesor_id: profesorId,
-          fecha: fechaStr,
-          hora: slotSeleccionado.hora + ':00',
-          duracion_min: parseInt(duracion),
-          estado: 'programada',
-          confirmada_cliente: false,
-          confirmada_profesor: false,
-          patron_id: patronId,
-          recurrente: true,
+          contrato_id: (contratoSeleccionado as any).id, salon_id: slotSeleccionado.salon.id,
+          profesor_id: profesorId, fecha: fechaStr, hora: slotSeleccionado.hora + ':00',
+          duracion_min: parseInt(duracion), estado: 'programada',
+          confirmada_cliente: false, confirmada_profesor: false,
+          patron_id: patronId, recurrente: true,
           modalidad: slotSeleccionado.salon.nombre === 'Domicilio' ? 'domicilio' : 'presencial',
         })
-        i++
       }
       const { error: err } = await supabase.from('clases').insert(batch)
       if (err) setError('Error: ' + err.message)
       else { setModalAbierto(false); cargarClases() }
     } else {
-      const conflicto = await verificarTodos(slotSeleccionado.salon.id, profesorId, (contratoSeleccionado as any).id, slotSeleccionado.fecha, slotSeleccionado.hora, parseInt(duracion))
-      if (conflicto) { setError(conflicto); setGuardando(false); return }
+      const conflictos = await verificarConflictosEnMemoria(
+        slotSeleccionado.salon.id, profesorId,
+        [slotSeleccionado.fecha], slotSeleccionado.hora, parseInt(duracion)
+      )
+      if (conflictos[slotSeleccionado.fecha]) { setError(conflictos[slotSeleccionado.fecha]); setGuardando(false); return }
       auditar('crear_clase', 'clases', undefined, { fecha: slotSeleccionado.fecha, profesor_id: profesorId })
       const { error: err } = await supabase.from('clases').insert({
-        contrato_id: (contratoSeleccionado as any).id,
-        salon_id: slotSeleccionado.salon.id,
-        profesor_id: profesorId,
-        fecha: slotSeleccionado.fecha,
-        hora: slotSeleccionado.hora + ':00',
-        duracion_min: parseInt(duracion),
-        estado: 'programada',
-        confirmada_cliente: false,
-        confirmada_profesor: false,
+        contrato_id: (contratoSeleccionado as any).id, salon_id: slotSeleccionado.salon.id,
+        profesor_id: profesorId, fecha: slotSeleccionado.fecha, hora: slotSeleccionado.hora + ':00',
+        duracion_min: parseInt(duracion), estado: 'programada',
+        confirmada_cliente: false, confirmada_profesor: false,
         modalidad: slotSeleccionado.salon.nombre === 'Domicilio' ? 'domicilio' : 'presencial',
       })
       if (err) setError('Error: ' + err.message)
