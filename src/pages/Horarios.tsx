@@ -834,7 +834,7 @@ export default function Horarios() {
     } else {
       const conflicto = await verificarTodos(slotSeleccionado.salon.id, profesorId, (contratoSeleccionado as any).id, slotSeleccionado.fecha, slotSeleccionado.hora, parseInt(duracion))
       if (conflicto) { setError(conflicto); setGuardando(false); return }
-      auditar('crear_clase', 'clases', undefined, { fecha: editFecha, profesor_id: editProfesor })
+      auditar('crear_clase', 'clases', undefined, { fecha: slotSeleccionado.fecha, profesor_id: profesorId })
       const { error: err } = await supabase.from('clases').insert({
         contrato_id: (contratoSeleccionado as any).id,
         salon_id: slotSeleccionado.salon.id,
