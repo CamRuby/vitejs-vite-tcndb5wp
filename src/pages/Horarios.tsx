@@ -1801,7 +1801,60 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                       </div>
                     )}
                   </div>
-
+{editEstado === 'cancelada' && claseEditando.estado !== 'cancelada' && (
+  <div style={{ marginTop: '12px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '14px' }}>
+    <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: '700', color: '#c2410c' }}>¿Por qué se cancela?</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {[
+        { key: 'academia', label: '🏫 Canceló la academia', desc: 'No cuenta en el plan' },
+        { key: 'profesor', label: '👨‍🏫 Canceló el profesor', desc: 'No cuenta, posible reposición' },
+        { key: 'cliente_tiempo', label: '✅ Canceló el cliente a tiempo', desc: 'No cuenta en el plan' },
+        { key: 'cliente_tarde', label: '⏰ Canceló el cliente tarde', desc: 'Sí cuenta en el plan' },
+      ].map(op => (
+        <label key={op.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '8px 10px', borderRadius: '8px',
+          background: motivoCancelacion === op.key ? '#fef3c7' : 'white',
+          border: `1px solid ${motivoCancelacion === op.key ? '#f59e0b' : '#e2e8f0'}` }}>
+          <input type="radio" name="motivo" value={op.key} checked={motivoCancelacion === op.key}
+            onChange={() => setMotivoCancelacion(op.key)} />
+          <div>
+            <span style={{ fontSize: '13px', fontWeight: '600', color: '#374151' }}>{op.label}</span>
+            <span style={{ fontSize: '11px', color: '#888', marginLeft: '6px' }}>{op.desc}</span>
+          </div>
+        </label>
+      ))}
+    </div>
+    {motivoCancelacion === 'cliente_tarde' && (
+      <div style={{ marginTop: '12px', padding: '12px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+        {clienteInasistenciaPerdonada && (
+          <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#854d0e', background: '#fefce8', padding: '6px 10px', borderRadius: '6px', border: '1px solid #fde68a' }}>
+            ℹ️ El cliente ya tiene por lo menos una inasistencia perdonada
+          </p>
+        )}
+        <p style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: '600', color: '#374151' }}>Honorario al profesor:</p>
+        {tarifaBase > 0 ? (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {[50, 100].map(pct => (
+              <button key={pct} type="button"
+                onClick={() => setHonorarioCancelacion(Math.round(tarifaBase * pct / 100))}
+                style={{ flex: 1, padding: '8px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
+                  border: `2px solid ${honorarioCancelacion === Math.round(tarifaBase * pct / 100) ? '#854d0e' : '#e2e8f0'}`,
+                  background: honorarioCancelacion === Math.round(tarifaBase * pct / 100) ? '#fefce8' : 'white',
+                  color: honorarioCancelacion === Math.round(tarifaBase * pct / 100) ? '#854d0e' : '#666' }}>
+                {pct}% — ${Math.round(tarifaBase * pct / 100).toLocaleString()}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div>
+            <input type="number" value={honorarioCancelacion} onChange={e => setHonorarioCancelacion(Number(e.target.value))} style={fieldStyle} placeholder="Valor honorario" />
+            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#aaa' }}>Ingresa el valor manualmente</p>
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+)}
+                  
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Fecha</label>
                     <input type="date" value={editFecha} onChange={e => setEditFecha(e.target.value)} style={fieldStyle} />
