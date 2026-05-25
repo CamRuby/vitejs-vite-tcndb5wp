@@ -11,32 +11,7 @@ export default function App() {
   const [rol, setRol] = useState<string | null>(null)
   const [listo, setListo] = useState(false)
 
-  useEffect(() => {
-    if (esProfesor) { setListo(true); return }
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSesion(session)
-      if (session?.user?.email) {
-        const { data } = await supabase
-          .from('roles')
-          .select('rol')
-          .eq('email', session.user.email)
-          .single()
-        setRol(data?.rol || 'sin_rol')
-        // Registrar inicio de sesión
-        supabase.from('auditoria').insert({
-          usuario_email: session.user.email,
-          accion: 'inicio_sesion',
-          entidad: 'auth',
-          detalle: { portal: 'administrativo' }
-        })
-      }
-      setListo(true)
-    })
-  }, [])
-
-  // Manejar login y logout sin onAuthStateChange
-  async function handleLogin() {
+  async function verificarSesion() {
     const { data: { session } } = await supabase.auth.getSession()
     setSesion(session)
     if (session?.user?.email) {
@@ -46,14 +21,22 @@ export default function App() {
         .eq('email', session.user.email)
         .single()
       setRol(data?.rol || 'sin_rol')
+    } else {
+      setRol(null)
     }
+    setListo(true)
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    setSesion(null)
-    setRol(null)
-  }
+  useEffect(() => {
+    if (esProfesor) { setListo(true); return }
+    verificarSesion()
+
+    // Escuchar login/logout y re-verificar
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      verificarSesion()
+    })
+    return () => subscription.unsubscribe()
+  }, [])
 
   if (esProfesor) return <ProfesorApp />
 
@@ -63,13 +46,13 @@ export default function App() {
     </div>
   )
 
-  if (!sesion) return <Login onLogin={handleLogin} />
+  if (!sesion) return <Login />
 
   if (rol === 'profesor') return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
       <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>No tienes acceso a esta sección.</p>
       <p style={{ fontSize: '14px', color: '#9ca3af' }}>Usa la app de profesores en tu celular.</p>
-      <button onClick={handleLogout}
+      <button onClick={() => supabase.auth.signOut()}
         style={{ padding: '10px 24px', background: '#1a8a8a', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
         Cerrar sesión
       </button>
@@ -80,12 +63,12 @@ export default function App() {
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
       <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>Usuario sin rol asignado.</p>
       <p style={{ fontSize: '14px', color: '#9ca3af' }}>Contacta al administrador.</p>
-      <button onClick={handleLogout}
+      <button onClick={() => supabase.auth.signOut()}
         style={{ padding: '10px 24px', background: '#1a8a8a', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
         Cerrar sesión
       </button>
     </div>
   )
 
-  return <Dashboard usuario={sesion.user} onLogout={handleLogout} />
+  return <Dashboard usuario={sesion.user} />
 }
