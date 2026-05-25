@@ -453,6 +453,10 @@ async function verificarConflictosEnMemoria(
     setConfirmarDada(false)
     setPlanCompleto(false)
     setProcesandoRevision(false)
+    setMotivoCancelacion('academia')
+    setHonorarioCancelacion(0)
+    setTarifaBase(0)
+    setClienteInasistenciaPerdonada(false)
     setModalEditar(true)
   }
 
