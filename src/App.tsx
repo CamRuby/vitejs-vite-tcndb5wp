@@ -11,30 +11,32 @@ export default function App() {
   const [rol, setRol] = useState<string | null>(null)
   const [listo, setListo] = useState(false)
 
-  async function verificarSesion() {
-    const { data: { session } } = await supabase.auth.getSession()
-    setSesion(session)
-    if (session?.user?.email) {
-      const { data } = await supabase
-        .from('roles')
-        .select('rol')
-        .eq('email', session.user.email)
-        .single()
-      setRol(data?.rol || 'sin_rol')
-    } else {
-      setRol(null)
-    }
-    setListo(true)
-  }
-
   useEffect(() => {
     if (esProfesor) { setListo(true); return }
-    verificarSesion()
 
-    // Escuchar login/logout y re-verificar
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      verificarSesion()
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setSesion(session)
+      if (session?.user?.email) {
+        const { data } = await supabase
+          .from('roles')
+          .select('rol')
+          .eq('email', session.user.email)
+          .single()
+        setRol(data?.rol || 'sin_rol')
+      }
+      setListo(true)
     })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (_event === 'SIGNED_OUT') {
+        setSesion(null)
+        setRol(null)
+      }
+      if (_event === 'SIGNED_IN') {
+        setSesion(session)
+      }
+    })
+
     return () => subscription.unsubscribe()
   }, [])
 
@@ -70,5 +72,7 @@ export default function App() {
     </div>
   )
 
+  // Si hay sesión, mostrar Dashboard independientemente del rol
+  // Solo se bloquea si es explícitamente 'profesor' o 'sin_rol'
   return <Dashboard usuario={sesion.user} />
 }
