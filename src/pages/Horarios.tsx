@@ -871,10 +871,19 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
     } else {
       const updatePayload: any = { hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha }
 
-      // Cancelación desde admin = siempre por academia
-      if (editEstado === 'cancelada') {
-        updatePayload.cancelado_por_academia = true
-        updatePayload.cancelado_tarde = true
+     if (editEstado === 'cancelada') {
+        updatePayload.motivo_cancelacion = motivoCancelacion
+        if (motivoCancelacion === 'academia' || motivoCancelacion === 'profesor') {
+          updatePayload.cancelado_por_academia = true
+          updatePayload.cancelado_tarde = false
+        } else if (motivoCancelacion === 'cliente_tiempo') {
+          updatePayload.cancelado_por_academia = false
+          updatePayload.cancelado_tarde = false
+        } else if (motivoCancelacion === 'cliente_tarde') {
+          updatePayload.cancelado_por_academia = false
+          updatePayload.cancelado_tarde = true
+          updatePayload.honorario_valor = honorarioCancelacion
+        }
       }
       const { error } = await supabase.from('clases')
         .update(updatePayload)
