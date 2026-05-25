@@ -230,7 +230,25 @@ export default function Horarios() {
   useEffect(() => { cargarSedes(); cargarProfesores(); cargarTodosSalones() }, [])
   useEffect(() => { if (sedeSeleccionada) { setTalleres([]); setInscritosPorTaller({}); cargarSalones(); cargarClases() } }, [sedeSeleccionada, fechaBase, diaSeleccionado, vista])
   useEffect(() => { if (salones.length > 0 && sedeSeleccionada) cargarTalleres() }, [salones])
-
+  useEffect(() => {
+    if (!claseEditando || editEstado !== 'cancelada' || claseEditando.estado === 'cancelada') return
+    if (claseEditando.profesores?.id && claseEditando.duracion_min) {
+      supabase.from('profesor_tarifas').select('valor')
+        .eq('profesor_id', claseEditando.profesores.id)
+        .eq('duracion_min', claseEditando.duracion_min)
+        .eq('modalidad', claseEditando.modalidad || 'presencial')
+        .single()
+        .then(({ data }) => {
+          if (data) { setTarifaBase(Number(data.valor)); setHonorarioCancelacion(Number(data.valor)) }
+        })
+    }
+    if (claseEditando.contratos?.id) {
+      supabase.from('clases').select('id').eq('inasistencia_perdonada', true)
+        .eq('contrato_id', claseEditando.contratos.id).limit(1)
+        .then(({ data }) => setClienteInasistenciaPerdonada((data || []).length > 0))
+      }
+    }, [claseEditando, editEstado])
+  
   async function cargarTodosSalones() {
     const { data } = await supabase.from('salones').select('id, nombre, sede_id').order('nombre')
     setTodosSalones(data || [])
