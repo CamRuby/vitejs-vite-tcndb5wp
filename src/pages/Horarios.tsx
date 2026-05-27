@@ -1160,6 +1160,9 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                                 )}
                                 {mainClass.recurrente && <span style={{ fontSize: '9px' }}>🔁</span>}
                                 {mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && <span style={{ fontSize: '9px' }}>⚠️</span>}
+                                {mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && mainClass.honorario_valor === null && vista === 'dia' && (
+                                <span style={{ fontSize: '9px', background: '#fff7ed', color: '#c2410c', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>💰</span>
+                                  )}
                               </div>
                             </div>
                             {vista === 'dia' && mainClass.profesores?.nombre && (
