@@ -732,7 +732,30 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       setClases(clasesData)
     } else { setClases([]) }
   }
-
+async function recalcularClasesTomadas(planesData: any[]) {
+  const planesActivos = planesData.filter(p => p.estado !== 'archivado')
+  for (const plan of planesActivos) {
+    const { data: clasesReales } = await supabase
+      .from('clases')
+      .select('id, estado, es_cortesia, cancelado_por_academia, inasistencia_perdonada, duracion_min')
+      .eq('contrato_id', plan.id)
+    if (!clasesReales) continue
+    const durPlan = plan.duracion_min || 60
+    let total = 0
+    for (const c of clasesReales) {
+      const esInasistencia = c.estado === 'cancelada' && !c.cancelado_por_academia && !c.inasistencia_perdonada
+      const cuenta = (c.estado === 'dada' && !c.es_cortesia) || esInasistencia
+      if (cuenta) {
+        const fraccion = parseFloat(((c.duracion_min || durPlan) / durPlan).toFixed(4))
+        total = parseFloat((total + fraccion).toFixed(4))
+      }
+    }
+    if (Math.abs(total - (plan.clases_tomadas || 0)) > 0.001) {
+      const nuevoEstado = plan.total_clases > 0 && total >= plan.total_clases ? 'completado' : plan.estado
+      await supabase.from('contratos').update({ clases_tomadas: total, estado: nuevoEstado }).eq('id', plan.id)
+    }
+  }
+}
   async function seleccionarClientePorId(clienteId: string) {
     const { data } = await supabase.from('clientes').select('*').eq('id', clienteId).single()
     if (data) seleccionarCliente(data)
