@@ -645,25 +645,26 @@ clasesDadas.forEach(c => {
           text: `${primerDia} al ${ultimoDiaLabel} del año ${anio}.`,
           fontSize: 10, bold: true, alignment: 'center', margin: [0,0,0,16]
         },
-        // Detalle de clases
+        
+  // Detalle de clases
   filaDetalle.length > 0 ? {
   table: {
     headerRows: 1,
-    widths: [34, 44, 28, 52, '*'],
+    widths: [30, 44, 22, 70, '*', 52],
     body: [
       [
         { text: 'FECHA', style: 'dth' },
         { text: 'HORA', style: 'dth' },
         { text: 'DUR.', style: 'dth' },
-        { text: 'HONORARIO', style: 'dth' },
-        { text: 'RESUMEN DE LA CLASE', style: 'dth' }
+        { text: 'ESTUDIANTE', style: 'dth' },
+        { text: 'RESUMEN DE LA CLASE', style: 'dth' },
+        { text: 'HONORARIO', style: 'dth' }
       ],
       ...filaDetalle,
       [
-        { text: 'TOTAL', colSpan: 3, bold: true, fontSize: 9, fillColor: '#f1f5f9', alignment: 'right' },
-        {},{},
-        { text: `$${totalHon.toLocaleString('es-CO')}`, bold: true, fontSize: 10, fillColor: '#f1f5f9', alignment: 'right' },
-        { text: '', fillColor: '#f1f5f9' }
+        { text: 'TOTAL', colSpan: 5, bold: true, fontSize: 9, fillColor: '#f1f5f9', alignment: 'right' },
+        {},{},{},{},
+        { text: `$${totalHon.toLocaleString('es-CO')}`, bold: true, fontSize: 10, fillColor: '#f1f5f9', alignment: 'right' }
       ]
     ]
   },
