@@ -637,8 +637,7 @@ export default function ProfesorApp() {
           fontSize: 10, bold: true, alignment: 'center', margin: [0,0,0,16]
         },
         // Detalle de clases
-        filaDetalle.length > 0 ? {
-        filaDetalle.length > 0 ? {
+  filaDetalle.length > 0 ? {
   table: {
     headerRows: 1,
     widths: [34, 44, 28, 52, '*'],
