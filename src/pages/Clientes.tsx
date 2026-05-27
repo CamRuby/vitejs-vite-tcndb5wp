@@ -780,6 +780,12 @@ async function recalcularClasesTomadas(planesData: any[]) {
       inasistencia_perdonada: cliente.inasistencia_perdonada || false
     })
     await cargarDatosCliente(cliente)
+    const { data: planesParaRecalc } = await supabase
+  .from('contratos')
+  .select('id, clases_tomadas, total_clases, estado, duracion_min')
+  .eq('cliente_id', cliente.id)
+await recalcularClasesTomadas(planesParaRecalc || [])
+await cargarDatosCliente(cliente)
     setConfirmarBorrar(false); setErrorBorrar(''); setExpandirFicha(false)
     setPlanesExpandidos(new Set())
     setModo('ver')
