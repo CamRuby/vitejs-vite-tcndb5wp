@@ -1899,15 +1899,47 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
 
               {/* ── FIX 3: Inasistencia — info solo, sin panel de resolución manual ── */}
               {claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia && (
-                <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
-                  <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#c2410c' }}>
-                    ⚠️ Inasistencia registrada — suma al plan del cliente
-                  </p>
-                  <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#92400e' }}>
-                    Si se quiere perdonar: abrir la siguiente clase dada del cliente y marcarla como cortesía.
-                  </p>
-                </div>
-              )}
+  <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
+    <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: '700', color: '#c2410c' }}>
+      ⚠️ Inasistencia registrada — suma al plan del cliente
+    </p>
+    <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#92400e' }}>
+      Si se quiere perdonar: abrir la siguiente clase dada del cliente y marcarla como cortesía.
+    </p>
+    {(claseEditando.honorario_valor === null || claseEditando.honorario_valor === undefined) && (
+      <div style={{ borderTop: '1px solid #fed7aa', paddingTop: '10px' }}>
+        <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: '700', color: '#c2410c' }}>💰 Honorario pendiente — selecciona:</p>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {[50, 100].map(pct => {
+            const base = tarifaBase || 0
+            const valor = base > 0 ? Math.round(base * pct / 100) : 0
+            return (
+              <button key={pct} type="button"
+                onClick={async () => {
+                  await supabase.from('clases').update({ honorario_valor: valor }).eq('id', claseEditando.id)
+                  setClaseEditando((prev: any) => ({ ...prev, honorario_valor: valor }))
+                  setClases(prev => prev.map(c => c.id === claseEditando.id ? { ...c, honorario_valor: valor } : c))
+                }}
+                style={{ flex: 1, padding: '8px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
+                  border: '2px solid #c2410c', background: 'white', color: '#c2410c' }}>
+                {pct}%{base > 0 ? ` — $${valor.toLocaleString()}` : ''}
+              </button>
+            )
+          })}
+        </div>
+        {tarifaBase === 0 && (
+          <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#aaa' }}>Sin tarifa registrada para este profesor. Edita el honorario manualmente desde Profesores.</p>
+        )}
+      </div>
+    )}
+    {claseEditando.honorario_valor !== null && claseEditando.honorario_valor !== undefined && (
+      <div style={{ borderTop: '1px solid #fed7aa', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: '12px', color: '#92400e', fontWeight: '600' }}>💰 Honorario asignado:</span>
+        <span style={{ fontSize: '14px', fontWeight: '800', color: '#c2410c' }}>${Number(claseEditando.honorario_valor).toLocaleString()}</span>
+      </div>
+    )}
+  </div>
+)}
 
               {editError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{editError}</p>}
 
