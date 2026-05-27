@@ -586,21 +586,30 @@ export default function ProfesorApp() {
 
     // Rows for class detail
     const filaDetalle: any[] = []
-    clasesDadas.forEach(c => {
-    const hon = getHonorario(c)
-    const honStr = hon === 'pendiente' ? '—' : `$${Number(hon).toLocaleString('es-CO')}`
-    const esInasistencia = c.estado === 'cancelada' && !c.cancelado_por_academia
-    const resumenTexto = esInasistencia
-      ? 'El estudiante no asistió, sin resumen de clase.'
-      : (c.observaciones || '—')
+clasesDadas.forEach(c => {
+  const hon = getHonorario(c)
+  const honStr = hon === 'pendiente' ? '—' : `$${Number(hon).toLocaleString('es-CO')}`
+  const esInasistencia = c.estado === 'cancelada' && !c.cancelado_por_academia
+  const resumenTexto = esInasistencia
+    ? 'El estudiante no asistió, sin resumen de clase.'
+    : (c.observaciones || '—')
+  const num = c.numero_calculado && c.contratos?.total_clases
+    ? `${c.numero_calculado}/${c.contratos.total_clases}` : ''
+  const nombreEst = c.esTaller ? `🎸 ${c.nombreTaller || 'Taller'}` : nombreCliente(c)
   filaDetalle.push([
     { text: `${c.fecha?.substring(8,10)}/${c.fecha?.substring(5,7)}`, fontSize: 8 },
     { text: formatHoraAmPm(c.hora), fontSize: 8 },
     { text: `${c.duracion_min}m`, fontSize: 8, alignment: 'center' },
-    { text: honStr, fontSize: 8, alignment: 'right', bold: true },
-    { text: resumenTexto, fontSize: 7, color: esInasistencia ? '#c2410c' : '#555', italics: esInasistencia }
-    ])
-  })
+    { stack: [
+      { text: nombreEst, fontSize: 8, bold: true },
+      num ? { text: num, fontSize: 7, color: '#888' } : {}
+    ]},
+    { text: resumenTexto, fontSize: 7,
+      color: esInasistencia ? '#c2410c' : '#555',
+      italics: esInasistencia, bold: esInasistencia },
+    { text: honStr, fontSize: 8, alignment: 'right', bold: true }
+  ])
+})
 
     const nombre = profesor?.nombre || '—'
     const cc = profesor?.cc || '—'
