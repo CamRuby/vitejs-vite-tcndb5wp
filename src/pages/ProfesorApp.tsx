@@ -1146,28 +1146,26 @@ clasesDadas.forEach(c => {
             )}
 
             {pantallaModal === 'inasistencia' && (
-              <div>
-                <div style={{ background:'#fff7ed', borderRadius:'16px', padding:'16px', marginBottom:'20px' }}>
-                  <p style={{ margin:'0 0 4px', fontSize:'18px', fontWeight:'800', color:'#c2410c' }}>Estudiante no asistió</p>
-                  <p style={{ margin:0, fontSize:'14px', color:'#92400e' }}>{nombreCliente(claseActiva)} · {formatHoraAmPm(claseActiva.hora)}</p>
-                </div>
-                <p style={{ fontSize:'14px', fontWeight:'700', color:'#374151', margin:'0 0 12px' }}>¿Cuánto te corresponde de honorario?</p>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'16px' }}>
-                  <button className="ba" onClick={() => marcarInasistencia(100)} disabled={guardando}
-                    style={{ padding:'24px 12px', background:'#dcfce7', color:'#166534', border:'2px solid #86efac', borderRadius:'16px', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
-                    <p style={{ margin:0, fontSize:'28px', fontWeight:'800' }}>100%</p>
-                  </button>
-                  <button className="ba" onClick={() => marcarInasistencia(50)} disabled={guardando}
-                    style={{ padding:'24px 12px', background:'#fefce8', color:'#854d0e', border:'2px solid #fde68a', borderRadius:'16px', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
-                    <p style={{ margin:0, fontSize:'28px', fontWeight:'800' }}>50%</p>
-                  </button>
-                </div>
-                <button onClick={() => setPantallaModal('acciones')} disabled={guardando}
-                  style={{ width:'100%', padding:'13px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:'14px', fontSize:'14px', cursor:'pointer', fontFamily:'inherit' }}>
-                  ← Volver
-                </button>
-              </div>
-            )}
+  <div>
+    <div style={{ background:'#fff7ed', borderRadius:'16px', padding:'16px', marginBottom:'20px' }}>
+      <p style={{ margin:'0 0 4px', fontSize:'18px', fontWeight:'800', color:'#c2410c' }}>Estudiante no asistió</p>
+      <p style={{ margin:0, fontSize:'14px', color:'#92400e' }}>{nombreCliente(claseActiva)} · {formatHoraAmPm(claseActiva.hora)}</p>
+    </div>
+    <p style={{ fontSize:'13px', color:'#6b7280', margin:'0 0 20px', lineHeight:'1.6' }}>
+      La inasistencia quedará registrada. El honorario será definido por la administración.
+    </p>
+    <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+      <button className="ba" onClick={marcarInasistencia} disabled={guardando}
+        style={{ padding:'18px', background:'#c2410c', color:'white', border:'none', borderRadius:'16px', fontSize:'16px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
+        {guardando ? '...' : '✗ Registrar inasistencia'}
+      </button>
+      <button onClick={() => setPantallaModal('acciones')} disabled={guardando}
+        style={{ padding:'13px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:'14px', fontSize:'14px', cursor:'pointer', fontFamily:'inherit' }}>
+        ← Volver
+      </button>
+    </div>
+  </div>
+)}
 
             {pantallaModal === 'cancelar' && (
               <div>
