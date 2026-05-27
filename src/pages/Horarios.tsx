@@ -230,8 +230,9 @@ export default function Horarios() {
   useEffect(() => { cargarSedes(); cargarProfesores(); cargarTodosSalones() }, [])
   useEffect(() => { if (sedeSeleccionada) { setTalleres([]); setInscritosPorTaller({}); cargarSalones(); cargarClases() } }, [sedeSeleccionada, fechaBase, diaSeleccionado, vista])
   useEffect(() => { if (salones.length > 0 && sedeSeleccionada) cargarTalleres() }, [salones])
-  useEffect(() => {
-    if (!claseEditando || editEstado !== 'cancelada' || claseEditando.estado === 'cancelada') return
+ useEffect(() => {
+  if (!claseEditando) return
+  if (editEstado !== 'cancelada' && claseEditando.estado !== 'cancelada') return
     if (claseEditando.profesores?.id && claseEditando.duracion_min) {
       supabase.from('profesor_tarifas').select('valor')
         .eq('profesor_id', claseEditando.profesores.id)
