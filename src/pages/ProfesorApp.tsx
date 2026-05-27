@@ -638,32 +638,36 @@ export default function ProfesorApp() {
         },
         // Detalle de clases
         filaDetalle.length > 0 ? {
-          table: {
-            headerRows: 1,
-            widths: [34, '*', 70, 34, 54, 52],
-            body: [
-              [
-                { text: 'FECHA', style: 'dth' }, { text: 'ESTUDIANTE', style: 'dth' },
-                { text: 'INSTRUMENTO', style: 'dth' }, { text: 'DUR.', style: 'dth' },
-                { text: 'TIPO', style: 'dth' }, { text: 'HONORARIO', style: 'dth' }
-              ],
-              ...filaDetalle,
-              [
-                { text: 'TOTAL', colSpan: 5, bold: true, fontSize: 9, fillColor: '#f1f5f9', alignment: 'right' },
-                {},{},{},{},
-                { text: `$${totalHon.toLocaleString('es-CO')}`, bold: true, fontSize: 10, fillColor: '#f1f5f9', alignment: 'right' }
-              ]
-            ]
-          },
-          layout: {
-            fillColor: (i: number) => i === 0 ? '#f1f5f9' : null,
-            hLineWidth: () => 0.5, vLineWidth: () => 0,
-            hLineColor: () => '#e0e0e0',
-            paddingLeft: () => 5, paddingRight: () => 5,
-            paddingTop: () => 4, paddingBottom: () => 4
-          },
-          margin: [0, 0, 0, 20]
-        } : {},
+        filaDetalle.length > 0 ? {
+  table: {
+    headerRows: 1,
+    widths: [34, 44, 28, 52, '*'],
+    body: [
+      [
+        { text: 'FECHA', style: 'dth' },
+        { text: 'HORA', style: 'dth' },
+        { text: 'DUR.', style: 'dth' },
+        { text: 'HONORARIO', style: 'dth' },
+        { text: 'RESUMEN DE LA CLASE', style: 'dth' }
+      ],
+      ...filaDetalle,
+      [
+        { text: 'TOTAL', colSpan: 3, bold: true, fontSize: 9, fillColor: '#f1f5f9', alignment: 'right' },
+        {},{},
+        { text: `$${totalHon.toLocaleString('es-CO')}`, bold: true, fontSize: 10, fillColor: '#f1f5f9', alignment: 'right' },
+        { text: '', fillColor: '#f1f5f9' }
+      ]
+    ]
+  },
+  layout: {
+    fillColor: (i: number) => i === 0 ? '#f1f5f9' : null,
+    hLineWidth: () => 0.5, vLineWidth: () => 0,
+    hLineColor: () => '#e0e0e0',
+    paddingLeft: () => 5, paddingRight: () => 5,
+    paddingTop: () => 4, paddingBottom: () => 4
+  },
+  margin: [0, 0, 0, 20]
+} : {},
         // Datos bancarios
         {
           text: (tipoCuenta === 'Nequi' || tipoCuenta === 'Daviplata')
