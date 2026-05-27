@@ -38,16 +38,24 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
   const [planesAlerta, setPlanesAlerta]     = useState<any[]>([])
   const [planesPorRenovar, setPlanesPorRenovar] = useState<any[]>([])
   const [planesSinIniciar, setPlanesSinIniciar] = useState<any[]>([])
+  const [inasistenciasPendientes, setInasistenciasPendientes] = useState<any[]>([])
 
   const hoy = new Date()
   const fechaHoy = fechaHoyLocal()
   const tituloFecha = `${DIAS_L[hoy.getDay()].charAt(0).toUpperCase() + DIAS_L[hoy.getDay()].slice(1)} ${hoy.getDate()} de ${MESES_L[hoy.getMonth()]}`
 
-  useEffect(() => { cargarTodo() }, [])  // recarga siempre que se monta (Dashboard hace key o navegar)
+  useEffect(() => { cargarTodo() }, [])
 
   async function cargarTodo() {
     setCargando(true)
-    await Promise.all([cargarMetricas(), cargarNovedades(), cargarPlanesAlerta(), cargarPlanesPorRenovar(), cargarPlanesSinIniciar()])
+    await Promise.all([
+      cargarMetricas(),
+      cargarNovedades(),
+      cargarPlanesAlerta(),
+      cargarPlanesPorRenovar(),
+      cargarPlanesSinIniciar(),
+      cargarInasistenciasPendientes()
+    ])
     setCargando(false)
   }
 
@@ -84,7 +92,6 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
   }
 
   async function cargarPlanesPorRenovar() {
-    // Planes completados + planes activos con clases_tomadas >= total_clases
     const { data: completados } = await supabase
       .from('contratos')
       .select('id, total_clases, clases_tomadas, cliente_id, estado, clientes(nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre)')
@@ -97,19 +104,16 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
       .eq('estado', 'activo')
       .order('fecha_inicio', { ascending: false })
       .limit(50)
-    // Filtrar activos donde clases_tomadas >= total_clases
     const activosCompletos = (activos || []).filter((p: any) =>
       p.total_clases > 0 && parseFloat((p.clases_tomadas || 0).toFixed(4)) >= parseFloat(p.total_clases.toFixed(4))
     )
     const todos = [...(completados || []), ...activosCompletos]
-    // Deduplicar por id
     const vistos = new Set<string>()
     const dedup = todos.filter((p: any) => { if (vistos.has(p.id)) return false; vistos.add(p.id); return true })
     setPlanesPorRenovar(dedup.slice(0, 6))
   }
 
   async function cargarPlanesSinIniciar() {
-    // Planes activos con 0 clases tomadas
     const { data } = await supabase
       .from('contratos')
       .select('id, total_clases, clases_tomadas, fecha_inicio, cliente_id, clientes(nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre)')
@@ -120,6 +124,18 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
     setPlanesSinIniciar(data || [])
   }
 
+  async function cargarInasistenciasPendientes() {
+    const { data } = await supabase
+      .from('clases')
+      .select('id, fecha, hora, contratos(clientes(nombre, nombres, apellidos), instrumentos(nombre)), profesores(nombre), inasistencia_perdonada')
+      .eq('estado', 'cancelada')
+      .eq('cancelado_por_academia', false)
+      .is('honorario_valor', null)
+      .order('fecha', { ascending: false })
+      .limit(10)
+    setInasistenciasPendientes(data || [])
+  }
+
   async function marcarLeida(id: string) {
     await supabase.from('notificaciones').update({ leida: true }).eq('id', id)
     setNovedades(prev => prev.map(n => n.id === id ? { ...n, leida: true } : n))
@@ -128,7 +144,16 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
   }
 
   function nombreCliente(p: any) {
-    return p.clientes?.nombre || `${p.clientes?.nombres || ''} ${p.clientes?.apellidos || ''}`.trim() || '—'
+    const cl = p.clientes || p.contratos?.clientes
+    return cl?.nombre || `${cl?.nombres || ''} ${cl?.apellidos || ''}`.trim() || '—'
+  }
+
+  function formatHora(hora: string) {
+    if (!hora) return '—'
+    const [h, m] = hora.substring(0, 5).split(':').map(Number)
+    const ampm = h >= 12 ? 'p.m.' : 'a.m.'
+    const h12 = h % 12 || 12
+    return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
   }
 
   const tarjetaMetrica = (label: string, valor: number, color: string, bg: string) => (
@@ -138,12 +163,12 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
     </div>
   )
 
-  // Colores por tarjeta — alineados con el sistema de colores existente
   const CARD_COLORS = {
-    novedades:   { header: '#1d4ed8', headerBg: '#eff6ff', border: '#bfdbfe' },
-    completar:   { header: '#c2410c', headerBg: '#fff7ed', border: '#fed7aa' },
-    renovar:     { header: TEAL,       headerBg: TEAL_LIGHT,  border: TEAL_MID   },
-    sinIniciar:  { header: '#7c3aed', headerBg: '#f3e8ff', border: '#d8b4fe' },
+    novedades:            { header: '#1d4ed8', headerBg: '#eff6ff',  border: '#bfdbfe' },
+    inasistencias:        { header: '#c2410c', headerBg: '#fff7ed',  border: '#fed7aa' },
+    proximasATerminar:    { header: '#854d0e', headerBg: '#fefce8',  border: '#fde68a' },
+    renovar:              { header: TEAL,      headerBg: TEAL_LIGHT,  border: TEAL_MID  },
+    sinIniciar:           { header: '#7c3aed', headerBg: '#f3e8ff',  border: '#d8b4fe' },
   }
 
   function tarjetaLista(
@@ -153,7 +178,8 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
     vacioMsg: string,
     colores: { header: string; headerBg: string; border: string },
     renderItem: (p: any) => React.ReactNode,
-    linkLabel: string
+    linkLabel: string,
+    onLink?: () => void
   ) {
     return (
       <div style={{ background: 'white', borderRadius: '16px', border: `1px solid ${colores.border}`, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
@@ -168,7 +194,7 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
                 {items.map(renderItem)}
               </div>
               <div style={{ padding: '10px 20px', textAlign: 'center', borderTop: '1px solid #f8fafc' }}>
-                <button onClick={() => onNavegar('clientes')}
+                <button onClick={onLink || (() => onNavegar('clientes'))}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: colores.header, fontWeight: '600' }}>
                   {linkLabel} →
                 </button>
@@ -199,10 +225,10 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
             {tarjetaMetrica('Novedades',    metricas.novedades,   metricas.novedades > 0 ? '#991b1b' : '#94a3b8', metricas.novedades > 0 ? '#fee2e2' : '#f8fafc')}
           </div>
 
-          {/* Tarjetas — 2x2 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px' }}>
+          {/* Tarjetas — 3 columnas */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '18px' }}>
 
-            {/* Novedades recientes */}
+            {/* 1. Novedades recientes */}
             {tarjetaLista(
               'Novedades recientes',
               metricas.novedades > 0 ? `${metricas.novedades} sin leer` : 'Al día',
@@ -229,20 +255,60 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
               'Ver todas las novedades'
             )}
 
-            {/* Planes por completar */}
+            {/* 2. Inasistencias pendientes */}
             {tarjetaLista(
-              'Por completar',
+              'Inasistencias pendientes',
+              inasistenciasPendientes.length > 0 ? `${inasistenciasPendientes.length} por resolver` : 'Al día',
+              inasistenciasPendientes,
+              '✓ Sin inasistencias pendientes',
+              CARD_COLORS.inasistencias,
+              (c) => {
+                const cliente = c.contratos?.clientes
+                const nombreC = cliente?.nombre || `${cliente?.nombres || ''} ${cliente?.apellidos || ''}`.trim() || '—'
+                const perdonada = c.inasistencia_perdonada
+                return (
+                  <div key={c.id}
+                    onClick={() => onNavegar('horarios')}
+                    style={{ padding: '11px 20px', borderBottom: '1px solid #f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#fff7ed')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
+                    <div style={{ textAlign: 'left' }}>
+                      <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: '600', color: '#1a1a1a' }}>{nombreC}</p>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>
+                        {c.fecha?.substring(8,10)}/{c.fecha?.substring(5,7)} · {formatHora(c.hora)} · {c.profesores?.nombre || '—'}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end', flexShrink: 0, marginLeft: '10px' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: '#fff7ed', color: '#c2410c', whiteSpace: 'nowrap' }}>
+                        💰 Sin honorario
+                      </span>
+                      {perdonada && (
+                        <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: '#fefce8', color: '#854d0e', whiteSpace: 'nowrap' }}>
+                          ✓ Perdonada
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              },
+              'Ver en horarios',
+              () => onNavegar('horarios')
+            )}
+
+            {/* 3. Planes próximos a terminar */}
+            {tarjetaLista(
+              'Planes próximos a terminar',
               '2 o menos clases restantes',
               planesAlerta,
               'Sin alertas por ahora',
-              CARD_COLORS.completar,
+              CARD_COLORS.proximasATerminar,
               (p) => {
                 const restantes = parseFloat(((p.total_clases || 0) - (p.clases_tomadas || 0)).toFixed(2))
                 return (
                   <div key={p.id}
                     onClick={() => onNavegar('clientes')}
                     style={{ padding: '11px 20px', borderBottom: '1px solid #f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#fff7ed')}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#fefce8')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
                     <div style={{ textAlign: 'left' }}>
                       <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: '600', color: '#1a1a1a', textAlign: 'left' }}>{nombreCliente(p)}</p>
@@ -257,7 +323,7 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
               'Ver todos los planes'
             )}
 
-            {/* Por renovar */}
+            {/* 4. Por renovar */}
             {tarjetaLista(
               'Por renovar',
               'Planes completados sin archivar',
@@ -282,7 +348,7 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
               'Ver en clientes'
             )}
 
-            {/* Sin iniciar */}
+            {/* 5. Sin iniciar */}
             {tarjetaLista(
               'Sin iniciar',
               'Planes activos con 0 clases tomadas',
