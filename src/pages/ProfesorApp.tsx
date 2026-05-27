@@ -373,71 +373,38 @@ export default function ProfesorApp() {
     setGuardando(false)
   }
 
-  async function marcarInasistencia(pct: number) {
-    if (!claseActiva) return
-    setGuardando(true)
-    const { data: contrato } = await supabase.from('contratos').select('id, clases_tomadas, duracion_min')
-      .eq('id', claseActiva.contrato_id).single()
-    const durPlan  = Number(contrato?.duracion_min) || Number(claseActiva.contratos?.duracion_min) || Number(claseActiva.duracion_min) || 60
-    const durClase = Number(claseActiva.duracion_min) || durPlan
-    const fraccion = parseFloat((durClase / durPlan).toFixed(4))
-    const tomadas  = parseFloat(Number(contrato?.clases_tomadas || 0).toFixed(4))
-    if (contrato) {
-      const nuevasTomadas2 = parseFloat((tomadas + fraccion).toFixed(4))
-      const totalClases2 = Number(claseActiva.contratos?.total_clases || 0)
-      const updateContrato2: any = { clases_tomadas: nuevasTomadas2 }
-      if (totalClases2 > 0 && nuevasTomadas2 >= totalClases2) updateContrato2.estado = 'completado'
-      await supabase.from('contratos').update(updateContrato2).eq('id', contrato.id)
-    }
-    const modalidad = (claseActiva.modalidad || 'presencial').toLowerCase()
-    const baseHon   = getValorTarifa(Number(claseActiva.duracion_min), modalidad)
-    const honorario = Math.round(baseHon * pct / 100)
-    await supabase.from('clases').update({
-      estado: 'cancelada',
-      cancelado_por_academia: false,
-      honorario_valor: honorario,
-      observaciones: resumen.trim() || claseActiva.observaciones || null
-    }).eq('id', claseActiva.id)
-    await insertarNotificacion(
-      'inasistencia',
-      `Inasistencia — ${nombreCliente(claseActiva)}`,
-      `Clase con ${profesor?.nombre} · ${formatHoraAmPm(claseActiva.hora)} · ${claseActiva.salones?.sedes?.nombre} · honorario ${pct}%`,
-      claseActiva.id
-    )
-    setExito('Inasistencia registrada')
-    cerrarModal()
-    setGuardando(false)
+ async function marcarInasistencia() {
+  if (!claseActiva) return
+  setGuardando(true)
+  const { data: contrato } = await supabase.from('contratos').select('id, clases_tomadas, duracion_min')
+    .eq('id', claseActiva.contrato_id).single()
+  const durPlan  = Number(contrato?.duracion_min) || Number(claseActiva.contratos?.duracion_min) || Number(claseActiva.duracion_min) || 60
+  const durClase = Number(claseActiva.duracion_min) || durPlan
+  const fraccion = parseFloat((durClase / durPlan).toFixed(4))
+  const tomadas  = parseFloat(Number(contrato?.clases_tomadas || 0).toFixed(4))
+  if (contrato) {
+    const nuevasTomadas = parseFloat((tomadas + fraccion).toFixed(4))
+    const totalClases = Number(claseActiva.contratos?.total_clases || 0)
+    const updateContrato: any = { clases_tomadas: nuevasTomadas }
+    if (totalClases > 0 && nuevasTomadas >= totalClases) updateContrato.estado = 'completado'
+    await supabase.from('contratos').update(updateContrato).eq('id', contrato.id)
   }
-
-  async function cancelarClase() {
-    if (!claseActiva) return
-    setGuardando(true)
-    const minutos  = minutosParaClase(claseActiva.fecha, claseActiva.hora)
-    const esTardia = minutos < 180
-    const motivo   = esTardia ? '' : 'Cancelación a tiempo'
-    await supabase.from('clases').update({
-      estado: 'cancelada',
-      motivo_cancelacion: motivo,
-      cancelado_por_academia: true,
-      cancelado_tarde: esTardia,
-      observaciones: resumen.trim() || claseActiva.observaciones || null
-    }).eq('id', claseActiva.id)
-    await insertarNotificacion(
-      esTardia ? 'cancelacion_tardia' : 'cancelacion_a_tiempo',
-      `${motivo} — ${profesor?.nombre}`,
-      `Clase de ${nombreCliente(claseActiva)} · ${claseActiva.fecha} ${formatHoraAmPm(claseActiva.hora)} · ${claseActiva.salones?.sedes?.nombre}`,
-      claseActiva.id
-    )
-    if (esTardia) {
-      setAvisoCancelacion(`La cancelación tardía es una situación negativa que afecta el servicio. La administración decidirá la acción a seguir de acuerdo a los términos del contrato`)
-      setPantallaModal('avisoTardia')
-      setGuardando(false)
-    } else {
-      setExito('Clase cancelada')
-      cerrarModal()
-      setGuardando(false)
-    }
-  }
+  await supabase.from('clases').update({
+    estado: 'cancelada',
+    cancelado_por_academia: false,
+    honorario_valor: null,
+    observaciones: resumen.trim() || claseActiva.observaciones || null
+  }).eq('id', claseActiva.id)
+  await insertarNotificacion(
+    'inasistencia',
+    `Inasistencia — ${nombreCliente(claseActiva)}`,
+    `Clase con ${profesor?.nombre} · ${formatHoraAmPm(claseActiva.hora)} · ${claseActiva.salones?.sedes?.nombre}`,
+    claseActiva.id
+  )
+  setExito('Inasistencia registrada')
+  cerrarModal()
+  setGuardando(false)
+}
 
   async function guardarResumen() {
     if (!claseActiva) return
