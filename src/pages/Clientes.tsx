@@ -304,12 +304,7 @@ function ModalPlan({ plan, profesores, instrumentos, sedes, onGuardar, onCerrar,
               <label style={labelStyle}>Fecha de inicio</label>
               <input type="date" value={fp.fecha_inicio} onChange={e => setFp({ ...fp, fecha_inicio: e.target.value })} style={estiloInput} />
             </div>
-            {!esNuevo && (
-              <div>
-                <label style={labelStyle}>Clases tomadas</label>
-                <input type="number" min={0} step={0.25} value={fp.clases_tomadas} onChange={e => setFp({ ...fp, clases_tomadas: e.target.value })} style={estiloInput} />
-              </div>
-            )}
+         
 
           </div>
           {error && <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '12px' }}>{error}</p>}
