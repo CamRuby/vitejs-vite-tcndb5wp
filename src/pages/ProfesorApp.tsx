@@ -1435,46 +1435,7 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
             📝 Sin resumen — toca para agregar
           </button>
         </div>
-{modalContrasena && (
-  <div onClick={e => e.target === e.currentTarget && setModalContrasena(false)}
-    style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:300, animation:'fadeIn 0.2s ease' }}>
-    <div style={{ width:'100%', maxWidth:'480px', background:'white', borderRadius:'28px 28px 0 0', padding:'20px 20px 36px', animation:'slideUp 0.3s ease' }}>
-      <div style={{ width:'44px', height:'5px', background:'#e5e7eb', borderRadius:'3px', margin:'0 auto 22px' }} />
-      <p style={{ margin:'0 0 20px', fontSize:'18px', fontWeight:'800', color:'#111' }}>🔒 Cambiar contraseña</p>
-      {contrasenaExito ? (
-        <div style={{ background:'#dcfce7', border:'1px solid #86efac', borderRadius:'14px', padding:'16px', textAlign:'center', color:'#166534', fontSize:'15px', fontWeight:'700' }}>
-          ✓ {contrasenaExito}
-        </div>
-      ) : (
-        <>
-          <div style={{ marginBottom:'14px' }}>
-            <label style={{ display:'block', fontSize:'11px', fontWeight:'800', color:'#6b7280', marginBottom:'8px', letterSpacing:'1px' }}>NUEVA CONTRASEÑA</label>
-            <input type="password" value={nuevaContrasena} onChange={e => setNuevaContrasena(e.target.value)}
-              placeholder="Mínimo 6 caracteres"
-              style={{ width:'100%', padding:'14px 16px', border:'2px solid #e5e7eb', borderRadius:'12px', fontSize:'15px', boxSizing:'border-box' as const, fontFamily:'inherit' }} />
-          </div>
-          <div style={{ marginBottom:'20px' }}>
-            <label style={{ display:'block', fontSize:'11px', fontWeight:'800', color:'#6b7280', marginBottom:'8px', letterSpacing:'1px' }}>CONFIRMAR CONTRASEÑA</label>
-            <input type="password" value={confirmarContrasena} onChange={e => setConfirmarContrasena(e.target.value)}
-              placeholder="Repite la contraseña"
-              style={{ width:'100%', padding:'14px 16px', border:'2px solid #e5e7eb', borderRadius:'12px', fontSize:'15px', boxSizing:'border-box' as const, fontFamily:'inherit' }} />
-          </div>
-          {contrasenaError && <p style={{ color:'#dc2626', fontSize:'13px', marginBottom:'12px', fontWeight:'600' }}>{contrasenaError}</p>}
-          <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-            <button onClick={cambiarContrasena} disabled={guardandoContrasena}
-              style={{ width:'100%', padding:'15px', background:TEAL, color:'white', border:'none', borderRadius:'14px', fontSize:'16px', fontWeight:'800', cursor:'pointer', fontFamily:'inherit' }}>
-              {guardandoContrasena ? 'Guardando...' : 'Guardar contraseña'}
-            </button>
-            <button onClick={() => { setModalContrasena(false); setNuevaContrasena(''); setConfirmarContrasena(''); setContrasenaError('') }}
-              style={{ width:'100%', padding:'13px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:'14px', fontSize:'14px', cursor:'pointer', fontFamily:'inherit' }}>
-              Cancelar
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  </div>
-)}
+
     )}
     </div>
   )
