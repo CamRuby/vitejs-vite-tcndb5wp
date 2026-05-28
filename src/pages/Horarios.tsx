@@ -262,7 +262,7 @@ export default function Horarios() {
   }
 
   async function cargarProfesores() {
-  const { data } = await supabase.from('profesores').select('id, nombre').eq('estado', 'activo').order('nombre')
+  const { data } = await supabase.from('profesores').select('id, nombre').eq('activo', true).order('nombre')
   setProfesores(data || [])
 }
 
