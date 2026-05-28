@@ -132,7 +132,14 @@ export default function Profesores() {
         body: JSON.stringify({ email: nuevoEmail.trim(), password: nuevaPassword, rol: 'profesor' })
       })
       const json = await res.json()
-      if (json.error) { setErrAcceso(json.error); return }
+      if (json.error && !json.error.toLowerCase().includes('already')) { 
+  setErrAcceso(json.error); return 
+}
+await supabase.from('profesores').update({ email: nuevoEmail.trim() }).eq('id', prof.id)
+setProf((prev: any) => ({ ...prev, email: nuevoEmail.trim() }))
+setTieneAcceso(true)
+setOkAcceso(`✓ Acceso creado para ${nuevoEmail.trim()}`)
+setNuevaPassword('')
       await supabase.from('profesores').update({ email: nuevoEmail.trim() }).eq('id', prof.id)
       setProf((prev: any) => ({ ...prev, email: nuevoEmail.trim() }))
       setTieneAcceso(true)
