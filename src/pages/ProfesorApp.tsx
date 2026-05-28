@@ -693,20 +693,15 @@ clasesDadas.forEach(c => {
   const mesLabelCap = mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1)
   const nombre = profesor?.nombre || '—'
   generarDocCuentaCobro().getBlob(async (blob: Blob) => {
-    try {
-      const archivo = new File([blob], `CuentaCobro_${nombre.replace(/ /g,'_')}_${mes}.pdf`, { type: 'application/pdf' })
+    const archivo = new File([blob], `CuentaCobro_${nombre.replace(/ /g,'_')}_${mes}.pdf`, { type: 'application/pdf' })
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [archivo] })) {
       await navigator.share({
         title: `Cuenta de cobro ${mesLabelCap}`,
         files: [archivo]
       })
-    } catch {
+    } else {
       const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `CuentaCobro_${nombre.replace(/ /g,'_')}_${mes}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      window.open(url, '_blank')
       setTimeout(() => URL.revokeObjectURL(url), 10000)
     }
   })
