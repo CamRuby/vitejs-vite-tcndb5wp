@@ -687,18 +687,22 @@ clasesDadas.forEach(c => {
     })
   }
 
-  async function compartirCuentaCobro() {
+ async function compartirCuentaCobro() {
     generarDocCuentaCobro().getBlob(async (blob: Blob) => {
-      const archivo = new File([blob], `CuentaCobro_${nombre.replace(/ /g,'_')}_${mes}.pdf`, { type: 'application/pdf' })
-     if (navigator.share) {
+      try {
+        const archivo = new File([blob], `CuentaCobro_${nombre.replace(/ /g,'_')}_${mes}.pdf`, { type: 'application/pdf' })
         await navigator.share({
           title: `Cuenta de cobro ${mesLabelCap}`,
-          text: `Cuenta de cobro de ${nombre} — ${mesLabelCap}`,
           files: [archivo]
         })
-      } else {
+      } catch {
         const url = URL.createObjectURL(blob)
-        window.open(url, '_blank')
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `CuentaCobro_${nombre.replace(/ /g,'_')}_${mes}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
         setTimeout(() => URL.revokeObjectURL(url), 10000)
       }
     })
