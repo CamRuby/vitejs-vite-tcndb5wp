@@ -1314,7 +1314,7 @@ clasesDadas.forEach(c => {
           </div>
         </div>
       )}
-    </div>
+    
  {modalContrasena && (
   <div onClick={e => e.target === e.currentTarget && setModalContrasena(false)}
     style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:300, animation:'fadeIn 0.2s ease' }}>
@@ -1355,6 +1355,7 @@ clasesDadas.forEach(c => {
     </div>
   </div>
 )}
+      </div>
   )
 }
 
