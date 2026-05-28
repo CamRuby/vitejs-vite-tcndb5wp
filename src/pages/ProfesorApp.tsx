@@ -676,20 +676,32 @@ clasesDadas.forEach(c => {
         dth: { fontSize: 8, bold: true, fillColor: '#f1f5f9', color: '#333' }
       }
     }
-   pdfMake.createPdf(docDef).getBlob(async (blob: Blob) => {
-  const archivo = new File([blob], `CuentaCobro_${nombre.replace(/ /g,'_')}_${mes}.pdf`, { type: 'application/pdf' })
-  if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
-    await navigator.share({
-      title: `Cuenta de cobro ${mesLabelCap}`,
-      text: `Cuenta de cobro de ${nombre} — ${mesLabelCap}`,
-      files: [archivo]
-    })
-  } else {
-    const url = URL.createObjectURL(blob)
-    window.open(url, '_blank')
-    setTimeout(() => URL.revokeObjectURL(url), 10000)
+  return pdfMake.createPdf(docDef)
   }
-})
+
+  function verCuentaCobro() {
+    generarDocCuentaCobro().getBlob((blob: Blob) => {
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 10000)
+    })
+  }
+
+  async function compartirCuentaCobro() {
+    generarDocCuentaCobro().getBlob(async (blob: Blob) => {
+      const archivo = new File([blob], `CuentaCobro_${nombre.replace(/ /g,'_')}_${mes}.pdf`, { type: 'application/pdf' })
+      if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+        await navigator.share({
+          title: `Cuenta de cobro ${mesLabelCap}`,
+          text: `Cuenta de cobro de ${nombre} — ${mesLabelCap}`,
+          files: [archivo]
+        })
+      } else {
+        const url = URL.createObjectURL(blob)
+        window.open(url, '_blank')
+        setTimeout(() => URL.revokeObjectURL(url), 10000)
+      }
+    })
   }
 
   function descargarHonorariosPDF() {
