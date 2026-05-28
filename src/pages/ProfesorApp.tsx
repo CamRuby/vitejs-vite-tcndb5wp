@@ -678,13 +678,8 @@ clasesDadas.forEach(c => {
     }
     pdfMake.createPdf(docDef).getBlob((blob: Blob) => {
   const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `CuentaCobro_${nombre.replace(/ /g,'_')}_${mes}.pdf`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(url), 100)
+  window.open(url, '_blank')
+  setTimeout(() => URL.revokeObjectURL(url), 10000)
 })
   }
 
