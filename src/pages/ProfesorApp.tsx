@@ -968,14 +968,18 @@ clasesDadas.forEach(c => {
               )}
               {!cargandoClases && clases.length > 0 && (
                 <div style={{ marginBottom:'16px' }}>
-                 <div style={{ display:'flex', gap:'8px' }}>
+                 <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
                   <button onClick={verCuentaCobro}
-                    style={{ flex:1, padding:'13px', background:'white', color:TEAL, border:`2px solid ${TEAL}`, borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
-                    👁 Ver
+                    style={{ flex:1, padding:'13px', background:TEAL, color:'white', border:'none', borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                    📄 Ver cuenta de cobro
                   </button>
                   <button onClick={compartirCuentaCobro}
-                    style={{ flex:1, padding:'13px', background:TEAL, color:'white', border:'none', borderRadius:'14px', fontSize:'14px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
-                    📤 Compartir
+                    style={{ width:'46px', height:'46px', background:'white', color:TEAL, border:`2px solid ${TEAL}`, borderRadius:'14px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                    </svg>
                   </button>
                 </div>
                 </div>
