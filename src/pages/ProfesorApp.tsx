@@ -690,7 +690,7 @@ clasesDadas.forEach(c => {
   async function compartirCuentaCobro() {
     generarDocCuentaCobro().getBlob(async (blob: Blob) => {
       const archivo = new File([blob], `CuentaCobro_${nombre.replace(/ /g,'_')}_${mes}.pdf`, { type: 'application/pdf' })
-      if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+     if (navigator.share) {
         await navigator.share({
           title: `Cuenta de cobro ${mesLabelCap}`,
           text: `Cuenta de cobro de ${nombre} — ${mesLabelCap}`,
