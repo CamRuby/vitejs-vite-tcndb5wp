@@ -847,7 +847,18 @@ clasesDadas.forEach(c => {
       </button>
     </div>
   )
-
+  if (profesor && profesor.activo === false) return (
+      <div style={{ position:'fixed', inset:0, background:'#f8fafc', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'32px', textAlign:'center', gap:'14px' }}>
+        <div style={{ fontSize:'52px' }}>🔒</div>
+        <p style={{ color:'#1f2937', fontSize:'17px', fontWeight:'700', margin:0 }}>Cuenta inactiva</p>
+        <p style={{ color:'#6b7280', fontSize:'14px', margin:0, lineHeight:'1.6', maxWidth:'280px' }}>Tu cuenta ha sido desactivada. Contacta al administrador.</p>
+        <button onClick={() => supabase.auth.signOut()}
+          style={{ marginTop:'10px', padding:'12px 28px', background:TEAL, color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'600', fontFamily:'inherit' }}>
+          Cerrar sesión
+        </button>
+      </div>
+    )
+  
   const dadas           = clases.filter(c => c.estado === 'dada')
   const pendientesCobro = clases.filter(c => c.estado === 'cancelada' && !c.cancelado_por_academia).length
   const totalHon        = dadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
