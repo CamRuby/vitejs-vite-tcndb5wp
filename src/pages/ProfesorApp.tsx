@@ -850,14 +850,18 @@ clasesDadas.forEach(c => {
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
             <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca"
               style={{ height:'36px', objectFit:'contain', filter:'brightness(0) invert(1)', opacity:0.9 }} />
-            <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-              <span style={{ color:'rgba(255,255,255,0.8)', fontSize:'14px', fontWeight:'600' }}>{profesor.nombre.split(' ')[0]}</span>
-              <button onClick={() => supabase.auth.signOut()}
-                style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'rgba(255,255,255,0.85)', padding:'7px 13px', borderRadius:'20px', cursor:'pointer', fontSize:'12px', fontWeight:'700', fontFamily:'inherit' }}>
-                Salir
-              </button>
-            </div>
-          </div>
+                 <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+        <span style={{ color:'rgba(255,255,255,0.8)', fontSize:'14px', fontWeight:'600' }}>{profesor.nombre.split(' ')[0]}</span>
+        <button onClick={() => setModalContrasena(true)}
+          style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'rgba(255,255,255,0.85)', padding:'7px 13px', borderRadius:'20px', cursor:'pointer', fontSize:'12px', fontWeight:'600', fontFamily:'inherit' }}>
+          🔒 Contraseña
+        </button>
+        <button onClick={() => supabase.auth.signOut()}
+          style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'rgba(255,255,255,0.85)', padding:'7px 13px', borderRadius:'20px', cursor:'pointer', fontSize:'12px', fontWeight:'700', fontFamily:'inherit' }}>
+          Salir
+        </button>
+      </div>
+              </div>
           <div style={{ display:'flex', gap:'3px' }}>
             {([
               { key:'hoy',       label: etiquetaSemana() },
