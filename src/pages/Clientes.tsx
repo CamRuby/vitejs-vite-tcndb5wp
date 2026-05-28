@@ -1346,7 +1346,7 @@ await cargarDatosCliente(cliente)
               {!cargandoVista && vistaActual === 'activos' && (() => {
                 let datos = [...datosVista]
                 if (filtroSede) datos = datos.filter((p: any) => p.sedes?.id === filtroSede)
-                if (filtroProfesor) datos = datos.filter((p: any) => p.profesores?.id === filtroProfesor)
+                
                 datos.sort((a: any, b: any) => ((a.total_clases || 0) - (a.clases_tomadas || 0)) - ((b.total_clases || 0) - (b.clases_tomadas || 0)))
                 return (
                   <div>
