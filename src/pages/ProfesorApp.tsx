@@ -509,7 +509,17 @@ export default function ProfesorApp() {
     setClaseActiva(null); setResumen(''); setPantallaModal('acciones'); setAvisoCancelacion('')
     if (vista === 'hoy') cargarHoy(); else cargarHistorial()
   }
-
+async function cambiarContrasena() {
+  if (!nuevaContrasena || nuevaContrasena.length < 6) { setContrasenaError('La contraseña debe tener al menos 6 caracteres'); return }
+  if (nuevaContrasena !== confirmarContrasena) { setContrasenaError('Las contraseñas no coinciden'); return }
+  setGuardandoContrasena(true); setContrasenaError('')
+  const { error } = await supabase.auth.updateUser({ password: nuevaContrasena })
+  if (error) { setContrasenaError('Error: ' + error.message); setGuardandoContrasena(false); return }
+  setContrasenaExito('¡Contraseña actualizada!')
+  setNuevaContrasena(''); setConfirmarContrasena('')
+  setGuardandoContrasena(false)
+  setTimeout(() => { setModalContrasena(false); setContrasenaExito('') }, 2000)
+}
   function numerosALetras(n: number): string {
     const unidades = ['','un','dos','tres','cuatro','cinco','seis','siete','ocho','nueve',
       'diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve']
