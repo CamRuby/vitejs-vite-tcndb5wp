@@ -594,8 +594,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [borrando, setBorrando] = useState(false)
   const [expandirFicha, setExpandirFicha] = useState(false)
   const [filtroSede, setFiltroSede] = useState('')
-  const [filtroProfesor, setFiltroProfesor] = useState('')
-  const [profesoresFiltro, setProfesoresFiltro] = useState<any[]>([])
+  
   // ── Historial por plan: qué planes están expandidos ──
   const [planesExpandidos, setPlanesExpandidos] = useState<Set<string>>(new Set())
   const [filtroHistorialPlan, setFiltroHistorialPlan] = useState<Record<string, 'historial' | 'programadas'>>({})
