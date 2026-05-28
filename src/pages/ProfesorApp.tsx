@@ -676,15 +676,14 @@ clasesDadas.forEach(c => {
         dth: { fontSize: 8, bold: true, fillColor: '#f1f5f9', color: '#333' }
       }
     }
-    pdfMake.createPdf(docDef).getBlob((blob: Blob) => {
-  const url = URL.createObjectURL(blob)
+    pdfMake.createPdf(docDef).getBase64((data: string) => {
+  const url = `data:application/pdf;base64,${data}`
   const a = document.createElement('a')
   a.href = url
   a.download = `CuentaCobro_${nombre.replace(/ /g,'_')}_${mes}.pdf`
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(url), 100)
 })
   }
 
