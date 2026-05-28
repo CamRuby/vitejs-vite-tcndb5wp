@@ -1356,10 +1356,7 @@ await cargarDatosCliente(cliente)
                         <option value="">Todas las sedes</option>
                         {sedes.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                       </select>
-                      <select value={filtroProfesor} onChange={e => setFiltroProfesor(e.target.value)} style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px', background: 'white' }}>
-                        <option value="">Todos los profesores</option>
-                        {profesoresFiltro.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                      </select>
+
                       <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#666' }}>{datos.length} planes</span>
                     </div>
                     <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eef2f7', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
