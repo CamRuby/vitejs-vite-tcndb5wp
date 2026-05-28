@@ -539,7 +539,7 @@ async function cambiarContrasena() {
     return n.toLocaleString('es-CO')
   }
 
-  function descargarCuentaCobro() {
+  function generarDocCuentaCobro() {
     const [anio, mesNum] = mes.split('-')
     const mesLabel = `${MESES_NOMBRE[parseInt(mesNum)-1]} ${anio}`
     const mesLabelCap = mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1)
