@@ -136,7 +136,7 @@ export default function Profesores() {
   setErrAcceso(json.error); return 
 }
 await supabase.from('profesores').update({ email: nuevoEmail.trim() }).eq('id', prof.id)
-setProf((prev: any) => ({ ...prev, email: nuevoEmail.trim() }))
+setForm((prev: any) => ({ ...prev, email: nuevoEmail.trim() }))
 setTieneAcceso(true)
 setOkAcceso(`✓ Acceso creado para ${nuevoEmail.trim()}`)
 setNuevaPassword('')
