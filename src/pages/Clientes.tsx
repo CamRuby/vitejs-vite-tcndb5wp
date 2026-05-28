@@ -612,7 +612,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   useEffect(() => {
     cargarBase()
     supabase.from('sedes').select('id, nombre').order('nombre').then(({ data }) => setSedes(data || []))
-    supabase.from('profesores').select('id, nombre').order('nombre').then(({ data }) => setProfesoresFiltro(data || []))
+    
   }, [])
   useEffect(() => { if (modo === 'lista' && instrumentos.length > 0) cargarVista(vistaActual) }, [vistaActual, instrumentos])
   useEffect(() => { if (busqueda.length >= 2) buscarClientes(); else setClientes([]) }, [busqueda])
