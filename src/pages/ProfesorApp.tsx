@@ -125,6 +125,12 @@ export default function ProfesorApp() {
   const [guardandoAsistTaller, setGuardandoAsistTaller] = useState(false)
   const [guardandoSesion, setGuardandoSesion] = useState(false)
   const [eligiendoHonorarioTaller, setEligiendoHonorarioTaller] = useState(false)
+  const [modalContrasena, setModalContrasena] = useState(false)
+  const [nuevaContrasena, setNuevaContrasena] = useState('')
+  const [confirmarContrasena, setConfirmarContrasena] = useState('')
+  const [contrasenaError, setContrasenaError] = useState('')
+  const [contrasenaExito, setContrasenaExito] = useState('')
+  const [guardandoContrasena, setGuardandoContrasena] = useState(false)
 
   useEffect(() => {
     document.body.style.background = '#f8fafc'
