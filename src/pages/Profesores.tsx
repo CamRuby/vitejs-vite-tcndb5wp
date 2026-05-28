@@ -408,7 +408,7 @@ export default function Profesores() {
                 <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} style={fS} />
               </div>
               <div><label style={lS}>Teléfono</label><input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={fS} /></div>
-              <div><label style={lS}>Correo</label><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={fS} /></div>
+
               <div><label style={lS}>Ciudad (sede)</label><input value={form.ciudad} onChange={e => setForm({ ...form, ciudad: e.target.value })} style={fS} placeholder="Ej: Tunja" /></div>
               <div><label style={lS}>Cédula</label><input value={form.cc} onChange={e => setForm({ ...form, cc: e.target.value })} style={fS} placeholder="Ej: 7.181.939" /></div>
               <div><label style={lS}>Ciudad de expedición CC</label><input value={form.ciudad_cc} onChange={e => setForm({ ...form, ciudad_cc: e.target.value })} style={fS} placeholder="Ej: Bogotá" /></div>
@@ -484,7 +484,7 @@ export default function Profesores() {
               <div style={{ padding: '18px 24px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '14px' }}>
                 <div><label style={lS}>Nombre *</label><input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} style={fS} /></div>
                 <div><label style={lS}>Teléfono</label><input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={fS} /></div>
-                <div><label style={lS}>Correo</label><input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={fS} /></div>
+                
                 <div><label style={lS}>Ciudad (sede)</label><input value={form.ciudad} onChange={e => setForm({ ...form, ciudad: e.target.value })} style={fS} placeholder="Ej: Tunja" /></div>
                 <div><label style={lS}>Cédula</label><input value={form.cc} onChange={e => setForm({ ...form, cc: e.target.value })} style={fS} placeholder="Ej: 79838241" /></div>
                 <div><label style={lS}>Ciudad expedición CC</label><input value={form.ciudad_cc} onChange={e => setForm({ ...form, ciudad_cc: e.target.value })} style={fS} placeholder="Ej: Bogotá" /></div>
