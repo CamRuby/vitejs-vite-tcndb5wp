@@ -622,7 +622,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     const [{ data: ins }, { data: sed }, { data: pro }] = await Promise.all([
       supabase.from('instrumentos').select('id, nombre').order('nombre'),
       supabase.from('sedes').select('id, nombre').order('nombre'),
-      supabase.from('profesores').select('id, nombre').order('nombre'),
+      supabase.from('profesores').select('id, nombre').eq('activo', true).order('nombre'),
     ])
     setInstrumentos(ins || []); setSedes(sed || []); setProfesores(pro || [])
     cargarVista('clientes')
