@@ -216,7 +216,7 @@ setNuevaPassword('')
   async function guardar() {
     if (!form.nombre.trim()) { setErrForm('El nombre es obligatorio'); return }
     setGuardando(true); setErrForm('')
-    const payload = { nombre: form.nombre.trim(), telefono: form.telefono || null, email: form.email || null, ciudad: form.ciudad, ciudad_cc: form.ciudad_cc || null, activo: form.activo, cc: form.cc || null, banco: form.banco || null, tipo_cuenta: form.tipo_cuenta || null, numero_cuenta: form.numero_cuenta || null }
+    const payload = { nombre: form.nombre.trim(), telefono: form.telefono || null, ciudad: form.ciudad, ciudad_cc: form.ciudad_cc || null, activo: form.activo, cc: form.cc || null, banco: form.banco || null, tipo_cuenta: form.tipo_cuenta || null, numero_cuenta: form.numero_cuenta || null }
     if (modo === 'nuevo') {
       const { data, error } = await supabase.from('profesores').insert(payload).select().single()
       if (error) { setErrForm('Error: ' + error.message); setGuardando(false); return }
