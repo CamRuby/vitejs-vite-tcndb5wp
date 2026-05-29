@@ -880,7 +880,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
     } else {
       const updatePayload: any = { hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha }
-
+      updatePayload.conteo_whatsapp = editConteoWhatsapp !== '' ? editConteoWhatsapp : null
      if (editEstado === 'cancelada') {
         updatePayload.motivo_cancelacion = motivoCancelacion
         if (motivoCancelacion === 'academia' || motivoCancelacion === 'profesor') {
