@@ -279,7 +279,7 @@ export default function Horarios() {
     const { data } = await supabase
       .from('clases_con_numero')
       .select(`
-        id, fecha, hora, duracion_min, estado, es_cortesia, patron_id, recurrente, cancelado_por_academia, numero_calculado, modalidad,
+        id, fecha, hora, duracion_min, estado, es_cortesia, patron_id, recurrente, cancelado_por_academia, numero_calculado, modalidad,id, fecha, hora, duracion_min, estado, es_cortesia, patron_id, recurrente, cancelado_por_academia, numero_calculado, modalidad, conteo_whatsapp,
         contratos (id, clases_tomadas, total_clases, sede_id, duracion_min, clientes (id, nombre), instrumentos (nombre)),
         profesores (id, nombre),
         salones (id, nombre, sede_id)
