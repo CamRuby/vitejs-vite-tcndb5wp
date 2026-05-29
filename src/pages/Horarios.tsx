@@ -1928,9 +1928,6 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                       </div>
                     )}
 
-                </>
-              
-
               {/* ── FIX 3: Inasistencia — info solo, sin panel de resolución manual ── */}
               {claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia && (
   <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
