@@ -834,7 +834,8 @@ async function verificarConflictosEnMemoria(
         duracion_min: parseInt(duracion), estado: 'programada',
         confirmada_cliente: false, confirmada_profesor: false,
         modalidad: slotSeleccionado.salon.nombre === 'Domicilio' ? 'domicilio' : 'presencial',
-      })
+            conteo_whatsapp: conteoWhatsapp !== '' ? conteoWhatsapp : null,
+          })
       if (err) setError('Error: ' + err.message)
       else { setModalAbierto(false); cargarClases() }
     }
