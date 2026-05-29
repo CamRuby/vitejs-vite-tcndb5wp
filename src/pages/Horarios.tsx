@@ -1909,7 +1909,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                       {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                     </select>
                   </div>
-                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+                 <div style={{ display: 'grid', gridTemplateColumns: editEstado !== 'cancelada' ? '1fr 1fr' : '1fr', gap: '10px', marginBottom: '20px' }}>
                     <div>
                       <label style={labelStyle}>Salón</label>
                       <select value={editSalonId} onChange={e => setEditSalonId(e.target.value)} style={fieldStyle}>
@@ -1917,15 +1917,15 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                       </select>
                     </div>
                     {editEstado !== 'cancelada' && (
-                    <div>
-                      <label style={labelStyle}>
-                        <span style={{ color: '#dc2626', fontWeight: '700' }}>WhatsApp #</span>
-                      </label>
-                      <input type="number" min={1} value={editConteoWhatsapp}
-                        onChange={e => setEditConteoWhatsapp(e.target.value === '' ? '' : Number(e.target.value))}
-                        placeholder="—"
-                        style={{ ...fieldStyle, borderColor: '#dc2626', color: '#dc2626', fontWeight: '700' }} />
-                    </div>
+                      <div>
+                        <label style={labelStyle}>
+                          <span style={{ color: '#dc2626', fontWeight: '700' }}>WhatsApp #</span>
+                        </label>
+                        <input type="number" min={1} value={editConteoWhatsapp}
+                          onChange={e => setEditConteoWhatsapp(e.target.value === '' ? '' : Number(e.target.value))}
+                          placeholder="—"
+                          style={{ ...fieldStyle, borderColor: '#dc2626', color: '#dc2626', fontWeight: '700' }} />
+                      </div>
                     )}
                   </div>
       <span style={{ fontSize: '11px', color: '#aaa', marginLeft: '6px' }}>(editable)</span>
