@@ -1927,15 +1927,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                           style={{ ...fieldStyle, borderColor: '#dc2626', color: '#dc2626', fontWeight: '700' }} />
                       </div>
                     )}
-                  </div>
-      <span style={{ fontSize: '11px', color: '#aaa', marginLeft: '6px' }}>(editable)</span>
-    </label>
-    <input type="number" min={1} value={editConteoWhatsapp}
-      onChange={e => setEditConteoWhatsapp(e.target.value === '' ? '' : Number(e.target.value))}
-      placeholder="Sin conteo"
-      style={{ ...fieldStyle, borderColor: '#dc2626', color: '#dc2626', fontWeight: '700' }} />
-  </div>
-)}
+
                 </>
               )}
 
