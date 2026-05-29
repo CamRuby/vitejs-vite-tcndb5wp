@@ -178,7 +178,8 @@ export default function Horarios() {
   const [tarifaBase, setTarifaBase] = useState<number>(0)
   const [clienteInasistenciaPerdonada, setClienteInasistenciaPerdonada] = useState(false)
   const fechasSemana = getFechasSemana(fechaBase)
-
+  const [conteoWhatsapp, setConteoWhatsapp] = useState<number | ''>('')
+  const [editConteoWhatsapp, setEditConteoWhatsapp] = useState<number | ''>('')
   const columns = useMemo(() => {
     if (vista === 'semana') {
       return fechasSemana.flatMap((fecha, i) =>
