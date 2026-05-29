@@ -1929,7 +1929,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                     )}
 
                 </>
-              )}
+              
 
               {/* ── FIX 3: Inasistencia — info solo, sin panel de resolución manual ── */}
               {claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia && (
