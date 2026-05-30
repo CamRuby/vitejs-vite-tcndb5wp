@@ -2023,7 +2023,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
               )}
             </div>
                </div>
-               }}
+               )}
               </div>
               )}
               {esBloqueada(claseEditando) && !confirmarBorrar && (
