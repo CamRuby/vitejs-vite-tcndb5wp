@@ -2022,7 +2022,8 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                 </div>
               )}
             </div>
-             </div>
+               </div>
+               )}
               {esBloqueada(claseEditando) && !confirmarBorrar && (
                 <button onClick={() => setModalEditar(false)} style={{ width: '100%', padding: '11px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', marginTop: '10px' }}>Cerrar</button>
               )}
