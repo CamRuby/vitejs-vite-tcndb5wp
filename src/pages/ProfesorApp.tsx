@@ -1324,7 +1324,7 @@ clasesDadas.forEach(c => {
                         style={{ padding:'16px', background:'#fff7ed', color:'#c2410c', border:'2px solid #fed7aa', borderRadius:'16px', fontSize:'15px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
                         ✗ No asistió
                       </button>
-                  
+                      </div>
                       </button>
                     </div>
                   </div>
