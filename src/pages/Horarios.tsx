@@ -1749,7 +1749,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
               )}
 
               {!esBloqueada(claseEditando) && !(claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia) && (
-                <div>
+                <>
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Estado</label>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -1909,25 +1909,27 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                       {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                     </select>
                   </div>
-                 <div style={{ display: 'grid', gridTemplateColumns: editEstado !== 'cancelada' ? '1fr 1fr' : '1fr', gap: '10px', marginBottom: '20px' }}>
-                    <div>
-                      <label style={labelStyle}>Salón</label>
-                      <select value={editSalonId} onChange={e => setEditSalonId(e.target.value)} style={fieldStyle}>
-                        {salones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                      </select>
-                    </div>
-                    {editEstado !== 'cancelada' && (
-                      <div>
-                        <label style={labelStyle}>
-                          <span style={{ color: '#dc2626', fontWeight: '700' }}>WhatsApp #</span>
-                        </label>
-                        <input type="number" min={1} value={editConteoWhatsapp}
-                          onChange={e => setEditConteoWhatsapp(e.target.value === '' ? '' : Number(e.target.value))}
-                          placeholder="—"
-                          style={{ ...fieldStyle, borderColor: '#dc2626', color: '#dc2626', fontWeight: '700' }} />
-                      </div>
-                    )}
-                 </div>
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={labelStyle}>Salón</label>
+                    <select value={editSalonId} onChange={e => setEditSalonId(e.target.value)} style={fieldStyle}>
+                      {salones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                    </select>
+                  </div>
+             {editEstado !== 'cancelada' && (
+  <div style={{ marginBottom: '20px' }}>
+    <label style={labelStyle}>
+      <span style={{ color: '#dc2626', fontWeight: '700' }}>Conteo WhatsApp</span>
+      <span style={{ fontSize: '11px', color: '#aaa', marginLeft: '6px' }}>(editable)</span>
+    </label>
+    <input type="number" min={1} value={editConteoWhatsapp}
+      onChange={e => setEditConteoWhatsapp(e.target.value === '' ? '' : Number(e.target.value))}
+      placeholder="Sin conteo"
+      style={{ ...fieldStyle, borderColor: '#dc2626', color: '#dc2626', fontWeight: '700' }} />
+  </div>
+)}
+                </>
+              )}
+
               {/* ── FIX 3: Inasistencia — info solo, sin panel de resolución manual ── */}
               {claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia && (
   <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
@@ -2021,11 +2023,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                   </div>
                 </div>
               )}
-            </div>
-               </div>
-               )}
-              </div>
-              )}
+
               {esBloqueada(claseEditando) && !confirmarBorrar && (
                 <button onClick={() => setModalEditar(false)} style={{ width: '100%', padding: '11px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', marginTop: '10px' }}>Cerrar</button>
               )}
