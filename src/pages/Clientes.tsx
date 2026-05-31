@@ -1215,28 +1215,7 @@ await cargarDatosCliente(cliente)
       const fraccion = parseFloat(((modalCortesia?.clase?.duracion_min || durPlan) / durPlan).toFixed(4))
       const nuevasCT = Math.max(parseFloat(((plan.clases_tomadas || 0) - fraccion).toFixed(4)), 0)
       await supabase.from('contratos').update({ clases_tomadas: nuevasCT }).eq('id', contratoId)
-      // Recalcular numero_en_plan de TODAS las clases del contrato (dadas reales + pendientes)
-      const { data: todasClases } = await supabase.from('clases')
-        .select('id, estado, es_cortesia, cancelado_por_academia, inasistencia_perdonada')
-        .eq('contrato_id', contratoId)
-        .order('fecha').order('hora')
-      if (todasClases && todasClases.length > 0) {
-        let conteo = 0
-        const updates: { id: string; numero: number | null }[] = todasClases.map((cl: any) => {
-          const cuenta = (cl.estado === 'dada' && !cl.es_cortesia) ||
-                         (cl.estado === 'cancelada' && !cl.cancelado_por_academia && !cl.inasistencia_perdonada)
-          if (cuenta) conteo++
-          const esFutura = cl.estado === 'programada' || cl.estado === 'confirmada'
-          return { id: cl.id, numero: cuenta ? conteo : esFutura ? (conteo + 1) : null }
-        })
-        // Actualizar en lotes: primero nulls, luego valores
-        const toNull = updates.filter(u => u.numero === null).map(u => u.id)
-        if (toNull.length > 0) await supabase.from('clases').update({ numero_en_plan: null }).in('id', toNull)
-        const conNumero = updates.filter(u => u.numero !== null)
-        for (const u of conNumero) {
-          await supabase.from('clases').update({ numero_en_plan: u.numero }).eq('id', u.id)
-        }
-      }
+
     }
     setModalCortesia(null)
     setJustificacionCortesia('')
