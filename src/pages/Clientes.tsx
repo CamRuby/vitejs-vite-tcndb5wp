@@ -1670,12 +1670,13 @@ await cargarDatosCliente(cliente)
                                 c.estado === 'cancelada' ? { bg: '#fee2e2', color: '#991b1b' } :
                                 c.estado === 'confirmada' ? { bg: '#dcfce7', color: '#166534' } :
                                                             { bg: TEAL_LIGHT, color: TEAL }
-                              const etiquetaEstado =
+                                const etiquetaEstado =
                                   esCortesia && esInasistencia ? '🎁 Inasistencia perdonada' :
-                                  esCortesia          ? '🎁 Cortesía' :
-                                  esInasistencia      ? 'Inasistencia' :
-                                esCanceladaAcademia ? 'Cancelada (academia)' :
-                                c.estado
+                                  esCortesia ? '🎁 Cortesía' :
+                                  esInasistencia && !c.inasistencia_perdonada ? 'Inasistencia' :
+                                  esInasistencia && c.inasistencia_perdonada ? 'Inasistencia perdonada' :
+                                  esCanceladaAcademia ? 'Cancelada (academia)' :
+                                  c.estado
 
                               const [hh, mm] = (c.hora || '00:00').substring(0, 5).split(':').map(Number)
                               const ampm = hh >= 12 ? 'pm' : 'am'
