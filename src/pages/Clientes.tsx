@@ -1204,11 +1204,12 @@ await cargarDatosCliente(cliente)
   // ── Marcar clase como cortesía: requiere justificación guardada en observaciones_admin ──
   async function marcarCortesia(claseId: string, contratoId: string, justificacion: string) {
     // Quitar numero_en_plan a la clase cortesía
-    await supabase.from('clases').update({
+    const r = await supabase.from('clases').update({
       es_cortesia: true,
       numero_en_plan: null,
       observaciones_admin: justificacion.trim() || null
     }).eq('id', claseId)
+    console.log('resultado update clases:', JSON.stringify(r.error), 'claseId:', claseId)
     const plan = planes.find((p: any) => p.id === contratoId)
     if (plan) {
       const durPlan = plan.duracion_min || 60
