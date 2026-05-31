@@ -433,6 +433,7 @@ async function verificarConflictosEnMemoria(
       .not('conteo_whatsapp', 'is', null)
       .order('fecha', { ascending: false }).limit(1)
     const ultimoWA = dataWA?.[0]?.conteo_whatsapp
+    console.log('ultimoWA:', ultimoWA, 'dataWA:', dataWA)
     setConteoWhatsapp(ultimoWA != null ? ultimoWA + 1 : '')
     const { data } = await supabase.from('clases')
       .select('conteo_whatsapp').eq('contrato_id', id)
