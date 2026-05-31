@@ -2090,10 +2090,28 @@ await cargarDatosCliente(cliente)
                   />
                   <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                     <button
-                      onClick={async () => {
+                     onClick={async () => {
                         if (!justificacionCortesia.trim()) return
                         setGuardandoCortesia(true)
-                        await marcarCortesia(modalCortesia.claseId, modalCortesia.contratoId, justificacionCortesia)
+                        const esInasistencia = modalCortesia.clase.estado === 'cancelada' && !modalCortesia.clase.cancelado_por_academia
+                        const durPlan = planes.find((p: any) => p.id === modalCortesia.contratoId)?.duracion_min || 60
+                        const fraccion = parseFloat(((modalCortesia.clase.duracion_min || durPlan) / durPlan).toFixed(4))
+                        await supabase.from('clases').update({
+                          es_cortesia: true,
+                          inasistencia_perdonada: esInasistencia,
+                          numero_en_plan: null,
+                          observaciones_admin: justificacionCortesia.trim() || null
+                        }).eq('id', modalCortesia.claseId)
+                        const plan = planes.find((p: any) => p.id === modalCortesia.contratoId)
+                        if (plan) {
+                          const nuevasCT = Math.max(parseFloat(((plan.clases_tomadas || 0) - fraccion).toFixed(4)), 0)
+                          await supabase.from('contratos').update({ clases_tomadas: nuevasCT }).eq('id', modalCortesia.contratoId)
+                        }
+                        setModalCortesia(null)
+                        setJustificacionCortesia('')
+                        setGuardandoCortesia(false)
+                        await cargarDatosCliente(clienteSeleccionado)
+                        cargarVista(vistaActual)
                       }}
                       disabled={!justificacionCortesia.trim() || guardandoCortesia}
                       style={{ flex: 1, padding: '9px', background: justificacionCortesia.trim() ? '#0369a1' : '#cbd5e1', color: 'white', border: 'none', borderRadius: '8px', cursor: justificacionCortesia.trim() ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: '600' }}>
