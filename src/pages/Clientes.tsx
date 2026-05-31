@@ -1222,6 +1222,7 @@ await cargarDatosCliente(cliente)
     setGuardandoCortesia(false)
     cargarDatosCliente(clienteSeleccionado)
     cargarVista(vistaActual)
+    console.log('fin marcarCortesia')
   }
 
   function formatFechaCorta(iso: string) {
