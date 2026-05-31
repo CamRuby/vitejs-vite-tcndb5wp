@@ -52,6 +52,11 @@ export default function Profesores() {
   const [tTaller, setTTaller] = useState(false)
   const [tValor, setTValor] = useState('')
 
+  // ── Copiar tarifas ──
+  const [mostrarCopiar, setMostrarCopiar] = useState(false)
+  const [profCopiar, setProfCopiar] = useState('')
+  const [copiando, setCopiando] = useState(false)
+
   const [clases, setClases] = useState<any[]>([])
   const [mes, setMes] = useState(() => {
     const h = new Date()
@@ -113,8 +118,24 @@ export default function Profesores() {
     setOkAcceso('')
     setEditando(false)
     setErrForm('')
+    setMostrarCopiar(false)
+    setProfCopiar('')
     setCargando(false)
     setModo('ver')
+  }
+
+  async function copiarTarifas() {
+    if (!profCopiar) { alert('Selecciona un profesor'); return }
+    setCopiando(true)
+    const { data: tarifasSource } = await supabase.from('profesor_tarifas').select('modalidad, duracion_min, taller_grupal, valor').eq('profesor_id', profCopiar)
+    if (!tarifasSource?.length) { alert('El profesor seleccionado no tiene tarifas registradas'); setCopiando(false); return }
+    await supabase.from('profesor_tarifas').delete().eq('profesor_id', prof.id)
+    const inserts = tarifasSource.map((t: any) => ({ profesor_id: prof.id, modalidad: t.modalidad, duracion_min: t.duracion_min, taller_grupal: t.taller_grupal, valor: t.valor }))
+    const { data: nuevas } = await supabase.from('profesor_tarifas').insert(inserts).select()
+    setTarifas(nuevas || [])
+    setMostrarCopiar(false)
+    setProfCopiar('')
+    setCopiando(false)
   }
 
   async function crearAcceso() {
@@ -125,26 +146,17 @@ export default function Profesores() {
       const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch(`${SUPABASE_URL}/functions/v1/crear-usuario`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
         body: JSON.stringify({ email: nuevoEmail.trim(), password: nuevaPassword, rol: 'profesor' })
       })
       const json = await res.json()
-      if (json.error && !json.error.toLowerCase().includes('already')) { 
-  setErrAcceso(json.error); return 
-}
-await supabase.from('profesores').update({ email: nuevoEmail.trim() }).eq('id', prof.id)
-setForm((prev: any) => ({ ...prev, email: nuevoEmail.trim() }))
-setTieneAcceso(true)
-setOkAcceso(`✓ Acceso creado para ${nuevoEmail.trim()}`)
-setNuevaPassword('')
+      if (json.error && !json.error.toLowerCase().includes('already')) { setErrAcceso(json.error); return }
       await supabase.from('profesores').update({ email: nuevoEmail.trim() }).eq('id', prof.id)
-      setProf((prev: any) => ({ ...prev, email: nuevoEmail.trim() }))
+      setForm((prev: any) => ({ ...prev, email: nuevoEmail.trim() }))
       setTieneAcceso(true)
       setOkAcceso(`✓ Acceso creado para ${nuevoEmail.trim()}`)
       setNuevaPassword('')
+      setProf((prev: any) => ({ ...prev, email: nuevoEmail.trim() }))
     } catch (e: any) {
       setErrAcceso('Error al crear acceso: ' + e.message)
     } finally {
@@ -191,15 +203,9 @@ setNuevaPassword('')
       const tallerRows = (sesiones || []).map((s: any) => {
         const t = tallerMap[s.taller_id]
         return {
-          id: `taller-${s.id}`,
-          fecha: s.fecha,
-          hora: t?.hora || '00:00:00',
-          duracion_min: t?.duracion_min,
-          estado: s.estado,
-          esTaller: true,
-          nombreTaller: t?.nombre,
-          salones: t?.salones,
-          observaciones: s.observaciones,
+          id: `taller-${s.id}`, fecha: s.fecha, hora: t?.hora || '00:00:00',
+          duracion_min: t?.duracion_min, estado: s.estado, esTaller: true,
+          nombreTaller: t?.nombre, salones: t?.salones, observaciones: s.observaciones,
           es_cortesia: false, cancelado_tarde: false, cancelado_por_academia: false,
           honorario_valor: s.honorario_valor ?? null,
           observaciones_admin: s.observaciones_admin ?? null,
@@ -252,9 +258,7 @@ setNuevaPassword('')
     if (!prof?.id) { alert('Sin profesor seleccionado'); return }
     if (!tValor) { alert('Ingresa un valor'); return }
     const existe = tarifas.some(t =>
-      t.modalidad === tModalidad &&
-      t.taller_grupal === tTaller &&
-      (tTaller ? true : t.duracion_min === tDur)
+      t.modalidad === tModalidad && t.taller_grupal === tTaller && (tTaller ? true : t.duracion_min === tDur)
     )
     if (existe) { alert(`Ya existe una tarifa para ${tModalidad} · ${tTaller ? 'Taller grupal' : tDur + ' min'}`); return }
     const { data, error } = await supabase.from('profesor_tarifas')
@@ -306,12 +310,10 @@ setNuevaPassword('')
     if (claseModal.esTaller) {
       const sesionId = claseModal.id.replace('taller-', '')
       await supabase.from('taller_sesiones').update({
-        honorario_valor: Number(editHon),
-        observaciones_admin: editObsAdmin || null
+        honorario_valor: Number(editHon), observaciones_admin: editObsAdmin || null
       }).eq('id', sesionId)
       setClases(prev => prev.map(c => c.id === claseModal.id
-        ? { ...c, honorario_valor: Number(editHon), observaciones_admin: editObsAdmin || null }
-        : c))
+        ? { ...c, honorario_valor: Number(editHon), observaciones_admin: editObsAdmin || null } : c))
       setClaseModal(null); setGuardandoH(false); return
     }
     auditar('editar_honorario', 'clases', claseModal.id, { honorario_valor: Number(editHon), obs_admin: editObsAdmin })
@@ -353,7 +355,6 @@ setNuevaPassword('')
   return (
     <div style={{ padding: '20px 24px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
 
-      {/* Encabezado */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
         <div>
           <h2 style={{ margin: 0, fontSize: '26px', color: '#1a1a1a' }}>Profesores</h2>
@@ -415,7 +416,6 @@ setNuevaPassword('')
                 <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} style={fS} />
               </div>
               <div><label style={lS}>Teléfono</label><input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={fS} /></div>
-
               <div><label style={lS}>Ciudad (sede)</label><input value={form.ciudad} onChange={e => setForm({ ...form, ciudad: e.target.value })} style={fS} placeholder="Ej: Tunja" /></div>
               <div><label style={lS}>Cédula</label><input value={form.cc} onChange={e => setForm({ ...form, cc: e.target.value })} style={fS} placeholder="Ej: 7.181.939" /></div>
               <div><label style={lS}>Ciudad de expedición CC</label><input value={form.ciudad_cc} onChange={e => setForm({ ...form, ciudad_cc: e.target.value })} style={fS} placeholder="Ej: Bogotá" /></div>
@@ -423,10 +423,8 @@ setNuevaPassword('')
                 <div><label style={lS}>Banco</label><input value={form.banco} onChange={e => setForm({ ...form, banco: e.target.value })} style={fS} placeholder="Ej: BANCOLOMBIA" /></div>
                 <div><label style={lS}>Tipo de cuenta</label>
                   <select value={form.tipo_cuenta} onChange={e => setForm({ ...form, tipo_cuenta: e.target.value })} style={fS}>
-                    <option value="Ahorros">Ahorros</option>
-                    <option value="Corriente">Corriente</option>
-                    <option value="Nequi">Nequi</option>
-                    <option value="Daviplata">Daviplata</option>
+                    <option value="Ahorros">Ahorros</option><option value="Corriente">Corriente</option>
+                    <option value="Nequi">Nequi</option><option value="Daviplata">Daviplata</option>
                   </select>
                 </div>
               </div>
@@ -435,8 +433,7 @@ setNuevaPassword('')
                 <label style={lS}>Estado</label>
                 <select value={form.activo ? 'activo' : 'inactivo'} onChange={e => setForm({ ...form, activo: e.target.value === 'activo' })}
                   style={{ ...fS, background: form.activo ? '#dcfce7' : '#fee2e2', color: form.activo ? '#166534' : '#991b1b', fontWeight: '600' }}>
-                  <option value="activo">Activo</option>
-                  <option value="inactivo">Inactivo</option>
+                  <option value="activo">Activo</option><option value="inactivo">Inactivo</option>
                 </select>
               </div>
               {errForm && <p style={{ gridColumn: '1 / -1', color: '#ef4444', fontSize: '13px', margin: 0 }}>{errForm}</p>}
@@ -459,7 +456,6 @@ setNuevaPassword('')
             ← Volver a la lista
           </button>
 
-          {/* Tarjeta */}
           <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.08)', marginBottom: '20px' }}>
             <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -491,7 +487,6 @@ setNuevaPassword('')
               <div style={{ padding: '18px 24px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '14px' }}>
                 <div><label style={lS}>Nombre *</label><input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} style={fS} /></div>
                 <div><label style={lS}>Teléfono</label><input value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={fS} /></div>
-                
                 <div><label style={lS}>Ciudad (sede)</label><input value={form.ciudad} onChange={e => setForm({ ...form, ciudad: e.target.value })} style={fS} placeholder="Ej: Tunja" /></div>
                 <div><label style={lS}>Cédula</label><input value={form.cc} onChange={e => setForm({ ...form, cc: e.target.value })} style={fS} placeholder="Ej: 79838241" /></div>
                 <div><label style={lS}>Ciudad expedición CC</label><input value={form.ciudad_cc} onChange={e => setForm({ ...form, ciudad_cc: e.target.value })} style={fS} placeholder="Ej: Bogotá" /></div>
@@ -499,10 +494,8 @@ setNuevaPassword('')
                   <div><label style={lS}>Banco</label><input value={form.banco} onChange={e => setForm({ ...form, banco: e.target.value })} style={fS} placeholder="Ej: BANCOLOMBIA" /></div>
                   <div><label style={lS}>Tipo de cuenta</label>
                     <select value={form.tipo_cuenta} onChange={e => setForm({ ...form, tipo_cuenta: e.target.value })} style={fS}>
-                      <option value="Ahorros">Ahorros</option>
-                      <option value="Corriente">Corriente</option>
-                      <option value="Nequi">Nequi</option>
-                      <option value="Daviplata">Daviplata</option>
+                      <option value="Ahorros">Ahorros</option><option value="Corriente">Corriente</option>
+                      <option value="Nequi">Nequi</option><option value="Daviplata">Daviplata</option>
                     </select>
                   </div>
                 </div>
@@ -511,8 +504,7 @@ setNuevaPassword('')
                   <label style={lS}>Estado</label>
                   <select value={form.activo ? 'activo' : 'inactivo'} onChange={e => setForm({ ...form, activo: e.target.value === 'activo' })}
                     style={{ ...fS, background: form.activo ? '#dcfce7' : '#fee2e2', color: form.activo ? '#166534' : '#991b1b', fontWeight: '600' }}>
-                    <option value="activo">Activo</option>
-                    <option value="inactivo">Inactivo</option>
+                    <option value="activo">Activo</option><option value="inactivo">Inactivo</option>
                   </select>
                 </div>
                 {errForm && <p style={{ gridColumn: '1 / -1', color: '#ef4444', fontSize: '13px', margin: 0 }}>{errForm}</p>}
@@ -520,7 +512,7 @@ setNuevaPassword('')
             )}
           </div>
 
-          {/* ── Acceso app profesor ── */}
+          {/* Acceso app */}
           {!editando && (
             <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden', marginBottom: '20px' }}>
               <div style={{ background: TEAL_LIGHT, padding: '12px 18px', borderBottom: '1px solid #eef2f7', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -600,9 +592,32 @@ setNuevaPassword('')
 
               {/* Tarifas */}
               <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
-                <div style={{ background: TEAL_LIGHT, padding: '12px 18px', borderBottom: '1px solid #eef2f7' }}>
+                <div style={{ background: TEAL_LIGHT, padding: '12px 18px', borderBottom: '1px solid #eef2f7', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <p style={{ margin: 0, fontWeight: '700', fontSize: '13px', color: TEAL }}>Tarifas de honorarios</p>
+                  <button onClick={() => { setMostrarCopiar(!mostrarCopiar); setProfCopiar('') }}
+                    style={{ padding: '4px 12px', background: mostrarCopiar ? '#e2e8f0' : 'white', border: `1px solid ${TEAL_MID}`, borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: TEAL, fontWeight: '600' }}>
+                    📋 Copiar de otro
+                  </button>
                 </div>
+                {mostrarCopiar && (
+                  <div style={{ padding: '10px 18px', background: '#f8fafc', borderBottom: '1px solid #eef2f7', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <select value={profCopiar} onChange={e => setProfCopiar(e.target.value)}
+                      style={{ ...fS, fontSize: '12px', padding: '6px 8px', flex: 1 }}>
+                      <option value="">— Seleccionar profesor —</option>
+                      {profesores.filter(p => p.id !== prof?.id).map(p => (
+                        <option key={p.id} value={p.id}>{p.nombre}</option>
+                      ))}
+                    </select>
+                    <button onClick={copiarTarifas} disabled={copiando || !profCopiar}
+                      style={{ padding: '6px 14px', background: profCopiar ? TEAL : '#cbd5e1', color: 'white', border: 'none', borderRadius: '6px', cursor: profCopiar ? 'pointer' : 'not-allowed', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                      {copiando ? 'Copiando...' : 'Aplicar'}
+                    </button>
+                    <button onClick={() => { setMostrarCopiar(false); setProfCopiar('') }}
+                      style={{ padding: '6px 10px', background: 'none', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', color: '#666' }}>
+                      ✕
+                    </button>
+                  </div>
+                )}
                 <div style={{ padding: '14px 18px' }}>
                   {tarifas.length === 0 && <p style={{ color: '#aaa', fontSize: '13px', margin: '0 0 10px' }}>Sin tarifas registradas</p>}
                   {tarifas.map(t => (
@@ -808,13 +823,6 @@ setNuevaPassword('')
                 </div>
               )}
 
-              {claseModal.estado === 'cancelada' && claseModal.cancelado_tarde && (
-                <div style={{ marginBottom: '14px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px 14px' }}>
-                  <p style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#92400e' }}>⚠️ Cancelada fuera de tiempo</p>
-                  <p style={{ margin: '3px 0 0', fontSize: '11px', color: '#92400e' }}>Cancelada con menos de 3 horas de anticipación — genera honorario al profesor</p>
-                </div>
-              )}
-
               {claseModal.estado === 'cancelada' && !claseModal.cancelado_por_academia && (
                 <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '10px 12px', marginBottom: '14px', fontSize: '13px', color: '#c2410c' }}>
                   El estudiante no asistió — pendiente de revisión
@@ -846,13 +854,9 @@ setNuevaPassword('')
 
               <div style={{ marginBottom: '20px' }}>
                 <p style={{ margin: '0 0 6px', fontSize: '13px', fontWeight: '700', color: '#333' }}>Observaciones administrativas</p>
-                <textarea
-                  value={editObsAdmin}
-                  onChange={e => setEditObsAdmin(e.target.value)}
+                <textarea value={editObsAdmin} onChange={e => setEditObsAdmin(e.target.value)}
                   placeholder="Notas internas de la asistente u otro administrativo..."
-                  rows={3}
-                  style={{ ...fS, resize: 'vertical', lineHeight: '1.5', fontFamily: 'inherit' }}
-                />
+                  rows={3} style={{ ...fS, resize: 'vertical', lineHeight: '1.5', fontFamily: 'inherit' }} />
               </div>
 
               <button onClick={guardarClaseModal} disabled={guardandoH}
