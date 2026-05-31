@@ -429,6 +429,12 @@ async function verificarConflictosEnMemoria(
     setProfesorId(ct.profesores?.id || '')
     calcularAvisosCrear(ct, ct.profesores?.id || '', String(ct.duracion_min || 60), slotSeleccionado?.salon?.sede_id || '')
     const { data } = await supabase.from('clases')
+      .select('conteo_whatsapp').eq('contrato_id', ct.id)
+      .not('conteo_whatsapp', 'is', null)
+      .order('fecha', { ascending: false }).limit(1)
+    const ultimo = data?.[0]?.conteo_whatsapp
+    setConteoWhatsapp(ultimo != null ? ultimo + 1 : '')
+    const { data } = await supabase.from('clases')
       .select('conteo_whatsapp').eq('contrato_id', id)
       .not('conteo_whatsapp', 'is', null)
       .order('fecha', { ascending: false }).limit(1)
