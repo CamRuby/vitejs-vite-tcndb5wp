@@ -1220,7 +1220,7 @@ await cargarDatosCliente(cliente)
     setModalCortesia(null)
     setJustificacionCortesia('')
     setGuardandoCortesia(false)
-    await cargarDatosCliente(clienteSeleccionado)
+    cargarDatosCliente(clienteSeleccionado)
     cargarVista(vistaActual)
   }
 
