@@ -1671,8 +1671,9 @@ await cargarDatosCliente(cliente)
                                 c.estado === 'confirmada' ? { bg: '#dcfce7', color: '#166534' } :
                                                             { bg: TEAL_LIGHT, color: TEAL }
                               const etiquetaEstado =
-                                esCortesia          ? '🎁 Cortesía' :
-                                esInasistencia      ? 'Inasistencia' :
+                                  esCortesia && esInasistencia ? '🎁 Inasistencia perdonada' :
+                                  esCortesia          ? '🎁 Cortesía' :
+                                  esInasistencia      ? 'Inasistencia' :
                                 esCanceladaAcademia ? 'Cancelada (academia)' :
                                 c.estado
 
