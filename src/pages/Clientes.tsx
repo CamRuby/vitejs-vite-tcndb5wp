@@ -2088,11 +2088,12 @@ await cargarDatosCliente(cliente)
                   />
                   <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                     <button
-                      onClick={async () => {
-                        if (!justificacionCortesia.trim()) return
-                        setGuardandoCortesia(true)
-                        await marcarCortesia(modalCortesia.claseId, modalCortesia.contratoId, justificacionCortesia)
-                      }}
+                        onClick={async () => {
+                          if (!justificacionCortesia.trim()) return
+                          setGuardandoCortesia(true)
+                          const esInasistencia = modalCortesia.clase.estado === 'cancelada' && !modalCortesia.clase.cancelado_por_academia
+                          await marcarCortesia(modalCortesia.claseId, modalCortesia.contratoId, justificacionCortesia, esInasistencia)
+                        }}
                       disabled={!justificacionCortesia.trim() || guardandoCortesia}
                       style={{ flex: 1, padding: '9px', background: justificacionCortesia.trim() ? '#0369a1' : '#cbd5e1', color: 'white', border: 'none', borderRadius: '8px', cursor: justificacionCortesia.trim() ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: '600' }}>
                       {guardandoCortesia ? 'Guardando...' : '✓ Confirmar cortesía'}
