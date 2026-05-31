@@ -1,4 +1,4 @@
-  import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import pdfMake from 'pdfmake/build/pdfmake'
 import pdfFonts from 'pdfmake/build/vfs_fonts'
@@ -1307,26 +1307,22 @@ clasesDadas.forEach(c => {
                   </div>
                 )}
 
-                {claseActiva.estado === 'confirmada' && vista === 'hoy' && (
+                  {claseActiva.estado === 'confirmada' && vista === 'hoy' && (
                   <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                    <button className="ba" onClick={marcarDada}
-                      disabled={guardando || (hayAtrasadas && !!claseActiva.esAtrasada === false)}
-                      style={{ padding:'18px', background:TEAL, color:'white', border:'none', borderRadius:'16px', fontSize:'17px', fontWeight:'800', cursor: guardando || (hayAtrasadas && !claseActiva.esAtrasada) ? 'not-allowed' : 'pointer', opacity: guardando || (hayAtrasadas && !claseActiva.esAtrasada) ? 0.35 : 1, fontFamily:'inherit' }}>
-                      ✓ Clase dada
-                    </button>
                     {hayAtrasadas && !claseActiva.esAtrasada && claseAtrasada && (
-                      <p style={{ margin:'-4px 0 0', fontSize:'12px', color:'#dc2626', fontWeight:'600', textAlign:'center' }}>
+                      <p style={{ margin:'0', fontSize:'12px', color:'#dc2626', fontWeight:'600', textAlign:'center' }}>
                         Resuelve primero la clase del {claseAtrasada.fecha}
                       </p>
                     )}
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                      <button className="ba" onClick={marcarDada}
+                        disabled={guardando || (hayAtrasadas && !!claseActiva.esAtrasada === false)}
+                        style={{ padding:'16px', background:'#166534', color:'white', border:'none', borderRadius:'16px', fontSize:'15px', fontWeight:'800', cursor: guardando || (hayAtrasadas && !claseActiva.esAtrasada) ? 'not-allowed' : 'pointer', opacity: guardando || (hayAtrasadas && !claseActiva.esAtrasada) ? 0.35 : 1, fontFamily:'inherit' }}>
+                        ✓ Clase dada
+                      </button>
                       <button className="ba" onClick={() => setPantallaModal('inasistencia')} disabled={guardando}
                         style={{ padding:'16px', background:'#fff7ed', color:'#c2410c', border:'2px solid #fed7aa', borderRadius:'16px', fontSize:'15px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
-                        ✗ No asistió
-                      </button>
-                      <button className="ba" onClick={() => setPantallaModal('cancelar')} disabled={guardando}
-                        style={{ padding:'16px', background:'#fef2f2', color:'#dc2626', border:'2px solid #fecaca', borderRadius:'16px', fontSize:'15px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
-                        ✕ Cancelar
+                        ✗ Estudiante no asistió
                       </button>
                     </div>
                   </div>
