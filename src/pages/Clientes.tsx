@@ -2070,7 +2070,7 @@ await cargarDatosCliente(cliente)
               </div>
 
               {/* Sección dar cortesía — solo si la clase es dada y aún no es cortesía */}
-              {modalCortesia.clase.estado === 'dada' && !modalCortesia.clase.es_cortesia && (
+              {(modalCortesia.clase.estado === 'dada' || (modalCortesia.clase.estado === 'cancelada' && !modalCortesia.clase.cancelado_por_academia)) && !modalCortesia.clase.es_cortesia && !modalCortesia.clase.inasistencia_perdonada && (
                 <div style={{ background: '#e0f2fe', borderRadius: '12px', padding: '14px 16px', marginTop: '16px', border: '1px solid #bae6fd' }}>
                   <p style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: '700', color: '#0369a1' }}>🎁 Dar esta clase como cortesía</p>
                   <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#0c4a6e' }}>
