@@ -2093,7 +2093,7 @@ await cargarDatosCliente(cliente)
                      onClick={async () => {
                         if (!justificacionCortesia.trim()) return
                         setGuardandoCortesia(true)
-                         alert('estado: ' + modalCortesia.clase.estado + '\ncancelado_por_academia: ' + modalCortesia.clase.cancelado_por_academia + '\nes_cortesia: ' + modalCortesia.clase.es_cortesia)
+
                         const durPlan = planes.find((p: any) => p.id === modalCortesia.contratoId)?.duracion_min || 60
                         const fraccion = parseFloat(((modalCortesia.clase.duracion_min || durPlan) / durPlan).toFixed(4))
                         await supabase.from('clases').update({
