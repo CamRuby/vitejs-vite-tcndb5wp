@@ -1211,7 +1211,9 @@ await cargarDatosCliente(cliente)
     }).eq('id', claseId)
     const plan = planes.find((p: any) => p.id === contratoId)
     if (plan) {
-      const nuevasCT = Math.max((plan.clases_tomadas || 0) - 1, 0)
+      const durPlan = plan.duracion_min || 60
+      const fraccion = parseFloat(((modalCortesia?.clase?.duracion_min || durPlan) / durPlan).toFixed(4))
+      const nuevasCT = Math.max(parseFloat(((plan.clases_tomadas || 0) - fraccion).toFixed(4)), 0)
       await supabase.from('contratos').update({ clases_tomadas: nuevasCT }).eq('id', contratoId)
       // Recalcular numero_en_plan de TODAS las clases del contrato (dadas reales + pendientes)
       const { data: todasClases } = await supabase.from('clases')
