@@ -1202,10 +1202,10 @@ await cargarDatosCliente(cliente)
   const [guardandoCortesia, setGuardandoCortesia] = useState(false)
 
   // ── Marcar clase como cortesía: requiere justificación guardada en observaciones_admin ──
-  async function marcarCortesia(claseId: string, contratoId: string, justificacion: string) {
-    // Quitar numero_en_plan a la clase cortesía
-      await supabase.from('clases').update({
+  async function marcarCortesia(claseId: string, contratoId: string, justificacion: string, esInasistencia: boolean = false) {
+    await supabase.from('clases').update({
       es_cortesia: true,
+      inasistencia_perdonada: esInasistencia,
       observaciones_admin: justificacion.trim() || null
     }).eq('id', claseId)
     console.log('resultado update clases:', JSON.stringify(r.error), 'claseId:', claseId)
