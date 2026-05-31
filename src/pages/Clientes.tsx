@@ -1206,7 +1206,6 @@ await cargarDatosCliente(cliente)
     // Quitar numero_en_plan a la clase cortesía
     const r = await supabase.from('clases').update({
       es_cortesia: true,
-      numero_en_plan: null,
       observaciones_admin: justificacion.trim() || null
     }).eq('id', claseId)
     console.log('resultado update clases:', JSON.stringify(r.error), 'claseId:', claseId)
