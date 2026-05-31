@@ -1204,10 +1204,8 @@ await cargarDatosCliente(cliente)
   // ── Marcar clase como cortesía: requiere justificación guardada en observaciones_admin ──
   async function marcarCortesia(claseId: string, contratoId: string, justificacion: string) {
     // Quitar numero_en_plan a la clase cortesía
-    const esInasistencia = modalCortesia?.clase?.estado === 'cancelada' && !modalCortesia?.clase?.cancelado_por_academia
     await supabase.from('clases').update({
       es_cortesia: true,
-      inasistencia_perdonada: esInasistencia ? true : false,
       numero_en_plan: null,
       observaciones_admin: justificacion.trim() || null
     }).eq('id', claseId)
@@ -2072,7 +2070,7 @@ await cargarDatosCliente(cliente)
               </div>
 
               {/* Sección dar cortesía — solo si la clase es dada y aún no es cortesía */}
-              {(modalCortesia.clase.estado === 'dada' || (modalCortesia.clase.estado === 'cancelada' && !modalCortesia.clase.cancelado_por_academia)) && !modalCortesia.clase.es_cortesia && !modalCortesia.clase.inasistencia_perdonada && (
+              {modalCortesia.clase.estado === 'dada' && !modalCortesia.clase.es_cortesia && (
                 <div style={{ background: '#e0f2fe', borderRadius: '12px', padding: '14px 16px', marginTop: '16px', border: '1px solid #bae6fd' }}>
                   <p style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: '700', color: '#0369a1' }}>🎁 Dar esta clase como cortesía</p>
                   <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#0c4a6e' }}>
@@ -2090,28 +2088,10 @@ await cargarDatosCliente(cliente)
                   />
                   <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                     <button
-                     onClick={async () => {
+                      onClick={async () => {
                         if (!justificacionCortesia.trim()) return
                         setGuardandoCortesia(true)
-
-                        const durPlan = planes.find((p: any) => p.id === modalCortesia.contratoId)?.duracion_min || 60
-                        const fraccion = parseFloat(((modalCortesia.clase.duracion_min || durPlan) / durPlan).toFixed(4))
-                        await supabase.from('clases').update({
-                          es_cortesia: true,
-                          inasistencia_perdonada: esInasistencia,
-                          numero_en_plan: null,
-                          observaciones_admin: justificacionCortesia.trim() || null
-                        }).eq('id', modalCortesia.claseId)
-                        const plan = planes.find((p: any) => p.id === modalCortesia.contratoId)
-                        if (plan) {
-                          const nuevasCT = Math.max(parseFloat(((plan.clases_tomadas || 0) - fraccion).toFixed(4)), 0)
-                          await supabase.from('contratos').update({ clases_tomadas: nuevasCT }).eq('id', modalCortesia.contratoId)
-                        }
-                        setModalCortesia(null)
-                        setJustificacionCortesia('')
-                        setGuardandoCortesia(false)
-                        await cargarDatosCliente(clienteSeleccionado)
-                        cargarVista(vistaActual)
+                        await marcarCortesia(modalCortesia.claseId, modalCortesia.contratoId, justificacionCortesia)
                       }}
                       disabled={!justificacionCortesia.trim() || guardandoCortesia}
                       style={{ flex: 1, padding: '9px', background: justificacionCortesia.trim() ? '#0369a1' : '#cbd5e1', color: 'white', border: 'none', borderRadius: '8px', cursor: justificacionCortesia.trim() ? 'pointer' : 'not-allowed', fontSize: '13px', fontWeight: '600' }}>
