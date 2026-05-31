@@ -341,8 +341,7 @@ export default function Profesores() {
   const clasesFiltradas = filtroVista === 'programadas'
     ? clases.filter(c => c.estado === 'programada' || c.estado === 'confirmada')
     : clases.filter(c => c.estado === 'dada' || c.estado === 'cancelada')
-
- const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
+const dadas = clases.filter(c => c.estado === 'dada')
  const canceladasTarde = clases.filter(c => c.estado === 'cancelada' && (c.cancelado_tarde || (!c.cancelado_por_academia && c.honorario_valor !== null && c.honorario_valor !== undefined)))
   const totalHon = [...dadas, ...canceladasTarde].reduce((s, c) => s + getHon(c), 0)
   const cnt = {
