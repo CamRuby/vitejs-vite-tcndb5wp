@@ -1208,7 +1208,7 @@ await cargarDatosCliente(cliente)
       inasistencia_perdonada: esInasistencia,
       observaciones_admin: justificacion.trim() || null
     }).eq('id', claseId)
-    console.log('resultado update clases:', JSON.stringify(r.error), 'claseId:', claseId)
+
     const plan = planes.find((p: any) => p.id === contratoId)
     if (plan) {
       const durPlan = plan.duracion_min || 60
