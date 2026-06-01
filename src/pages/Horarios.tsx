@@ -1764,7 +1764,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                      {claseEditando.estado === 'cancelada' ? (
                         <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '10px 14px', fontSize: '13px', color: '#c2410c', width: '100%' }}>
                           <p style={{ margin: '0 0 10px', fontWeight: '600' }}>⚠️ Clase cancelada</p>
-                          {claseEditando.motivo_cancelacion === 'profesor' && <>
+                         {(claseEditando.motivo_cancelacion === 'profesor' || motivoCancelacion === 'profesor') && <>
                             <label style={{ display: 'block', fontSize: '12px', color: '#555', fontWeight: '600', marginBottom: '4px' }}>Reasignar a otro profesor</label>
                             <select
                               defaultValue={claseEditando.profesor_id || ''}
