@@ -737,7 +737,7 @@ async function recalcularClasesTomadas(planesData: any[]) {
     const durPlan = plan.duracion_min || 60
     let total = 0
     for (const c of clasesReales) {
-const esInasistencia = c.estado === 'cancelada' && !c.cancelado_por_academia && c.cancelado_tarde
+const esInasistencia = c.estado === 'cancelada' && !c.cancelado_por_academia && c.cancelado_tarde && !c.inasistencia_perdonada
       const cuenta = (c.estado === 'dada' && !c.es_cortesia) || esInasistencia
       if (cuenta) {
         const fraccion = parseFloat(((c.duracion_min || durPlan) / durPlan).toFixed(4))
