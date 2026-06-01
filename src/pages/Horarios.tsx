@@ -1782,7 +1782,11 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                                 const tomadas = claseEditando.contratos?.clases_tomadas ?? 0
                                 const total = claseEditando.contratos?.total_clases ?? 0
                                 if (total > 0 && tomadas >= total) { setPlanCompleto(true); setConfirmarDada(false) }
-                                else { setEditEstado('confirmada'); setPlanCompleto(false) }
+                               else {
+                                setEditEstado('confirmada'); setPlanCompleto(false)
+                                const { data: ctWA } = await supabase.from('contratos').select('conteo_whatsapp').eq('id', claseEditando.contratos.id).single()
+                                setEditConteoWhatsapp(ctWA?.conteo_whatsapp != null ? ctWA.conteo_whatsapp + 1 : '')
+}
                               } else if (est === 'dada' && editEstado !== 'dada') {
                                 if (editEstado !== 'confirmada') { setEditError('La clase debe estar Confirmada antes de marcarla como Dada'); return }
                                 setConfirmarDada(true); setPlanCompleto(false)
