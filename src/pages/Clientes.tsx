@@ -1660,7 +1660,7 @@ await cargarDatosCliente(cliente)
                             {clasesFiltradas2.map((c: any, i) => {
                               const esPerdonada = c.estado === 'cancelada' && c.inasistencia_perdonada
                               const esCanceladaAcademia = c.estado === 'cancelada' && c.cancelado_por_academia
-                             const esInasistencia = c.estado === 'cancelada' && !c.cancelado_por_academia && (c.cancelado_tarde || !c.motivo_cancelacion)
+                             const esInasistencia = c.estado === 'cancelada' && !c.cancelado_por_academia && c.cancelado_tarde
                               const esCortesia = c.es_cortesia
                               const estadoColor =
                                 esCortesia        ? { bg: '#e0f2fe', color: '#0369a1' } :
