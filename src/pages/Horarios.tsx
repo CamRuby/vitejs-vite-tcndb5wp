@@ -1950,7 +1950,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
     <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#166534' }}>✅ Cancelado por el cliente a tiempo — no cuenta en el plan</p>
   </div>
 )}
-{claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia && claseEditando.cancelado_tarde && (
+{claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia && (
   <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
     <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: '700', color: '#c2410c' }}>
       ⚠️ Inasistencia registrada — suma al plan del cliente
