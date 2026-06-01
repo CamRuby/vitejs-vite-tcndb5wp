@@ -1982,7 +1982,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
           <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#aaa' }}>Sin tarifa registrada para este profesor. Edita el honorario manualmente desde Profesores.</p>
         )}
       </div>
- //   )}
+       )}
     {claseEditando.honorario_valor !== null && claseEditando.honorario_valor !== undefined && (
       <div style={{ borderTop: '1px solid #fed7aa', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: '12px', color: '#92400e', fontWeight: '600' }}>💰 Honorario asignado:</span>
