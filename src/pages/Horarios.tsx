@@ -414,6 +414,7 @@ async function verificarConflictosEnMemoria(
     setContratos(data || [])
     if (data?.length) {
       const ct = data[0] as any
+      console.log('ct.conteo_whatsapp:', ct.conteo_whatsapp, 'ct:', ct)
       setContratoSeleccionado(ct)
       setDuracion(String(ct.duracion_min || 60))
       setProfesorId(ct.profesores?.id || '')
