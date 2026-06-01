@@ -1945,7 +1945,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
               )}
 
               {/* ── FIX 3: Inasistencia — info solo, sin panel de resolución manual ── */}
-              {claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia && (
+             {claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia && claseEditando.cancelado_tarde && (
   <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
     <p style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: '700', color: '#c2410c' }}>
       ⚠️ Inasistencia registrada — suma al plan del cliente
