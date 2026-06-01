@@ -1844,10 +1844,9 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
     <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: '700', color: '#c2410c' }}>¿Por qué se cancela?</p>
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
       {[
-        { key: 'academia', label: '🏫 Canceló la academia', desc: 'No cuenta en el plan' },
-        { key: 'profesor', label: '👨‍🏫 Canceló el profesor', desc: 'No cuenta, posible reposición' },
-        { key: 'cliente_tiempo', label: '✅ Canceló el cliente a tiempo', desc: 'No cuenta en el plan' },
-        { key: 'cliente_tarde', label: '⏰ Canceló el cliente tarde', desc: 'Sí cuenta en el plan' },
+        { key: 'academia', label: '✅ Cancelación temprana', desc: 'No cuenta en el plan' },
+        { key: 'profesor', label: '⏰ Cancelación tardía del profesor', desc: 'No cuenta, posible reposición' },
+        { key: 'cliente_tarde', label: '⏰ Cancelación tardía del cliente', desc: 'Sí cuenta en el plan' },
       ].map(op => (
         <label key={op.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '8px 10px', borderRadius: '8px',
           background: motivoCancelacion === op.key ? '#fef3c7' : 'white',
