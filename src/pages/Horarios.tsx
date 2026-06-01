@@ -462,7 +462,7 @@ async function verificarConflictosEnMemoria(
     setTallerGuardando(false)
   }
 
-  function abrirClaseExistente(e: React.MouseEvent, clase: any) {
+ async function abrirClaseExistente(e: React.MouseEvent, clase: any) {
     e.stopPropagation()
     setClaseEditando(clase)
     setEditProfesorId(clase.profesores?.id || '')
