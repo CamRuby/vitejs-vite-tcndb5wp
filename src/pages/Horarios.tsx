@@ -1756,7 +1756,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                 </div>
               )}
 
-              {!esBloqueada(claseEditando) && !(claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia) && (
+            {!esBloqueada(claseEditando) && !(claseEditando.estado === 'cancelada') && (
                 <>
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Estado</label>
