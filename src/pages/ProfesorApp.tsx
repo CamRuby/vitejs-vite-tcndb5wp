@@ -859,7 +859,7 @@ clasesDadas.forEach(c => {
       </div>
     )
   
-  const dadas           = clases.filter(c => c.estado === 'dada')
+  const dadas           = clases.filter(c => c.estado === 'dada' || (c.estado === 'cancelada' && !c.cancelado_por_academia))
   const pendientesCobro = clases.filter(c => c.estado === 'cancelada' && !c.cancelado_por_academia).length
   const totalHon        = dadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
   const hayAtrasadas    = clases.some(c => c.esAtrasada)
