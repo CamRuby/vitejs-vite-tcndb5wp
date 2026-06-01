@@ -423,27 +423,15 @@ async function verificarConflictosEnMemoria(
   }
 
   async function seleccionarContrato(id: string) {
-  const ct = contratos.find((c: any) => c.id === id) as any
-  if (ct) {
-    setContratoSeleccionado(ct)
-    setDuracion(String(ct.duracion_min || 60))
-    setProfesorId(ct.profesores?.id || '')
-    calcularAvisosCrear(ct, ct.profesores?.id || '', String(ct.duracion_min || 60), slotSeleccionado?.salon?.sede_id || '')
-    const { data: dataWA } = await supabase.from('clases')
-      .select('conteo_whatsapp').eq('contrato_id', ct.id)
-      .not('conteo_whatsapp', 'is', null)
-      .order('fecha', { ascending: false }).limit(1)
-    const ultimoWA = dataWA?.[0]?.conteo_whatsapp
-    console.log('ultimoWA:', ultimoWA, 'dataWA:', dataWA)
-    setConteoWhatsapp(ultimoWA != null ? ultimoWA + 1 : '')
-    const { data } = await supabase.from('clases')
-      .select('conteo_whatsapp').eq('contrato_id', id)
-      .not('conteo_whatsapp', 'is', null)
-      .order('fecha', { ascending: false }).limit(1)
-    const ultimo = data?.[0]?.conteo_whatsapp
-    setConteoWhatsapp(ultimo != null ? ultimo + 1 : '')
+    const ct = contratos.find((c: any) => c.id === id) as any
+    if (ct) {
+      setContratoSeleccionado(ct)
+      setDuracion(String(ct.duracion_min || 60))
+      setProfesorId(ct.profesores?.id || '')
+      calcularAvisosCrear(ct, ct.profesores?.id || '', String(ct.duracion_min || 60), slotSeleccionado?.salon?.sede_id || '')
+      setConteoWhatsapp(ct.conteo_whatsapp != null ? ct.conteo_whatsapp + 1 : '')
+    }
   }
-}
 
   function abrirSlot(salon: any, hora: string, fecha: string) {
     setSlotSeleccionado({ salon, hora, fecha })
