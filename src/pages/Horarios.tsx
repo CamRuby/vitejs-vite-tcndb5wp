@@ -1910,11 +1910,11 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                       {salones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                     </select>
                   </div>
-             {editEstado !== 'cancelada' && (
+            {editEstado === 'confirmada' && (
   <div style={{ marginBottom: '20px' }}>
     <label style={labelStyle}>
       <span style={{ color: '#dc2626', fontWeight: '700' }}>Conteo WhatsApp</span>
-      <span style={{ fontSize: '11px', color: '#aaa', marginLeft: '6px' }}>(editable)</span>
+      <span style={{ fontSize: '11px', color: '#aaa', marginLeft: '6px' }}>(número de clase según WhatsApp)</span>
     </label>
     <input type="number" min={1} value={editConteoWhatsapp}
       onChange={e => setEditConteoWhatsapp(e.target.value === '' ? '' : Number(e.target.value))}
