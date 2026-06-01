@@ -1165,7 +1165,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                         })()}
 
                       {mainClass && !taller && (() => {
-                        const col2 = getColorEstado(mainClass.es_cortesia ? 'dada' : mainClass.estado, mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia)
+                        const col2 = getColorEstado(mainClass.es_cortesia ? 'dada' : mainClass.estado, mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && mainClass.cancelado_tarde)
                         // número calculado en tiempo real desde la view de Supabase
                         const numPlan = mainClass.contratos?.total_clases && mainClass.numero_calculado
                           ? `${mainClass.numero_calculado}/${mainClass.contratos.total_clases}`
