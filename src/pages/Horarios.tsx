@@ -479,7 +479,7 @@ async function verificarConflictosEnMemoria(
     setMotivoCancelacion('academia')
     setHonorarioCancelacion(0)
     setTarifaBase(0)
-    setEditConteoWhatsapp('')
+    setEditConteoWhatsapp(clase.conteo_whatsapp != null ? clase.conteo_whatsapp : '')
     setClienteInasistenciaPerdonada(false)
     setModalEditar(true)
   }
