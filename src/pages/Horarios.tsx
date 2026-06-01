@@ -885,9 +885,12 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
     } else {
       const updatePayload: any = { hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha }
-   if (editEstado === 'confirmada' && editConteoWhatsapp !== '') {
-        await supabase.from('contratos').update({ conteo_whatsapp: Number(editConteoWhatsapp) }).eq('id', claseEditando.contratos.id)
+   if (editEstado === 'cancelada' && claseEditando.estado === 'confirmada' && claseEditando.contratos?.id) {
+      const { data: ctWA } = await supabase.from('contratos').select('conteo_whatsapp').eq('id', claseEditando.contratos.id).single()
+      if (ctWA?.conteo_whatsapp != null) {
+        await supabase.from('contratos').update({ conteo_whatsapp: ctWA.conteo_whatsapp - 1 }).eq('id', claseEditando.contratos.id)
       }
+    }
      if (editEstado === 'cancelada') {
         updatePayload.motivo_cancelacion = motivoCancelacion
         if (motivoCancelacion === 'academia' || motivoCancelacion === 'profesor') {
