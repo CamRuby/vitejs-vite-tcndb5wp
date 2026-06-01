@@ -409,7 +409,7 @@ async function verificarConflictosEnMemoria(
     setBusquedaCliente(c.nombre)
     setClientesBuscados([])
     const { data } = await supabase.from('contratos')
-      .select('id, total_clases, clases_tomadas, duracion_min, sede_id, instrumentos(nombre), profesores(id, nombre)')
+      .select('id, total_clases, clases_tomadas, duracion_min, sede_id, conteo_whatsapp, instrumentos(nombre), profesores(id, nombre)')
       .eq('cliente_id', c.id).eq('estado', 'activo')
     setContratos(data || [])
     if (data?.length) {
