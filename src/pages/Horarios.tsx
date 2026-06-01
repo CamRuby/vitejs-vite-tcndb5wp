@@ -839,11 +839,8 @@ async function verificarConflictosEnMemoria(
         modalidad: slotSeleccionado.salon.nombre === 'Domicilio' ? 'domicilio' : 'presencial',
        
       })
-      if (err) setError('Error: ' + err.message)
+if (err) setError('Error: ' + err.message)
       else {
-        if (conteoWhatsapp !== '') {
-          await supabase.from('contratos').update({ conteo_whatsapp: Number(conteoWhatsapp) }).eq('id', (contratoSeleccionado as any).id)
-        }
         setModalAbierto(false)
         cargarClases()
       }
