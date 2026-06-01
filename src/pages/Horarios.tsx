@@ -932,9 +932,12 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
     }
     if (alcance === 'futuras' && claseEditando.patron_id) {
       await supabase.from('clases').delete().eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
-    } else {
+   } else {
       auditar('borrar_clase', 'clases', claseEditando.id, { fecha: claseEditando.fecha })
-    await supabase.from('clases').delete().eq('id', claseEditando.id)
+      await supabase.from('clases').delete().eq('id', claseEditando.id)
+      if (claseEditando.conteo_whatsapp != null && claseEditando.contratos?.id) {
+        await supabase.from('contratos').update({ conteo_whatsapp: claseEditando.conteo_whatsapp - 1 }).eq('id', claseEditando.contratos.id)
+      }
     }
     setModalEditar(false)
     cargarClases()
