@@ -1777,7 +1777,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                         ['programada', 'confirmada', 'dada', 'cancelada'].map(est => {
                           const col2 = getColorEstado(est)
                           return (
-                            <button key={est} onClick={() => {
+                           <button key={est} onClick={async () => {
                               if (est === 'confirmada' && editEstado !== 'confirmada') {
                                 const tomadas = claseEditando.contratos?.clases_tomadas ?? 0
                                 const total = claseEditando.contratos?.total_clases ?? 0
