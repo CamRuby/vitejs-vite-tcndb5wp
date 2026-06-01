@@ -709,7 +709,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       try {
         const { data: cd } = await supabase
           .from('clases')
-          .select('id, fecha, hora, duracion_min, estado, inasistencia_perdonada, es_cortesia, cancelado_por_academia, observaciones, observaciones_admin, contrato_id, profesores(nombre), salones(sedes(nombre)), contratos(instrumentos(nombre))')
+          .select('id, fecha, hora, duracion_min, estado, inasistencia_perdonada, es_cortesia, cancelado_por_academia, cancelado_tarde, observaciones, observaciones_admin, contrato_id, profesores(nombre), salones(sedes(nombre)), contratos(instrumentos(nombre))')
           .in('contrato_id', ids)
           .order('fecha', { ascending: true })
           .order('hora', { ascending: true })
