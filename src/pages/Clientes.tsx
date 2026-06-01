@@ -1551,7 +1551,8 @@ await cargarDatosCliente(cliente)
             let conteoClases = 0  // acumulado fraccionario
             const clasesConConteo = clasesDelPlanAsc.map((c: any) => {
               // dada (no cortesía) + cancelada por inasistencia cliente (no academia) sin perdonar = suma al plan
-              const esInasistenciaCliente = c.estado === 'cancelada' && !c.cancelado_por_academia && c.cancelado_tarde
+             const esInasistenciaCliente = c.estado === 'cancelada' && !c.cancelado_por_academia && c.cancelado_tarde
+              const cuentaEnPlan = (c.estado === 'dada' && !c.es_cortesia) || (esInasistenciaCliente && !c.inasistencia_perdonada)
               if (cuentaEnPlan) {
                 const fraccion = parseFloat(((c.duracion_min || durPlan) / durPlan).toFixed(4))
                 conteoClases = parseFloat((conteoClases + fraccion).toFixed(4))
