@@ -381,7 +381,7 @@ function ModalHistorialPlanes({ planes, onCerrar, onVerClases, clasesArchivadasM
                   <tbody>
                     {clasesArchivadasMap[planExpandido].map((cl: any, ci) => {
                       const esCortesia = cl.es_cortesia
-                      const esInasistencia = cl.estado === 'cancelada' && !cl.cancelado_por_academia && !cl.inasistencia_perdonada
+                     const esInasistencia = cl.estado === 'cancelada' && !cl.cancelado_por_academia && cl.cancelado_tarde && !cl.inasistencia_perdonada
                       const colCl = esCortesia ? { background: '#e0f2fe', color: '#0369a1' }
                         : cl.estado === 'dada' ? { background: '#fefce8', color: '#854d0e' }
                         : esInasistencia ? { background: '#fff7ed', color: '#c2410c' }
