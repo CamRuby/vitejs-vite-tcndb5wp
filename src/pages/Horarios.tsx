@@ -27,7 +27,6 @@ const MODALIDADES_CLASE = ['presencial', 'virtual', 'domicilio'] as const
 const DIA_NUM: Record<string, number> = {
   'domingo': 0, 'lunes': 1, 'martes': 2, 'miércoles': 3, 'jueves': 4, 'viernes': 5, 'sábado': 6
 }
-
 function formatFecha(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
