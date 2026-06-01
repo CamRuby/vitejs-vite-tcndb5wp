@@ -479,7 +479,12 @@ async function verificarConflictosEnMemoria(
     setMotivoCancelacion('academia')
     setHonorarioCancelacion(0)
     setTarifaBase(0)
-   setEditConteoWhatsapp('')
+   if (clase.estado === 'confirmada' && clase.contratos?.id) {
+      const { data: ctWA } = await supabase.from('contratos').select('conteo_whatsapp').eq('id', clase.contratos.id).single()
+      setEditConteoWhatsapp(ctWA?.conteo_whatsapp != null ? ctWA.conteo_whatsapp : '')
+    } else {
+      setEditConteoWhatsapp('')
+    }
     setClienteInasistenciaPerdonada(false)
     setModalEditar(true)
   }
