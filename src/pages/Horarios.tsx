@@ -942,7 +942,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
    } else {
       auditar('borrar_clase', 'clases', claseEditando.id, { fecha: claseEditando.fecha })
       await supabase.from('clases').delete().eq('id', claseEditando.id)
-     if (claseEditando.contratos?.id) {
+     if (claseEditando.estado === 'confirmada' && claseEditando.contratos?.id) {
         const { data: ctWA } = await supabase.from('contratos').select('conteo_whatsapp').eq('id', claseEditando.contratos.id).single()
         if (ctWA?.conteo_whatsapp != null) {
           await supabase.from('contratos').update({ conteo_whatsapp: ctWA.conteo_whatsapp - 1 }).eq('id', claseEditando.contratos.id)
