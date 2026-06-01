@@ -1317,18 +1317,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                       </ul>
                     </div>
                   )}
-                    {contratoSeleccionado && (
-                      <div style={{ marginBottom: '14px' }}>
-                        <label style={labelStyle}>
-                          <span style={{ color: '#dc2626', fontWeight: '700' }}>Conteo WhatsApp</span>
-                          <span style={{ fontSize: '11px', color: '#aaa', marginLeft: '6px' }}>(número de clase según WhatsApp)</span>
-                        </label>
-                        <input type="number" min={1} value={conteoWhatsapp}
-                          onChange={e => setConteoWhatsapp(e.target.value === '' ? '' : Number(e.target.value))}
-                          placeholder="Opcional"
-                          style={{ ...fieldStyle, borderColor: '#dc2626', color: '#dc2626', fontWeight: '700' }} />
-                      </div>
-                    )}      
+                   
                   <div style={{ marginBottom: '20px', background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#333' }}>
                       <input type="checkbox" checked={recurrente} onChange={e => setRecurrente(e.target.checked)} />
