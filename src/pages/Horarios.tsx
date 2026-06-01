@@ -417,7 +417,8 @@ async function verificarConflictosEnMemoria(
       setContratoSeleccionado(ct)
       setDuracion(String(ct.duracion_min || 60))
       setProfesorId(ct.profesores?.id || '')
-      calcularAvisosCrear(ct, ct.profesores?.id || '', String(ct.duracion_min || 60), slotSeleccionado?.salon?.sede_id || '')
+     calcularAvisosCrear(ct, ct.profesores?.id || '', String(ct.duracion_min || 60), slotSeleccionado?.salon?.sede_id || '')
+      setConteoWhatsapp(ct.conteo_whatsapp != null ? ct.conteo_whatsapp + 1 : '')
     }
   }
 
