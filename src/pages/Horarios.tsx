@@ -896,9 +896,12 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
       }
      if (editEstado === 'cancelada') {
         updatePayload.motivo_cancelacion = motivoCancelacion
-        if (motivoCancelacion === 'academia' || motivoCancelacion === 'profesor') {
+      if (motivoCancelacion === 'academia') {
+           updatePayload.cancelado_por_academia = true
+           updatePayload.cancelado_tarde = false
+        } else if (motivoCancelacion === 'profesor') {
           updatePayload.cancelado_por_academia = true
-          updatePayload.cancelado_tarde = false
+          updatePayload.cancelado_tarde = true
         } else if (motivoCancelacion === 'cliente_tiempo') {
           updatePayload.cancelado_por_academia = false
           updatePayload.cancelado_tarde = false
