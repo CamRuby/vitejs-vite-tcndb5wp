@@ -1188,7 +1188,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                                   <span style={{ fontSize: '12px', fontWeight: '700', opacity: 0.9, whiteSpace: 'nowrap' }}>{numPlan}</span>
                                 )}
                                 {mainClass.recurrente && <span style={{ fontSize: '9px' }}>🔁</span>}
-                                {mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && <span style={{ fontSize: '9px' }}>⚠️</span>}
+                                {mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && <span style={{ fontSize: '23px' }}>⚠️</span>}
                                 {mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && mainClass.honorario_valor === null && vista === 'dia' && (
                                 <span style={{ fontSize: '9px', background: '#fff7ed', color: '#c2410c', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>💰</span>
                                   )}
