@@ -211,51 +211,76 @@ export default function Importar() {
     for (const gc of grupos) {
 
       async function procesarBloque(filasBloque: FilaExcel[], estado: 'archivado' | 'activo') {
-        if (filasBloque.length === 0) return
-        const filasOrdenadas = [...filasBloque].sort((a, b) => a.fecha.localeCompare(b.fecha))
-        const fechaInicio = filasOrdenadas[0].fecha
-        const fechaFin = filasOrdenadas[filasOrdenadas.length - 1].fecha
-        const duracionComun = filasBloque[0].duracion
-        const clasesDadas = estado === 'archivado'
-          ? filasBloque
-          : filasBloque.filter(f => !esInasistencia(f.obs) && !(f.numClase === '0' || f.numClase === '0.0' || /prueba|cortesia/i.test(f.obs || '')))
-        const clasesTomadas = clasesDadas.length
-
-        const { data: ct, error: ctErr } = await supabase.from('contratos').insert({
-          cliente_id: gc.clienteId,
-          profesor_id: profesorId,
-          estado,
-          duracion_min: duracionComun,
-          total_clases: estado === 'activo' ? 0 : clasesTomadas,
-          clases_tomadas: clasesTomadas,
-          fecha_inicio: fechaInicio,
-          fecha_fin: estado === 'archivado' ? fechaFin : null,
-          importado: true,
-        }).select().single()
-        if (ctErr || !ct) { errores.push(`Error creando contrato ${gc.clienteNombre}: ${ctErr?.message}`); return }
-
-        for (const fila of filasBloque) {
-          const salonId = fila.sede ? await buscarSalonPorSede(fila.sede) : null
-          const esArchivo = estado === 'archivado'
-          const cortesia = esArchivo ? false : (fila.numClase === '0' || fila.numClase === '0.0' || /prueba|cortesia/i.test(fila.obs || ''))
-          const inasist  = esArchivo ? false : esInasistencia(fila.obs)
-          const { error: clErr } = await supabase.from('clases').insert({
-            contrato_id: (ct as any).id,
-            profesor_id: profesorId,
-            salon_id: salonId,
-            fecha: fila.fecha,
-            hora: '00:00:00',
-            duracion_min: fila.duracion,
-            estado: inasist ? 'cancelada' : 'dada',
-            es_cortesia: cortesia,
-            cancelado_por_academia: inasist ? false : null,
-            observaciones: fila.obs ? fila.obs : null,
-            modalidad: fila.sede.toLowerCase().includes('domicilio') ? 'domicilio' : 'presencial',
-          })
-          if (clErr) { errores.push(`${fila.fecha} ${fila.grupo}: ${clErr.message}`); saltadas++ }
-          else insertadas++
+          if (filasBloque.length === 0) return
+          const filasOrdenadas = [...filasBloque].sort((a, b) => a.fecha.localeCompare(b.fecha))
+          const fechaInicio = filasOrdenadas[0].fecha
+          const fechaFin = filasOrdenadas[filasOrdenadas.length - 1].fecha
+          const duracionComun = filasBloque[0].duracion
+          const clasesDadas = estado === 'archivado'
+            ? filasBloque
+            : filasBloque.filter(f => !esInasistencia(f.obs) && !(f.numClase === '0' || f.numClase === '0.0' || /prueba|cortesia/i.test(f.obs || '')))
+          const clasesTomadas = clasesDadas.length
+        
+          let contratoId: string | null = null
+        
+          if (estado === 'activo') {
+            // Buscar contrato activo existente
+            const { data: existente } = await supabase.from('contratos')
+              .select('id, clases_tomadas')
+              .eq('cliente_id', gc.clienteId)
+              .eq('estado', 'activo')
+              .eq('importado', false)
+              .limit(1)
+              .maybeSingle()
+        
+            if (existente) {
+              // Usar contrato existente y actualizar clases_tomadas
+              contratoId = existente.id
+              await supabase.from('contratos')
+                .update({ clases_tomadas: (existente.clases_tomadas || 0) + clasesTomadas })
+                .eq('id', existente.id)
+            }
+          }
+        
+          if (!contratoId) {
+            // Crear contrato nuevo
+            const { data: ct, error: ctErr } = await supabase.from('contratos').insert({
+              cliente_id: gc.clienteId,
+              profesor_id: profesorId,
+              estado,
+              duracion_min: duracionComun,
+              total_clases: estado === 'activo' ? 0 : clasesTomadas,
+              clases_tomadas: clasesTomadas,
+              fecha_inicio: fechaInicio,
+              fecha_fin: estado === 'archivado' ? fechaFin : null,
+              importado: true,
+            }).select().single()
+            if (ctErr || !ct) { errores.push(`Error creando contrato ${gc.clienteNombre}: ${ctErr?.message}`); return }
+            contratoId = (ct as any).id
+          }
+        
+          for (const fila of filasBloque) {
+            const salonId = fila.sede ? await buscarSalonPorSede(fila.sede) : null
+            const esArchivo = estado === 'archivado'
+            const cortesia = esArchivo ? false : (fila.numClase === '0' || fila.numClase === '0.0' || /prueba|cortesia/i.test(fila.obs || ''))
+            const inasist  = esArchivo ? false : esInasistencia(fila.obs)
+            const { error: clErr } = await supabase.from('clases').insert({
+              contrato_id: contratoId,
+              profesor_id: profesorId,
+              salon_id: salonId,
+              fecha: fila.fecha,
+              hora: '00:00:00',
+              duracion_min: fila.duracion,
+              estado: inasist ? 'cancelada' : 'dada',
+              es_cortesia: cortesia,
+              cancelado_por_academia: inasist ? false : null,
+              observaciones: fila.obs ? fila.obs : null,
+              modalidad: fila.sede.toLowerCase().includes('domicilio') ? 'domicilio' : 'presencial',
+            })
+            if (clErr) { errores.push(`${fila.fecha} ${fila.grupo}: ${clErr.message}`); saltadas++ }
+            else insertadas++
+          }
         }
-      }
 
       await procesarBloque(gc.filasArchivo, 'archivado')
       await procesarBloque(gc.filasActivo, 'activo')
