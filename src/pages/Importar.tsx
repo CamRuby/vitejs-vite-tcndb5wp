@@ -229,7 +229,7 @@ export default function Importar() {
               .select('id, clases_tomadas')
               .eq('cliente_id', gc.clienteId)
               .eq('estado', 'activo')
-              .eq('importado', false)
+              .neq('importado', false)
               .limit(1)
               .maybeSingle()
         
