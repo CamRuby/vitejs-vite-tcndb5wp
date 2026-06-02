@@ -12,6 +12,7 @@ interface PlanActivo {
   cliente_id: string
   cliente_nombre: string
   grupo_whatsapp: string | null
+  sede_id: string | null
   sede_nombre: string
   instrumento_id: string | null
   instrumento_nombre: string
@@ -27,11 +28,17 @@ interface Instrumento {
   nombre: string
 }
 
+interface Sede {
+  id: string
+  nombre: string
+}
+
 type CampoTexto = 'grupo_whatsapp'
 type CampoNumero = 'total_clases' | 'duracion_min' | 'conteo_whatsapp'
 
 interface Edicion {
   instrumento_id?: string
+  sede_id?: string
   grupo_whatsapp?: string
   total_clases?: number
   duracion_min?: number
@@ -98,6 +105,7 @@ export default function Reportes() {
 function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
   const [datos, setDatos] = useState<PlanActivo[]>([])
   const [instrumentos, setInstrumentos] = useState<Instrumento[]>([])
+  const [sedesDisponibles, setSedesDisponibles] = useState<Sede[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filtro, setFiltro] = useState<'todos' | 'al_dia' | 'pendiente'>('todos')
@@ -114,12 +122,13 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
     setCargando(true)
     setError(null)
     try {
-      const [{ data, error: err }, { data: instr, error: errInstr }] = await Promise.all([
+      const [{ data, error: err }, { data: instr, error: errInstr }, { data: sedesData, error: errSedes }] = await Promise.all([
         supabase
           .from('contratos')
           .select(`
             id,
             cliente_id,
+            sede_id,
             instrumento_id,
             total_clases,
             duracion_min,
@@ -133,13 +142,19 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
         supabase
           .from('instrumentos')
           .select('id, nombre')
+          .order('nombre', { ascending: true }),
+        supabase
+          .from('sedes')
+          .select('id, nombre')
           .order('nombre', { ascending: true })
       ])
 
       if (err) throw err
       if (errInstr) throw errInstr
+      if (errSedes) throw errSedes
 
       setInstrumentos(instr || [])
+      setSedesDisponibles(sedesData || [])
 
       const filas: PlanActivo[] = (data || []).map((row: any) => {
         const tomadas = Number(row.clases_tomadas ?? 0)
@@ -150,6 +165,7 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
           cliente_id: row.cliente_id,
           cliente_nombre: `${row.clientes?.nombres ?? ''} ${row.clientes?.apellidos ?? ''}`.trim(),
           grupo_whatsapp: row.clientes?.grupo_whatsapp ?? null,
+          sede_id: row.sede_id ?? null,
           sede_nombre: row.sedes?.nombre ?? '—',
           instrumento_id: row.instrumento_id ?? null,
           instrumento_nombre: row.instrumentos?.nombre ?? '—',
@@ -227,6 +243,16 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
     setEditados(prev => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }))
   }
 
+  function getSedeId(plan: PlanActivo): string {
+    const ed = editados[plan.id]
+    if (ed && 'sede_id' in ed) return ed.sede_id ?? ''
+    return plan.sede_id ?? ''
+  }
+
+  function editarSede(id: string, valor: string) {
+    setEditados(prev => ({ ...prev, [id]: { ...prev[id], sede_id: valor } }))
+  }
+
   function editarInstrumento(id: string, valor: string) {
     setEditados(prev => ({ ...prev, [id]: { ...prev[id], instrumento_id: valor } }))
   }
@@ -247,6 +273,7 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
       if ('duracion_min' in cambios && cambios.duracion_min !== null) updateContrato.duracion_min = cambios.duracion_min
       if ('conteo_whatsapp' in cambios) updateContrato.conteo_whatsapp = cambios.conteo_whatsapp
       if ('instrumento_id' in cambios && cambios.instrumento_id) updateContrato.instrumento_id = cambios.instrumento_id
+      if ('sede_id' in cambios && cambios.sede_id) updateContrato.sede_id = cambios.sede_id
 
       if (Object.keys(updateContrato).length > 0) {
         const { error: err } = await supabase.from('contratos').update(updateContrato).eq('id', id)
@@ -302,7 +329,7 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
   })
 
   const columnas = ['#', 'Cliente', 'Grupo WA', 'Sede', 'Instrumento', 'Plan', 'Duración', 'Clases tomadas', 'Conteo WA', 'Diferencia']
-  const editables = ['Grupo WA', 'Instrumento', 'Plan', 'Duración', 'Conteo WA']
+  const editables = ['Grupo WA', 'Sede', 'Instrumento', 'Plan', 'Duración', 'Conteo WA']
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: '1400px', margin: '0 auto' }}>
@@ -373,8 +400,8 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
         {[
           { label: 'Total planes activos', valor: totalGlobal, color: TEAL },
-          { label: 'Conteo al día', valor: alDiaGlobal, color: '#16a34a' },
-          { label: 'Conteo pendiente', valor: pendienteGlobal, color: '#d97706' },
+          { label: 'Planes con registros de clases al día', valor: alDiaGlobal, color: '#16a34a' },
+          { label: 'Planes con registros de clases pendientes', valor: pendienteGlobal, color: '#d97706' },
         ].map(t => (
           <div key={t.label} style={{
             background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px',
@@ -509,8 +536,23 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
                       )}
                     </td>
 
-                    {/* Sede */}
-                    <td style={{ padding: '10px 14px', color: '#475569', whiteSpace: 'nowrap' }}>{plan.sede_nombre}</td>
+                    {/* Sede — selector */}
+                    <td style={{ padding: '6px 14px', minWidth: '130px' }}>
+                      {modoEdicion ? (
+                        <select
+                          value={getSedeId(plan)}
+                          onChange={e => editarSede(plan.id, e.target.value)}
+                          style={estiloSelect('sede_id' in ed)}
+                        >
+                          <option value="">— Sin sede —</option>
+                          {sedesDisponibles.map(s => (
+                            <option key={s.id} value={s.id}>{s.nombre}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span style={{ color: '#475569', whiteSpace: 'nowrap' }}>{plan.sede_nombre}</span>
+                      )}
+                    </td>
 
                     {/* Instrumento — selector */}
                     <td style={{ padding: '6px 14px', minWidth: '140px' }}>
