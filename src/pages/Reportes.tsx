@@ -6,6 +6,7 @@ const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
 const TEAL_DARK = '#146f6f'
 
+
 // ─── TIPOS ────────────────────────────────────────────────────────────────────
 interface PlanActivo {
   id: string
