@@ -1901,7 +1901,7 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Hora de inicio</label>
                     <select value={editHora} onChange={e => setEditHora(e.target.value)} style={fieldStyle}>
-                    {HORAS_DETALLE.map(h => <option key={h} value={h}>{h}</option>)}
+                     {HORAS.map(h => <option key={h} value={h}>{h}</option>)}
                     </select>
                   </div>
                   <div style={{ marginBottom: '14px' }}>
