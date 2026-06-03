@@ -959,11 +959,14 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
     setEditGuardando(false)
   }
 
-  function getClasesSlot(salonId: string, hora: string, fecha: string) {
-    return clases.filter((c: any) =>
-      c.salones?.id === salonId && c.fecha === fecha && c.hora?.substring(0, 5) === hora
-    )
-  }
+ function getClasesSlot(salonId: string, hora: string, fecha: string) {
+  const slotMin = horaAMinutos(hora)
+  return clases.filter((c: any) => {
+    if (c.salones?.id !== salonId || c.fecha !== fecha) return false
+    const claseMin = horaAMinutos(c.hora?.substring(0, 5) || '00:00')
+    return claseMin >= slotMin && claseMin < slotMin + 15
+  })
+}
 
   function getTallerSlot(salonId: string, hora: string, fecha: string) {
     const diaSemana = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
