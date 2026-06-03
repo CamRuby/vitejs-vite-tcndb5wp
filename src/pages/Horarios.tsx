@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+    import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../supabase'
 import { auditar } from '../auditoria'
 
@@ -1666,10 +1666,8 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                       </select>
                     </div>
                     <div>
-                      <label style={labelStyle}>Hora de inicio</label>
-                      <select value={teHora} onChange={e => setTeHora(e.target.value)} style={fieldStyle}>
-                        {HORAS.map(h => <option key={h} value={h}>{h}</option>)}
-                      </select>
+                    <label style={labelStyle}>Hora de inicio</label>
+<input type="time" value={editHora} onChange={e => setEditHora(e.target.value)} style={fieldStyle} min="07:00" max="21:00" step="300" />
                     </div>
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={labelStyle}>Duración</label>
