@@ -15,16 +15,7 @@ export default function App() {
   useEffect(() => {
     if (esProfesor) { setListo(true); return }
 
-    // Timeout de seguridad: si en 8 segundos no carga, mostrar error
-    const timeout = setTimeout(() => {
-      if (!listo) {
-        setListo(true)
-        setSesion(null)
-      }
-    }, 8000)
-
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      clearTimeout(timeout)
       setSesion(session)
       if (session?.user?.email) {
         const { data } = await supabase
@@ -46,7 +37,7 @@ export default function App() {
       if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
         setSesion(session)
         setSesionExpirada(false)
-        if (session?.user?.email && !rol) {
+        if (session?.user?.email) {
           const { data } = await supabase
             .from('roles')
             .select('rol')
@@ -58,21 +49,15 @@ export default function App() {
       if (_event === 'USER_UPDATED') {
         setSesion(session)
       }
-      // Si la sesión expiró y no hay nueva sesión
-      if (!session && listo) {
-        setSesion(null)
-        setRol(null)
-        setSesionExpirada(true)
-      }
     })
 
-    return () => { subscription.unsubscribe(); clearTimeout(timeout) }
+    return () => subscription.unsubscribe()
   }, [])
 
   if (esProfesor) return <ProfesorApp />
 
   if (!listo) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p style={{ color: '#666', fontSize: '15px' }}>Cargando...</p>
     </div>
   )
