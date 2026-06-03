@@ -940,7 +940,10 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
       const durClase = claseEditando.duracion_min || durPlan
       const fraccion = parseFloat((durClase / durPlan).toFixed(4))
       const clasesTomadas = Math.max(0, parseFloat(((ctFresh?.clases_tomadas || 0) - fraccion).toFixed(4)))
-      await supabase.from('contratos').update({ clases_tomadas: clasesTomadas }).eq('id', claseEditando.contratos.id)
+      const totalClases = claseEditando.contratos?.total_clases || 0
+      const updateContrato: any = { clases_tomadas: clasesTomadas }
+      if (totalClases > 0 && clasesTomadas < totalClases) updateContrato.estado = 'activo'
+      await supabase.from('contratos').update(updateContrato).eq('id', claseEditando.contratos.id)    
     }
     if (alcance === 'futuras' && claseEditando.patron_id) {
       await supabase.from('clases').delete().eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
