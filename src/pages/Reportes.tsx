@@ -501,23 +501,18 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
     setCargando(true)
     setError(null)
     try {
-      const { data, error: err } = await supabase
-        .from('clases_con_numero')
-        .select(`
-          id, fecha, hora, duracion_min, estado, cancelado_por_academia, es_cortesia,
-          numero_calculado, honorario_valor, contrato_id,
-          contratos ( id, estado, cliente_id, total_clases,
-            clientes ( nombres, apellidos )
-          ),
-          profesores ( id, nombre ),
-          salones ( nombre, sedes ( nombre ) )
-        `)
-        .gte('fecha', fechaInicio)
-        .lte('fecha', fechaFin)
-        .or('estado.eq.dada,and(estado.eq.cancelada,cancelado_por_academia.eq.false)')
-        .order('fecha', { ascending: false })
-        .order('hora', { ascending: false })
-
+      const [{ data: dadas, error: err1 }, { data: inasistencias, error: err2 }] = await Promise.all([
+  supabase.from('clases_con_numero').select(`id, fecha, hora, duracion_min, estado, cancelado_por_academia, es_cortesia, numero_calculado, honorario_valor, contrato_id, contratos ( id, estado, cliente_id, total_clases, clientes ( nombres, apellidos ) ), profesores ( id, nombre ), salones ( nombre, sedes ( nombre ) )`)
+    .gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('estado', 'dada')
+    .order('fecha', { ascending: false }).order('hora', { ascending: false }),
+  supabase.from('clases_con_numero').select(`id, fecha, hora, duracion_min, estado, cancelado_por_academia, es_cortesia, numero_calculado, honorario_valor, contrato_id, contratos ( id, estado, cliente_id, total_clases, clientes ( nombres, apellidos ) ), profesores ( id, nombre ), salones ( nombre, sedes ( nombre ) )`)
+    .gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('estado', 'cancelada').eq('cancelado_por_academia', false)
+    .order('fecha', { ascending: false }).order('hora', { ascending: false })
+])
+const err = err1 || err2
+const data = [...(dadas || []), ...(inasistencias || [])].sort((a, b) =>
+  b.fecha.localeCompare(a.fecha) || (b.hora || '').localeCompare(a.hora || '')
+)
       if (err) throw err
 
       const filas: ClaseDada[] = (data || [])
