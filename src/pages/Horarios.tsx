@@ -2016,33 +2016,33 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
                 )
               )}
 
-              {!confirmarBorrar ? (
-                <button onClick={() => setConfirmarBorrar(true)} style={{ width: '100%', padding: '10px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Borrar clase</button>
-              ) : (
-                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '14px' }}>
-                  <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#991b1b', fontWeight: '700' }}>¿Confirmar eliminación?</p>
-                  <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#666' }}>
-                    {claseEditando.estado === 'dada'
-                      ? `⚠️ Esta clase ya fue dada. El contador del plan se ajustará.`
-                      : claseEditando.recurrente && claseEditando.patron_id
-                        ? 'Esta clase es parte de una serie recurrente.'
-                        : `${claseEditando.contratos?.clientes?.nombre} · ${claseEditando.fecha} · ${claseEditando.hora?.substring(0, 5)}`}
-                  </p>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {!esBloqueada(claseEditando) && !(claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia) && claseEditando.recurrente && claseEditando.patron_id ? (
-                      <>
-                        <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Borrar solo esta</button>
-                        <button onClick={() => borrarClase('futuras')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#991b1b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Borrar esta y siguientes</button>
-                      </>
-                    ) : (
-                      <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
-                        {editGuardando ? 'Borrando...' : 'Sí, borrar clase'}
-                      </button>
-                    )}
-                    <button onClick={() => setConfirmarBorrar(false)} style={{ padding: '8px 14px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Cancelar</button>
-                  </div>
-                </div>
-              )}
+                             {!(esBloqueada(claseEditando) || (claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia)) && (
+                  !confirmarBorrar ? (
+                    <button onClick={() => setConfirmarBorrar(true)} style={{ width: '100%', padding: '10px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Borrar clase</button>
+                  ) : (
+                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '14px' }}>
+                      <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#991b1b', fontWeight: '700' }}>¿Confirmar eliminación?</p>
+                      <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#666' }}>
+                        {claseEditando.recurrente && claseEditando.patron_id
+                          ? 'Esta clase es parte de una serie recurrente.'
+                          : `${claseEditando.contratos?.clientes?.nombre} · ${claseEditando.fecha} · ${claseEditando.hora?.substring(0, 5)}`}
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {claseEditando.recurrente && claseEditando.patron_id ? (
+                          <>
+                            <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Borrar solo esta</button>
+                            <button onClick={() => borrarClase('futuras')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#991b1b', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>Borrar esta y siguientes</button>
+                          </>
+                        ) : (
+                          <button onClick={() => borrarClase('esta')} disabled={editGuardando} style={{ flex: 1, padding: '8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>
+                            {editGuardando ? 'Borrando...' : 'Sí, borrar clase'}
+                          </button>
+                        )}
+                        <button onClick={() => setConfirmarBorrar(false)} style={{ padding: '8px 14px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Cancelar</button>
+                      </div>
+                    </div>
+                  )
+                )}
 
               {esBloqueada(claseEditando) && !confirmarBorrar && (
                 <button onClick={() => setModalEditar(false)} style={{ width: '100%', padding: '11px', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', marginTop: '10px' }}>Cerrar</button>
