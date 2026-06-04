@@ -45,6 +45,27 @@ interface Edicion {
   conteo_whatsapp?: number | null
 }
 
+interface ClaseDada {
+  id: string
+  fecha: string
+  hora: string
+  duracion_min: number
+  estado: string
+  cancelado_por_academia: boolean | null
+  es_cortesia: boolean
+  numero_calculado: number | null
+  honorario_valor: number | null
+  contrato_id: string
+  contrato_estado: string
+  cliente_id: string
+  cliente_nombre: string
+  sede_nombre: string
+  salon_nombre: string
+  profesor_id: string
+  profesor_nombre: string
+  total_clases: number
+}
+
 // ─── MENÚ DE REPORTES ─────────────────────────────────────────────────────────
 const REPORTES = [
   {
@@ -53,14 +74,23 @@ const REPORTES = [
     titulo: 'Clases tomadas por plan',
     descripcion: 'Planes activos con verificación de conteo WhatsApp por sede',
   },
+  {
+    id: 'clases_dadas_rango',
+    icono: '📊',
+    titulo: 'Clases dadas por rango',
+    descripcion: 'Historial de clases dadas e inasistencias con totales y filtros',
+  },
 ]
 
 // ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
-export default function Reportes() {
+export default function Reportes({ rol }: { rol?: string }) {
   const [reporteActivo, setReporteActivo] = useState<string | null>(null)
 
   if (reporteActivo === 'clases_tomadas_por_plan') {
-    return <ReporteClasesTomadasPorPlan onVolver={() => setReporteActivo(null)} />
+    return <ReporteClasesTomadasPorPlan onVolver={() => setReporteActivo(null)} rol={rol} />
+  }
+  if (reporteActivo === 'clases_dadas_rango') {
+    return <ReporteClasesDadasRango onVolver={() => setReporteActivo(null)} rol={rol} />
   }
 
   return (
@@ -102,7 +132,7 @@ export default function Reportes() {
 }
 
 // ─── REPORTE: CLASES TOMADAS POR PLAN ─────────────────────────────────────────
-function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
+function ReporteClasesTomadasPorPlan({ onVolver, rol }: { onVolver: () => void; rol?: string }) {
   const [datos, setDatos] = useState<PlanActivo[]>([])
   const [instrumentos, setInstrumentos] = useState<Instrumento[]>([])
   const [sedesDisponibles, setSedesDisponibles] = useState<Sede[]>([])
@@ -115,6 +145,8 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
   const [editados, setEditados] = useState<Record<string, Edicion>>({})
   const [guardando, setGuardando] = useState(false)
   const [mensajeGuardado, setMensajeGuardado] = useState<string | null>(null)
+
+  const esAdmin = rol === 'admin' || rol === 'director'
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -139,14 +171,8 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
             instrumentos ( id, nombre )
           `)
           .eq('estado', 'activo'),
-        supabase
-          .from('instrumentos')
-          .select('id, nombre')
-          .order('nombre', { ascending: true }),
-        supabase
-          .from('sedes')
-          .select('id, nombre')
-          .order('nombre', { ascending: true })
+        supabase.from('instrumentos').select('id, nombre').order('nombre', { ascending: true }),
+        supabase.from('sedes').select('id, nombre').order('nombre', { ascending: true })
       ])
 
       if (err) throw err
@@ -185,15 +211,11 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
     }
   }
 
-  // ── Sedes disponibles ──
   const sedes = ['todas', ...Array.from(new Set(datos.map(d => d.sede_nombre))).sort()]
-
-  // ── Indicadores globales (siempre sobre TODOS los datos) ──
   const totalGlobal = datos.length
   const alDiaGlobal = datos.filter(d => d.diferencia === 0).length
   const pendienteGlobal = datos.filter(d => d.diferencia > 0).length
 
-  // ── Filtrar para la tabla ──
   let filtrados = datos.filter(d => {
     const coincideBusqueda =
       d.cliente_nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -204,19 +226,12 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
     return coincideBusqueda && coincideSede
   })
 
-  if (filtro === 'al_dia') {
-    filtrados = filtrados.filter(d => d.diferencia === 0)
-  } else if (filtro === 'pendiente') {
-    filtrados = filtrados.filter(d => d.diferencia > 0).sort((a, b) => a.diferencia - b.diferencia)
-  }
+  if (filtro === 'al_dia') filtrados = filtrados.filter(d => d.diferencia === 0)
+  else if (filtro === 'pendiente') filtrados = filtrados.filter(d => d.diferencia > 0).sort((a, b) => a.diferencia - b.diferencia)
 
-  // ── Helpers de edición ──
   function getNum(plan: PlanActivo, campo: CampoNumero): number | string {
     const ed = editados[plan.id]
-    if (ed && campo in ed) {
-      const v = ed[campo]
-      return v === null || v === undefined ? '' : v
-    }
+    if (ed && campo in ed) { const v = ed[campo]; return v === null || v === undefined ? '' : v }
     if (campo === 'conteo_whatsapp') return plan.conteo_whatsapp !== null ? plan.conteo_whatsapp : ''
     if (campo === 'total_clases') return plan.total_clases
     return plan.duracion_min
@@ -234,6 +249,12 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
     return plan.instrumento_id ?? ''
   }
 
+  function getSedeId(plan: PlanActivo): string {
+    const ed = editados[plan.id]
+    if (ed && 'sede_id' in ed) return ed.sede_id ?? ''
+    return plan.sede_id ?? ''
+  }
+
   function editarNum(id: string, campo: CampoNumero, valor: string) {
     const num = valor === '' ? null : Number(valor)
     setEditados(prev => ({ ...prev, [id]: { ...prev[id], [campo]: num } }))
@@ -241,12 +262,6 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
 
   function editarTxt(id: string, campo: CampoTexto, valor: string) {
     setEditados(prev => ({ ...prev, [id]: { ...prev[id], [campo]: valor } }))
-  }
-
-  function getSedeId(plan: PlanActivo): string {
-    const ed = editados[plan.id]
-    if (ed && 'sede_id' in ed) return ed.sede_id ?? ''
-    return plan.sede_id ?? ''
   }
 
   function editarSede(id: string, valor: string) {
@@ -257,7 +272,6 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
     setEditados(prev => ({ ...prev, [id]: { ...prev[id], instrumento_id: valor } }))
   }
 
-  // ── Guardar ──
   async function guardarCambios() {
     setGuardando(true)
     setMensajeGuardado(null)
@@ -267,7 +281,6 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
       const plan = datos.find(d => d.id === id)
       if (!plan) continue
 
-      // Campos del contrato
       const updateContrato: any = {}
       if ('total_clases' in cambios && cambios.total_clases !== null) updateContrato.total_clases = cambios.total_clases
       if ('duracion_min' in cambios && cambios.duracion_min !== null) updateContrato.duracion_min = cambios.duracion_min
@@ -280,12 +293,8 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
         if (err) errores++
       }
 
-      // Campo del cliente
       if ('grupo_whatsapp' in cambios) {
-        const { error: err } = await supabase
-          .from('clientes')
-          .update({ grupo_whatsapp: cambios.grupo_whatsapp })
-          .eq('id', plan.cliente_id)
+        const { error: err } = await supabase.from('clientes').update({ grupo_whatsapp: cambios.grupo_whatsapp }).eq('id', plan.cliente_id)
         if (err) errores++
       }
     }
@@ -293,21 +302,14 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
     setGuardando(false)
     setEditados({})
     setModoEdicion(false)
-    setMensajeGuardado(errores === 0
-      ? '✅ Cambios guardados correctamente.'
-      : `⚠️ ${errores} cambio(s) no se pudieron guardar.`)
+    setMensajeGuardado(errores === 0 ? '✅ Cambios guardados correctamente.' : `⚠️ ${errores} cambio(s) no se pudieron guardar.`)
     await cargarDatos()
     setTimeout(() => setMensajeGuardado(null), 4000)
   }
 
-  function cancelarEdicion() {
-    setEditados({})
-    setModoEdicion(false)
-  }
-
+  function cancelarEdicion() { setEditados({}); setModoEdicion(false) }
   const hayCambios = Object.keys(editados).length > 0
 
-  // ── Estilos ──
   const estiloInput = (editado: boolean) => ({
     padding: '5px 8px', borderRadius: '6px', textAlign: 'center' as const,
     border: `1.5px solid ${editado ? TEAL : TEAL_MID}`,
@@ -317,15 +319,13 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
   const estiloInputTxt = (editado: boolean) => ({
     padding: '5px 8px', borderRadius: '6px',
     border: `1.5px solid ${editado ? TEAL : TEAL_MID}`,
-    fontSize: '13px', outline: 'none', background: '#fff',
-    width: '100%', minWidth: '120px',
+    fontSize: '13px', outline: 'none', background: '#fff', width: '100%', minWidth: '120px',
   })
 
   const estiloSelect = (editado: boolean) => ({
     padding: '5px 8px', borderRadius: '6px',
     border: `1.5px solid ${editado ? TEAL : TEAL_MID}`,
-    fontSize: '13px', outline: 'none', background: '#fff',
-    width: '100%', minWidth: '130px', cursor: 'pointer',
+    fontSize: '13px', outline: 'none', background: '#fff', width: '100%', minWidth: '130px', cursor: 'pointer',
   })
 
   const columnas = ['#', 'Cliente', 'Grupo WA', 'Sede', 'Instrumento', 'Plan', 'Duración', 'Clases tomadas', 'Conteo WA', 'Diferencia']
@@ -333,151 +333,72 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: '1400px', margin: '0 auto' }}>
-
-      {/* Encabezado */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
-        <button
-          onClick={onVolver}
-          style={{
-            background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px',
-            padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600,
-          }}
-        >← Reportes</button>
-        <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: 0, flex: 1 }}>
-          📋 Clases tomadas por plan
-        </h2>
-        {!modoEdicion ? (
-          <button
-            onClick={() => setModoEdicion(true)}
-            style={{
-              background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '8px',
-              padding: '7px 16px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600,
-            }}
-          >✏️ Modo edición</button>
-        ) : (
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              onClick={cancelarEdicion}
-              style={{
-                background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '8px',
-                padding: '7px 16px', cursor: 'pointer', fontSize: '13px', color: '#64748b', fontWeight: 600,
-              }}
-            >Cancelar</button>
-            <button
-              onClick={guardarCambios}
-              disabled={!hayCambios || guardando}
-              style={{
-                background: hayCambios ? TEAL : '#a0c8c8', border: 'none', borderRadius: '8px',
-                padding: '7px 18px', cursor: hayCambios ? 'pointer' : 'not-allowed',
-                fontSize: '13px', color: '#fff', fontWeight: 700,
-              }}
-            >{guardando ? 'Guardando…' : `💾 Guardar${hayCambios ? ` (${Object.keys(editados).length})` : ''}`}</button>
-          </div>
+        <button onClick={onVolver} style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>← Reportes</button>
+        <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: 0, flex: 1 }}>📋 Clases tomadas por plan</h2>
+        {esAdmin && (
+          !modoEdicion ? (
+            <button onClick={() => setModoEdicion(true)} style={{ background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>✏️ Modo edición</button>
+          ) : (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={cancelarEdicion} style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Cancelar</button>
+              <button onClick={guardarCambios} disabled={!hayCambios || guardando} style={{ background: hayCambios ? TEAL : '#a0c8c8', border: 'none', borderRadius: '8px', padding: '7px 18px', cursor: hayCambios ? 'pointer' : 'not-allowed', fontSize: '13px', color: '#fff', fontWeight: 700 }}>
+                {guardando ? 'Guardando…' : `💾 Guardar${hayCambios ? ` (${Object.keys(editados).length})` : ''}`}
+              </button>
+            </div>
+          )
         )}
       </div>
 
-      {/* Mensaje guardado */}
       {mensajeGuardado && (
-        <div style={{
-          background: mensajeGuardado.startsWith('✅') ? '#f0fdf4' : '#fffbeb',
-          border: `1px solid ${mensajeGuardado.startsWith('✅') ? '#bbf7d0' : '#fde68a'}`,
-          borderRadius: '8px', padding: '10px 16px', marginBottom: '16px',
-          fontSize: '14px', color: mensajeGuardado.startsWith('✅') ? '#166534' : '#92400e',
-        }}>{mensajeGuardado}</div>
+        <div style={{ background: mensajeGuardado.startsWith('✅') ? '#f0fdf4' : '#fffbeb', border: `1px solid ${mensajeGuardado.startsWith('✅') ? '#bbf7d0' : '#fde68a'}`, borderRadius: '8px', padding: '10px 16px', marginBottom: '16px', fontSize: '14px', color: mensajeGuardado.startsWith('✅') ? '#166534' : '#92400e' }}>{mensajeGuardado}</div>
       )}
 
-      {/* Aviso modo edición */}
       {modoEdicion && (
-        <div style={{
-          background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px',
-          padding: '10px 16px', marginBottom: '16px', fontSize: '13px', color: '#92400e',
-        }}>
-          ✏️ Modo edición activo — puedes modificar <strong>Grupo WA</strong>, <strong>Instrumento</strong>, <strong>Plan</strong>, <strong>Duración</strong> y <strong>Conteo WA</strong>. Pulsa <strong>Guardar</strong> cuando termines.
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px 16px', marginBottom: '16px', fontSize: '13px', color: '#92400e' }}>
+          ✏️ Modo edición activo — puedes modificar <strong>Grupo WA</strong>, <strong>Sede</strong>, <strong>Instrumento</strong>, <strong>Plan</strong>, <strong>Duración</strong> y <strong>Conteo WA</strong>.
         </div>
       )}
 
-      {/* Tarjetas resumen — siempre globales */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
         {[
           { label: 'Total planes activos', valor: totalGlobal, color: TEAL },
           { label: 'Planes con registros de clases al día', valor: alDiaGlobal, color: '#16a34a' },
           { label: 'Planes con registros de clases pendientes', valor: pendienteGlobal, color: '#d97706' },
         ].map(t => (
-          <div key={t.label} style={{
-            background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px',
-            padding: '14px 20px', minWidth: '160px', flex: '1',
-          }}>
+          <div key={t.label} style={{ background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', padding: '14px 20px', minWidth: '160px', flex: '1' }}>
             <div style={{ fontSize: '24px', fontWeight: 800, color: t.color }}>{cargando ? '…' : t.valor}</div>
             <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>{t.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Filtros */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '18px', flexWrap: 'wrap', alignItems: 'center' }}>
         {([
           { key: 'todos', label: '📋 Todos' },
           { key: 'al_dia', label: '✅ Conteo al día' },
           { key: 'pendiente', label: '⏳ Pendiente de ajustar' },
         ] as const).map(f => (
-          <button key={f.key} onClick={() => setFiltro(f.key)} style={{
-            padding: '7px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 600,
-            cursor: 'pointer', transition: 'all 0.15s',
-            background: filtro === f.key ? TEAL : '#fff',
-            color: filtro === f.key ? '#fff' : TEAL_DARK,
-            border: `1.5px solid ${filtro === f.key ? TEAL : TEAL_MID}`,
-          }}>{f.label}</button>
+          <button key={f.key} onClick={() => setFiltro(f.key)} style={{ padding: '7px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', background: filtro === f.key ? TEAL : '#fff', color: filtro === f.key ? '#fff' : TEAL_DARK, border: `1.5px solid ${filtro === f.key ? TEAL : TEAL_MID}` }}>{f.label}</button>
         ))}
 
-        <select
-          value={sedeFiltro}
-          onChange={e => setSedeFiltro(e.target.value)}
-          style={{
-            padding: '7px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 600,
-            border: `1.5px solid ${sedeFiltro !== 'todas' ? TEAL : TEAL_MID}`,
-            background: sedeFiltro !== 'todas' ? TEAL_LIGHT : '#fff',
-            color: sedeFiltro !== 'todas' ? TEAL_DARK : '#475569',
-            cursor: 'pointer', outline: 'none',
-          }}
-        >
-          {sedes.map(s => (
-            <option key={s} value={s}>{s === 'todas' ? '🏢 Todas las sedes' : `🏢 ${s}`}</option>
-          ))}
+        <select value={sedeFiltro} onChange={e => setSedeFiltro(e.target.value)} style={{ padding: '7px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${sedeFiltro !== 'todas' ? TEAL : TEAL_MID}`, background: sedeFiltro !== 'todas' ? TEAL_LIGHT : '#fff', color: sedeFiltro !== 'todas' ? TEAL_DARK : '#475569', cursor: 'pointer', outline: 'none' }}>
+          {sedes.map(s => <option key={s} value={s}>{s === 'todas' ? '🏢 Todas las sedes' : `🏢 ${s}`}</option>)}
         </select>
 
-        <input
-          type="text"
-          placeholder="Buscar cliente, instrumento, grupo…"
-          value={busqueda}
-          onChange={e => setBusqueda(e.target.value)}
-          style={{
-            marginLeft: 'auto', padding: '7px 14px', borderRadius: '20px',
-            border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', outline: 'none',
-            width: '240px', color: '#333',
-          }}
-        />
+        <input type="text" placeholder="Buscar cliente, instrumento, grupo…" value={busqueda} onChange={e => setBusqueda(e.target.value)} style={{ marginLeft: 'auto', padding: '7px 14px', borderRadius: '20px', border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', outline: 'none', width: '240px', color: '#333' }} />
       </div>
 
-      {/* Estado carga / error */}
       {cargando && <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>Cargando datos…</div>}
-      {error && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '16px', color: '#b91c1c', fontSize: '14px' }}>
-          {error}
-        </div>
-      )}
+      {error && <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '16px', color: '#b91c1c', fontSize: '14px' }}>{error}</div>}
 
-      {/* Tabla */}
       {!cargando && !error && (
         <div style={{ overflowX: 'auto', borderRadius: '12px', border: `1.5px solid ${TEAL_MID}`, background: '#fff' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
               <tr style={{ background: TEAL, color: '#fff' }}>
                 {columnas.map((h, i) => (
-                  <th key={i} style={{
-                    padding: '11px 14px', fontWeight: 700,
-                    textAlign: i === 0 || i >= 5 ? 'center' : 'left',
-                    whiteSpace: 'nowrap', fontSize: '12px', letterSpacing: '0.03em',
-                  }}>
+                  <th key={i} style={{ padding: '11px 14px', fontWeight: 700, textAlign: i === 0 || i >= 5 ? 'center' : 'left', whiteSpace: 'nowrap', fontSize: '12px', letterSpacing: '0.03em' }}>
                     {h}{modoEdicion && editables.includes(h) ? ' ✏️' : ''}
                   </th>
                 ))}
@@ -485,149 +406,50 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
             </thead>
             <tbody>
               {filtrados.length === 0 ? (
-                <tr>
-                  <td colSpan={columnas.length} style={{ padding: '40px', textAlign: 'center', color: '#999' }}>
-                    No hay planes que coincidan con el filtro.
-                  </td>
-                </tr>
+                <tr><td colSpan={columnas.length} style={{ padding: '40px', textAlign: 'center', color: '#999' }}>No hay planes que coincidan con el filtro.</td></tr>
               ) : filtrados.map((plan, idx) => {
                 const ed = editados[plan.id] ?? {}
                 const filaEditada = Object.keys(ed).length > 0
                 const waActual = 'conteo_whatsapp' in ed ? ed.conteo_whatsapp : plan.conteo_whatsapp
-                const diff = waActual !== null && waActual !== undefined
-                  ? plan.clases_tomadas - (waActual as number)
-                  : plan.clases_tomadas
+                const diff = waActual !== null && waActual !== undefined ? plan.clases_tomadas - (waActual as number) : plan.clases_tomadas
                 const diffColor = diff === 0 ? '#16a34a' : diff <= 2 ? '#d97706' : '#dc2626'
-                const diffBg   = diff === 0 ? '#f0fdf4'  : diff <= 2 ? '#fffbeb'  : '#fef2f2'
-
-                // Nombre del instrumento actualmente seleccionado en edición
+                const diffBg = diff === 0 ? '#f0fdf4' : diff <= 2 ? '#fffbeb' : '#fef2f2'
                 const instrIdActual = getInstrumentoId(plan)
-                const instrNombreActual = 'instrumento_id' in ed
-                  ? (instrumentos.find(i => i.id === ed.instrumento_id)?.nombre ?? '—')
-                  : plan.instrumento_nombre
-
                 return (
-                  <tr key={plan.id} style={{
-                    borderTop: `1px solid ${TEAL_LIGHT}`,
-                    background: filaEditada ? '#fffde7' : idx % 2 === 0 ? '#fff' : '#fafefe',
-                  }}>
-                    {/* # */}
+                  <tr key={plan.id} style={{ borderTop: `1px solid ${TEAL_LIGHT}`, background: filaEditada ? '#fffde7' : idx % 2 === 0 ? '#fff' : '#fafefe' }}>
                     <td style={{ padding: '10px 14px', textAlign: 'center', color: '#999', fontWeight: 600 }}>{idx + 1}</td>
-
-                    {/* Cliente */}
-                    <td style={{ padding: '10px 14px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
-                      {plan.cliente_nombre}
+                    <td style={{ padding: '10px 14px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>{plan.cliente_nombre}</td>
+                    <td style={{ padding: '6px 14px', minWidth: '130px' }}>
+                      {modoEdicion ? <input type="text" value={getTxt(plan, 'grupo_whatsapp')} onChange={e => editarTxt(plan.id, 'grupo_whatsapp', e.target.value)} placeholder="Sin grupo" style={estiloInputTxt('grupo_whatsapp' in ed)} /> : <span style={{ color: plan.grupo_whatsapp ? '#334155' : '#ccc' }}>{plan.grupo_whatsapp || '—'}</span>}
                     </td>
-
-                    {/* Grupo WA — editable texto */}
                     <td style={{ padding: '6px 14px', minWidth: '130px' }}>
                       {modoEdicion ? (
-                        <input
-                          type="text"
-                          value={getTxt(plan, 'grupo_whatsapp')}
-                          onChange={e => editarTxt(plan.id, 'grupo_whatsapp', e.target.value)}
-                          placeholder="Sin grupo"
-                          style={estiloInputTxt('grupo_whatsapp' in ed)}
-                        />
-                      ) : (
-                        <span style={{ color: plan.grupo_whatsapp ? '#334155' : '#ccc' }}>
-                          {plan.grupo_whatsapp || '—'}
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Sede — selector */}
-                    <td style={{ padding: '6px 14px', minWidth: '130px' }}>
-                      {modoEdicion ? (
-                        <select
-                          value={getSedeId(plan)}
-                          onChange={e => editarSede(plan.id, e.target.value)}
-                          style={estiloSelect('sede_id' in ed)}
-                        >
+                        <select value={getSedeId(plan)} onChange={e => editarSede(plan.id, e.target.value)} style={estiloSelect('sede_id' in ed)}>
                           <option value="">— Sin sede —</option>
-                          {sedesDisponibles.map(s => (
-                            <option key={s.id} value={s.id}>{s.nombre}</option>
-                          ))}
+                          {sedesDisponibles.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                         </select>
-                      ) : (
-                        <span style={{ color: '#475569', whiteSpace: 'nowrap' }}>{plan.sede_nombre}</span>
-                      )}
+                      ) : <span style={{ color: '#475569', whiteSpace: 'nowrap' }}>{plan.sede_nombre}</span>}
                     </td>
-
-                    {/* Instrumento — selector */}
                     <td style={{ padding: '6px 14px', minWidth: '140px' }}>
                       {modoEdicion ? (
-                        <select
-                          value={instrIdActual}
-                          onChange={e => editarInstrumento(plan.id, e.target.value)}
-                          style={estiloSelect('instrumento_id' in ed)}
-                        >
+                        <select value={instrIdActual} onChange={e => editarInstrumento(plan.id, e.target.value)} style={estiloSelect('instrumento_id' in ed)}>
                           <option value="">— Sin instrumento —</option>
-                          {instrumentos.map(i => (
-                            <option key={i.id} value={i.id}>{i.nombre}</option>
-                          ))}
+                          {instrumentos.map(i => <option key={i.id} value={i.id}>{i.nombre}</option>)}
                         </select>
-                      ) : (
-                        <span style={{ color: '#475569' }}>{plan.instrumento_nombre}</span>
-                      )}
+                      ) : <span style={{ color: '#475569' }}>{plan.instrumento_nombre}</span>}
                     </td>
-
-                    {/* Plan — editable número */}
                     <td style={{ padding: '6px 14px', textAlign: 'center' }}>
-                      {modoEdicion ? (
-                        <input
-                          type="number"
-                          value={getNum(plan, 'total_clases')}
-                          onChange={e => editarNum(plan.id, 'total_clases', e.target.value)}
-                          style={{ ...estiloInput('total_clases' in ed), width: '64px' }}
-                        />
-                      ) : (
-                        <span style={{ color: '#334155', fontWeight: 600 }}>{plan.total_clases}</span>
-                      )}
+                      {modoEdicion ? <input type="number" value={getNum(plan, 'total_clases')} onChange={e => editarNum(plan.id, 'total_clases', e.target.value)} style={{ ...estiloInput('total_clases' in ed), width: '64px' }} /> : <span style={{ color: '#334155', fontWeight: 600 }}>{plan.total_clases}</span>}
                     </td>
-
-                    {/* Duración — editable número */}
                     <td style={{ padding: '6px 14px', textAlign: 'center' }}>
-                      {modoEdicion ? (
-                        <input
-                          type="number"
-                          value={getNum(plan, 'duracion_min')}
-                          onChange={e => editarNum(plan.id, 'duracion_min', e.target.value)}
-                          style={{ ...estiloInput('duracion_min' in ed), width: '64px' }}
-                        />
-                      ) : (
-                        <span style={{ color: '#334155' }}>{plan.duracion_min} min</span>
-                      )}
+                      {modoEdicion ? <input type="number" value={getNum(plan, 'duracion_min')} onChange={e => editarNum(plan.id, 'duracion_min', e.target.value)} style={{ ...estiloInput('duracion_min' in ed), width: '64px' }} /> : <span style={{ color: '#334155' }}>{plan.duracion_min} min</span>}
                     </td>
-
-                    {/* Clases tomadas — solo lectura */}
-                    <td style={{ padding: '10px 14px', textAlign: 'center', color: '#334155', fontWeight: 600 }}>
-                      {plan.clases_tomadas}
-                    </td>
-
-                    {/* Conteo WA — editable número */}
+                    <td style={{ padding: '10px 14px', textAlign: 'center', color: '#334155', fontWeight: 600 }}>{plan.clases_tomadas}</td>
                     <td style={{ padding: '6px 14px', textAlign: 'center' }}>
-                      {modoEdicion ? (
-                        <input
-                          type="number"
-                          value={getNum(plan, 'conteo_whatsapp')}
-                          onChange={e => editarNum(plan.id, 'conteo_whatsapp', e.target.value)}
-                          placeholder="—"
-                          style={{ ...estiloInput('conteo_whatsapp' in ed), width: '64px' }}
-                        />
-                      ) : (
-                        plan.conteo_whatsapp !== null
-                          ? <span style={{ color: '#334155' }}>{plan.conteo_whatsapp}</span>
-                          : <span style={{ color: '#ccc' }}>—</span>
-                      )}
+                      {modoEdicion ? <input type="number" value={getNum(plan, 'conteo_whatsapp')} onChange={e => editarNum(plan.id, 'conteo_whatsapp', e.target.value)} placeholder="—" style={{ ...estiloInput('conteo_whatsapp' in ed), width: '64px' }} /> : plan.conteo_whatsapp !== null ? <span style={{ color: '#334155' }}>{plan.conteo_whatsapp}</span> : <span style={{ color: '#ccc' }}>—</span>}
                     </td>
-
-                    {/* Diferencia */}
                     <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                      <span style={{
-                        background: diffBg, color: diffColor, borderRadius: '20px',
-                        padding: '3px 12px', fontWeight: 700, fontSize: '13px', display: 'inline-block',
-                      }}>
+                      <span style={{ background: diffBg, color: diffColor, borderRadius: '20px', padding: '3px 12px', fontWeight: 700, fontSize: '13px', display: 'inline-block' }}>
                         {diff === 0 ? '✓ 0' : `+${diff}`}
                       </span>
                     </td>
@@ -639,10 +461,394 @@ function ReporteClasesTomadasPorPlan({ onVolver }: { onVolver: () => void }) {
         </div>
       )}
 
-      {/* Pie */}
       {!cargando && !error && filtrados.length > 0 && (
         <div style={{ marginTop: '12px', fontSize: '12px', color: '#999', textAlign: 'right' }}>
           Mostrando {filtrados.length} de {datos.length} planes
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── REPORTE: CLASES DADAS POR RANGO ──────────────────────────────────────────
+function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?: string }) {
+  const hoy = new Date()
+  const primerDiaMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+  const ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
+  const ultimoDiaMesStr = `${ultimoDiaMes.getFullYear()}-${String(ultimoDiaMes.getMonth() + 1).padStart(2, '0')}-${String(ultimoDiaMes.getDate()).padStart(2, '0')}`
+
+  const [datos, setDatos] = useState<ClaseDada[]>([])
+  const [cargando, setCargando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [fechaInicio, setFechaInicio] = useState(primerDiaMes)
+  const [fechaFin, setFechaFin] = useState(ultimoDiaMesStr)
+  const [filtroPro, setFiltroPro] = useState('todos')
+  const [filtroSede, setFiltroSede] = useState('todas')
+  const [filtroSalon, setFiltroSalon] = useState('todos')
+  const [filtroEstado, setFiltroEstado] = useState<'todos' | 'activo' | 'archivado'>('todos')
+  const [filtroTipo, setFiltroTipo] = useState<'todos' | 'dada' | 'inasistencia'>('todos')
+  const [modoEdicion, setModoEdicion] = useState(false)
+  const [honorariosEdit, setHonorariosEdit] = useState<Record<string, string>>({})
+  const [guardando, setGuardando] = useState(false)
+  const [mensajeGuardado, setMensajeGuardado] = useState<string | null>(null)
+  const [confirmarBorrar, setConfirmarBorrar] = useState<string | null>(null)
+  const [confirmarMover, setConfirmarMover] = useState<string | null>(null)
+
+  const esAdmin = rol === 'admin' || rol === 'director'
+
+  useEffect(() => { cargarDatos() }, [fechaInicio, fechaFin])
+
+  async function cargarDatos() {
+    setCargando(true)
+    setError(null)
+    try {
+      const { data, error: err } = await supabase
+        .from('clases_con_numero')
+        .select(`
+          id, fecha, hora, duracion_min, estado, cancelado_por_academia, es_cortesia,
+          numero_calculado, honorario_valor, contrato_id,
+          contratos ( id, estado, cliente_id, total_clases,
+            clientes ( nombres, apellidos )
+          ),
+          profesores ( id, nombre ),
+          salones ( nombre, sedes ( nombre ) )
+        `)
+        .gte('fecha', fechaInicio)
+        .lte('fecha', fechaFin)
+        .or('estado.eq.dada,and(estado.eq.cancelada,cancelado_por_academia.eq.false)')
+        .order('fecha', { ascending: false })
+        .order('hora', { ascending: false })
+
+      if (err) throw err
+
+      const filas: ClaseDada[] = (data || [])
+        .filter((r: any) => !r.es_cortesia)
+        .map((r: any) => ({
+          id: r.id,
+          fecha: r.fecha,
+          hora: r.hora?.substring(0, 5) || '—',
+          duracion_min: Number(r.duracion_min || 0),
+          estado: r.estado,
+          cancelado_por_academia: r.cancelado_por_academia,
+          es_cortesia: r.es_cortesia,
+          numero_calculado: r.numero_calculado,
+          honorario_valor: r.honorario_valor !== null ? Number(r.honorario_valor) : null,
+          contrato_id: r.contrato_id,
+          contrato_estado: r.contratos?.estado || '—',
+          cliente_id: r.contratos?.cliente_id || '',
+          cliente_nombre: `${r.contratos?.clientes?.nombres ?? ''} ${r.contratos?.clientes?.apellidos ?? ''}`.trim(),
+          sede_nombre: r.salones?.sedes?.nombre || '—',
+          salon_nombre: r.salones?.nombre || '—',
+          profesor_id: r.profesores?.id || '',
+          profesor_nombre: r.profesores?.nombre || '—',
+          total_clases: Number(r.contratos?.total_clases || 0),
+        }))
+
+      setDatos(filas)
+    } catch (e: any) {
+      setError('No se pudieron cargar los datos.')
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  // Listas para filtros
+  const profesores = ['todos', ...Array.from(new Set(datos.map(d => d.profesor_nombre))).sort()]
+  const sedes = ['todas', ...Array.from(new Set(datos.map(d => d.sede_nombre))).sort()]
+  const salones = ['todos', ...Array.from(new Set(datos.filter(d => filtroSede === 'todas' || d.sede_nombre === filtroSede).map(d => d.salon_nombre))).sort()]
+
+  // Filtrar
+  const filtrados = datos.filter(d => {
+    if (filtroPro !== 'todos' && d.profesor_nombre !== filtroPro) return false
+    if (filtroSede !== 'todas' && d.sede_nombre !== filtroSede) return false
+    if (filtroSalon !== 'todos' && d.salon_nombre !== filtroSalon) return false
+    if (filtroEstado !== 'todos' && d.contrato_estado !== filtroEstado) return false
+    if (filtroTipo === 'dada' && d.estado !== 'dada') return false
+    if (filtroTipo === 'inasistencia' && !(d.estado === 'cancelada' && !d.cancelado_por_academia)) return false
+    return true
+  })
+
+  // Totales
+  const totalClases = filtrados.filter(d => d.estado === 'dada').length
+  const totalMinutos = filtrados.filter(d => d.estado === 'dada').reduce((s, d) => s + d.duracion_min, 0)
+  const totalHoras = Math.floor(totalMinutos / 60)
+  const minResto = totalMinutos % 60
+  const totalHonorarios = filtrados.reduce((s, d) => s + (d.honorario_valor || 0), 0)
+  const totalInasistencias = filtrados.filter(d => d.estado === 'cancelada' && !d.cancelado_por_academia).length
+
+  async function moverClase(claseId: string, contratoId: string, clienteId: string, estadoActual: string) {
+    // Buscar el contrato destino
+    const estadoDestino = estadoActual === 'activo' ? 'archivado' : 'activo'
+    const { data: contratos } = await supabase
+      .from('contratos')
+      .select('id, clases_tomadas')
+      .eq('cliente_id', clienteId)
+      .eq('estado', estadoDestino)
+      .order('fecha_inicio', { ascending: false })
+      .limit(1)
+
+    if (!contratos || contratos.length === 0) {
+      alert(`No hay contrato ${estadoDestino} para este cliente.`)
+      return
+    }
+
+    const contratoDestino = contratos[0]
+
+    // Mover la clase
+    await supabase.from('clases').update({ contrato_id: contratoDestino.id }).eq('id', claseId)
+
+    // Restar del contrato origen
+    const { data: origen } = await supabase.from('contratos').select('clases_tomadas').eq('id', contratoId).single()
+    if (origen) await supabase.from('contratos').update({ clases_tomadas: Math.max(0, (origen.clases_tomadas || 0) - 1) }).eq('id', contratoId)
+
+    // Sumar al contrato destino
+    await supabase.from('contratos').update({ clases_tomadas: (contratoDestino.clases_tomadas || 0) + 1 }).eq('id', contratoDestino.id)
+
+    setConfirmarMover(null)
+    setMensajeGuardado('✅ Clase movida correctamente.')
+    setTimeout(() => setMensajeGuardado(null), 4000)
+    await cargarDatos()
+  }
+
+  async function borrarClase(claseId: string, contratoId: string) {
+    // Restar del contrato
+    const { data: ct } = await supabase.from('contratos').select('clases_tomadas').eq('id', contratoId).single()
+    if (ct) await supabase.from('contratos').update({ clases_tomadas: Math.max(0, (ct.clases_tomadas || 0) - 1) }).eq('id', contratoId)
+    await supabase.from('clases').delete().eq('id', claseId)
+    setConfirmarBorrar(null)
+    setMensajeGuardado('✅ Clase eliminada.')
+    setTimeout(() => setMensajeGuardado(null), 4000)
+    await cargarDatos()
+  }
+
+  async function guardarHonorarios() {
+    setGuardando(true)
+    let errores = 0
+    for (const [id, valor] of Object.entries(honorariosEdit)) {
+      const { error: err } = await supabase.from('clases').update({ honorario_valor: Number(valor) }).eq('id', id)
+      if (err) errores++
+    }
+    setGuardando(false)
+    setHonorariosEdit({})
+    setModoEdicion(false)
+    setMensajeGuardado(errores === 0 ? '✅ Honorarios guardados.' : `⚠️ ${errores} error(es).`)
+    setTimeout(() => setMensajeGuardado(null), 4000)
+    await cargarDatos()
+  }
+
+  const estiloFiltro = (activo: boolean) => ({
+    padding: '7px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 600,
+    cursor: 'pointer', border: `1.5px solid ${activo ? TEAL : TEAL_MID}`,
+    background: activo ? TEAL : '#fff', color: activo ? '#fff' : TEAL_DARK,
+  })
+
+  return (
+    <div style={{ padding: '28px 32px', maxWidth: '1400px', margin: '0 auto' }}>
+
+      {/* Encabezado */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        <button onClick={onVolver} style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>← Reportes</button>
+        <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: 0, flex: 1 }}>📊 Clases dadas por rango</h2>
+        {esAdmin && (
+          !modoEdicion ? (
+            <button onClick={() => setModoEdicion(true)} style={{ background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>✏️ Modo edición</button>
+          ) : (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => { setModoEdicion(false); setHonorariosEdit({}) }} style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Cancelar</button>
+              <button onClick={guardarHonorarios} disabled={Object.keys(honorariosEdit).length === 0 || guardando} style={{ background: Object.keys(honorariosEdit).length > 0 ? TEAL : '#a0c8c8', border: 'none', borderRadius: '8px', padding: '7px 18px', cursor: Object.keys(honorariosEdit).length > 0 ? 'pointer' : 'not-allowed', fontSize: '13px', color: '#fff', fontWeight: 700 }}>
+                {guardando ? 'Guardando…' : `💾 Guardar honorarios`}
+              </button>
+            </div>
+          )
+        )}
+      </div>
+
+      {mensajeGuardado && (
+        <div style={{ background: mensajeGuardado.startsWith('✅') ? '#f0fdf4' : '#fffbeb', border: `1px solid ${mensajeGuardado.startsWith('✅') ? '#bbf7d0' : '#fde68a'}`, borderRadius: '8px', padding: '10px 16px', marginBottom: '16px', fontSize: '14px', color: mensajeGuardado.startsWith('✅') ? '#166534' : '#92400e' }}>{mensajeGuardado}</div>
+      )}
+
+      {/* Rango de fechas */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ fontSize: '13px', color: '#555', fontWeight: 600 }}>Desde:</label>
+          <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} style={{ padding: '7px 12px', borderRadius: '8px', border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', outline: 'none' }} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ fontSize: '13px', color: '#555', fontWeight: 600 }}>Hasta:</label>
+          <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} style={{ padding: '7px 12px', borderRadius: '8px', border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', outline: 'none' }} />
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* Tipo */}
+        {([
+          { key: 'todos', label: '📋 Todos' },
+          { key: 'dada', label: '✅ Dadas' },
+          { key: 'inasistencia', label: '⚠️ Inasistencias' },
+        ] as const).map(f => (
+          <button key={f.key} onClick={() => setFiltroTipo(f.key)} style={estiloFiltro(filtroTipo === f.key)}>{f.label}</button>
+        ))}
+
+        <div style={{ width: '1px', height: '28px', background: '#e2e8f0', margin: '0 4px' }} />
+
+        {/* Estado contrato */}
+        {([
+          { key: 'todos', label: '🗂 Activo y archivo' },
+          { key: 'activo', label: '🟢 Activo' },
+          { key: 'archivado', label: '📦 Archivado' },
+        ] as const).map(f => (
+          <button key={f.key} onClick={() => setFiltroEstado(f.key)} style={estiloFiltro(filtroEstado === f.key)}>{f.label}</button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* Profesor */}
+        <select value={filtroPro} onChange={e => setFiltroPro(e.target.value)} style={{ padding: '7px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, border: `1.5px solid ${filtroPro !== 'todos' ? TEAL : TEAL_MID}`, background: filtroPro !== 'todos' ? TEAL_LIGHT : '#fff', color: filtroPro !== 'todos' ? TEAL_DARK : '#475569', outline: 'none', cursor: 'pointer' }}>
+          {profesores.map(p => <option key={p} value={p}>{p === 'todos' ? '👨‍🏫 Todos los profesores' : p}</option>)}
+        </select>
+
+        {/* Sede */}
+        <select value={filtroSede} onChange={e => { setFiltroSede(e.target.value); setFiltroSalon('todos') }} style={{ padding: '7px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, border: `1.5px solid ${filtroSede !== 'todas' ? TEAL : TEAL_MID}`, background: filtroSede !== 'todas' ? TEAL_LIGHT : '#fff', color: filtroSede !== 'todas' ? TEAL_DARK : '#475569', outline: 'none', cursor: 'pointer' }}>
+          {sedes.map(s => <option key={s} value={s}>{s === 'todas' ? '🏢 Todas las sedes' : `🏢 ${s}`}</option>)}
+        </select>
+
+        {/* Salón */}
+        <select value={filtroSalon} onChange={e => setFiltroSalon(e.target.value)} style={{ padding: '7px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, border: `1.5px solid ${filtroSalon !== 'todos' ? TEAL : TEAL_MID}`, background: filtroSalon !== 'todos' ? TEAL_LIGHT : '#fff', color: filtroSalon !== 'todos' ? TEAL_DARK : '#475569', outline: 'none', cursor: 'pointer' }}>
+          {salones.map(s => <option key={s} value={s}>{s === 'todos' ? '🚪 Todos los salones' : s}</option>)}
+        </select>
+      </div>
+
+      {/* Totales */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        {[
+          { label: 'Clases dadas', valor: totalClases, color: TEAL },
+          { label: 'Inasistencias', valor: totalInasistencias, color: '#d97706' },
+          { label: 'Tiempo total', valor: `${totalHoras}h ${minResto}m`, color: '#7c3aed' },
+          { label: 'Total honorarios', valor: `$${totalHonorarios.toLocaleString('es-CO')}`, color: '#16a34a' },
+        ].map(t => (
+          <div key={t.label} style={{ background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', padding: '14px 20px', minWidth: '140px', flex: '1' }}>
+            <div style={{ fontSize: '22px', fontWeight: 800, color: t.color }}>{cargando ? '…' : t.valor}</div>
+            <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>{t.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {cargando && <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>Cargando datos…</div>}
+      {error && <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '16px', color: '#b91c1c', fontSize: '14px' }}>{error}</div>}
+
+      {!cargando && !error && (
+        <div style={{ overflowX: 'auto', borderRadius: '12px', border: `1.5px solid ${TEAL_MID}`, background: '#fff' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ background: TEAL, color: '#fff' }}>
+                {['#', 'Fecha / Hora', 'Cliente', 'Sede', 'Salón', 'Clase', 'Duración', 'Profesor', 'Honorario', 'Plan', ...(esAdmin && modoEdicion ? ['Acciones'] : [])].map((h, i) => (
+                  <th key={i} style={{ padding: '11px 14px', fontWeight: 700, textAlign: i === 0 || i >= 5 ? 'center' : 'left', whiteSpace: 'nowrap', fontSize: '12px' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtrados.length === 0 ? (
+                <tr><td colSpan={10} style={{ padding: '40px', textAlign: 'center', color: '#999' }}>No hay clases en este rango.</td></tr>
+              ) : filtrados.map((c, idx) => {
+                const esInasistencia = c.estado === 'cancelada' && !c.cancelado_por_academia
+                const bgFila = esInasistencia ? '#fff7ed' : idx % 2 === 0 ? '#fff' : '#fafefe'
+                const honEdit = honorariosEdit[c.id]
+                const honMostrar = honEdit !== undefined ? honEdit : c.honorario_valor !== null ? String(c.honorario_valor) : ''
+
+                return (
+                  <tr key={c.id} style={{ borderTop: `1px solid ${TEAL_LIGHT}`, background: bgFila }}>
+                    <td style={{ padding: '10px 14px', textAlign: 'center', color: '#999', fontWeight: 600 }}>{idx + 1}</td>
+                    <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontWeight: 600, color: '#1e293b' }}>{c.fecha}</div>
+                      <div style={{ fontSize: '12px', color: '#888' }}>{c.hora}</div>
+                    </td>
+                    <td style={{ padding: '10px 14px', fontWeight: 600, color: '#1e293b' }}>{c.cliente_nombre}</td>
+                    <td style={{ padding: '10px 14px', color: '#475569' }}>{c.sede_nombre}</td>
+                    <td style={{ padding: '10px 14px', color: '#475569' }}>{c.salon_nombre}</td>
+                    <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                      {c.numero_calculado && c.total_clases
+                        ? <span style={{ fontWeight: 700, color: TEAL }}>{c.numero_calculado}/{c.total_clases}</span>
+                        : <span style={{ color: '#ccc' }}>—</span>}
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'center', color: '#334155' }}>{c.duracion_min} min</td>
+                    <td style={{ padding: '10px 14px', color: '#475569' }}>{c.profesor_nombre}</td>
+                    <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                      {modoEdicion && esAdmin ? (
+                        <input type="number" value={honMostrar} onChange={e => setHonorariosEdit(prev => ({ ...prev, [c.id]: e.target.value }))}
+                          placeholder="—" style={{ width: '80px', padding: '4px 8px', borderRadius: '6px', border: `1.5px solid ${honEdit !== undefined ? TEAL : TEAL_MID}`, fontSize: '13px', outline: 'none', textAlign: 'center' }} />
+                      ) : (
+                        c.honorario_valor !== null
+                          ? <span style={{ fontWeight: 600, color: '#16a34a' }}>${c.honorario_valor.toLocaleString('es-CO')}</span>
+                          : esInasistencia ? <span style={{ color: '#d97706', fontSize: '11px', fontWeight: 600 }}>⏳ Pendiente</span>
+                          : <span style={{ color: '#ccc' }}>—</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                      <span style={{
+                        padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700,
+                        background: esInasistencia ? '#fff7ed' : c.contrato_estado === 'activo' ? '#dcfce7' : '#f1f5f9',
+                        color: esInasistencia ? '#c2410c' : c.contrato_estado === 'activo' ? '#166534' : '#64748b',
+                      }}>
+                        {esInasistencia ? '⚠️ Inasistencia' : c.contrato_estado === 'activo' ? '🟢 Activo' : '📦 Archivo'}
+                      </span>
+                    </td>
+                    {esAdmin && modoEdicion && (
+                      <td style={{ padding: '6px 14px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                          {/* Mover */}
+                          {confirmarMover === c.id ? (
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button onClick={() => moverClase(c.id, c.contrato_id, c.cliente_id, c.contrato_estado)}
+                                style={{ padding: '4px 10px', background: TEAL, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 700 }}>
+                                ✓
+                              </button>
+                              <button onClick={() => setConfirmarMover(null)}
+                                style={{ padding: '4px 10px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px' }}>
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <button onClick={() => setConfirmarMover(c.id)}
+                              title={c.contrato_estado === 'activo' ? 'Mover a archivo' : 'Mover a activo'}
+                              style={{ padding: '4px 10px', background: TEAL_LIGHT, color: TEAL_DARK, border: `1px solid ${TEAL_MID}`, borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}>
+                              {c.contrato_estado === 'activo' ? '📦 Archivar' : '🟢 Activar'}
+                            </button>
+                          )}
+                          {/* Borrar — solo inasistencias */}
+                          {esInasistencia && (
+                            confirmarBorrar === c.id ? (
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                <button onClick={() => borrarClase(c.id, c.contrato_id)}
+                                  style={{ padding: '4px 10px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 700 }}>
+                                  ✓
+                                </button>
+                                <button onClick={() => setConfirmarBorrar(null)}
+                                  style={{ padding: '4px 10px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px' }}>
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <button onClick={() => setConfirmarBorrar(c.id)}
+                                style={{ padding: '4px 10px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}>
+                                🗑 Borrar
+                              </button>
+                            )
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!cargando && !error && filtrados.length > 0 && (
+        <div style={{ marginTop: '12px', fontSize: '12px', color: '#999', textAlign: 'right' }}>
+          Mostrando {filtrados.length} de {datos.length} registros
         </div>
       )}
     </div>
