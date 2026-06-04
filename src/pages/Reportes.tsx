@@ -71,13 +71,13 @@ const REPORTES = [
   {
     id: 'clases_tomadas_por_plan',
     icono: '📋',
-    titulo: 'Clases tomadas por plan',
+    titulo: 'Número de clases tomadas por plan',
     descripcion: 'Planes activos con verificación de conteo WhatsApp por sede',
   },
   {
     id: 'clases_dadas_rango',
     icono: '📊',
-    titulo: 'Clases dadas por rango',
+    titulo: 'Clases tomadas por rango de tiempo',
     descripcion: 'Historial de clases dadas e inasistencias con totales y filtros',
   },
 ]
@@ -131,7 +131,7 @@ export default function Reportes({ rol }: { rol?: string }) {
   )
 }
 
-// ─── REPORTE: CLASES TOMADAS POR PLAN ─────────────────────────────────────────
+// ─── REPORTE: NUMERO DE CLASES TOMADAS POR PLAN ─────────────────────────────────────────
 function ReporteClasesTomadasPorPlan({ onVolver, rol }: { onVolver: () => void; rol?: string }) {
   const [datos, setDatos] = useState<PlanActivo[]>([])
   const [instrumentos, setInstrumentos] = useState<Instrumento[]>([])
@@ -335,7 +335,7 @@ const esAdmin = rol === 'superadmin'
     <div style={{ padding: '28px 32px', maxWidth: '1400px', margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
         <button onClick={onVolver} style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>← Reportes</button>
-        <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: 0, flex: 1 }}>📋 Clases tomadas por plan</h2>
+        <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: 0, flex: 1 }}>📋 Número de clases tomadas por plan</h2>
         {esAdmin && (
           !modoEdicion ? (
             <button onClick={() => setModoEdicion(true)} style={{ background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>✏️ Modo edición</button>
@@ -470,7 +470,7 @@ const esAdmin = rol === 'superadmin'
   )
 }
 
-// ─── REPORTE: CLASES DADAS POR RANGO ──────────────────────────────────────────
+// ─── REPORTE: CLASES TOMADAS POR RANGO DE TIEMPO ──────────────────────────────────────────
 function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?: string }) {
   const hoy = new Date()
   const primerDiaMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
@@ -647,7 +647,7 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
       {/* Encabezado */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
         <button onClick={onVolver} style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>← Reportes</button>
-        <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: 0, flex: 1 }}>📊 Clases dadas por rango</h2>
+        <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: 0, flex: 1 }}>📊 Clases tomadas por rango de tiempo</h2>
         {esAdmin && (
           !modoEdicion ? (
             <button onClick={() => setModoEdicion(true)} style={{ background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>✏️ Modo edición</button>
