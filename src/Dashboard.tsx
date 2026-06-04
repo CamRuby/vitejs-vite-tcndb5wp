@@ -143,7 +143,7 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
         {seccion === 'clientes'   && <Clientes key={clientesKey} />}
         {seccion === 'profesores' && <Profesores key={profesoresKey} />}
         {seccion === 'horarios'   && <Horarios />}
-        {seccion === 'reportes'   && <Reportes />}
+        {seccion === 'reportes'   && <Reportes rol={rol ?? undefined} />}
         {seccion === 'importar'   && <Importar />}
         {seccion === 'auditoria'  && <Auditoria />}
       </div>
