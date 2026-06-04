@@ -146,7 +146,7 @@ function ReporteClasesTomadasPorPlan({ onVolver, rol }: { onVolver: () => void; 
   const [guardando, setGuardando] = useState(false)
   const [mensajeGuardado, setMensajeGuardado] = useState<string | null>(null)
 
-  const esAdmin = rol === 'admin' || rol === 'director'
+const esAdmin = rol === 'superadmin'
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -494,8 +494,7 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
   const [confirmarBorrar, setConfirmarBorrar] = useState<string | null>(null)
   const [confirmarMover, setConfirmarMover] = useState<string | null>(null)
 
-  const esAdmin = rol === 'admin' || rol === 'director'
-
+  const esAdmin = rol === 'superadmin'
   useEffect(() => { cargarDatos() }, [fechaInicio, fechaFin])
 
   async function cargarDatos() {
