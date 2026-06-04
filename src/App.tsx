@@ -60,5 +60,5 @@ export default function App() {
       </button>
     </div>
   )
-  return <Dashboard usuario={sesion.user} />
+  return <Dashboard usuario={sesion.user} rol={rol} />
 }
