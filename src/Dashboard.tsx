@@ -18,7 +18,7 @@ const MENU = [
   { id: 'auditoria',  label: 'Auditoría',  icon: '🔍' },
 ]
 
-export default function Dashboard({ usuario }: { usuario: any }) {
+export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string | null }) {
   const [seccion, setSeccion]             = useState(() => sessionStorage.getItem('seccion') || 'inicio')
   const [inicioKey, setInicioKey]         = useState(0)
   const [clientesKey, setClientesKey]     = useState(0)
