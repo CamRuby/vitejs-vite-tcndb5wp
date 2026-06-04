@@ -514,6 +514,7 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
         `)
         .gte('fecha', fechaInicio)
         .lte('fecha', fechaFin)
+        .in('estado', ['dada', 'cancelada'])
         .or('estado.eq.dada,cancelado_por_academia.eq.false')
         .order('fecha', { ascending: false })
         .order('hora', { ascending: false })
