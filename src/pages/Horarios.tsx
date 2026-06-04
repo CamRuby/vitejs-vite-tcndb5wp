@@ -890,7 +890,8 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
         .in('id', ids)
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
     } else {
-      const updatePayload: any = { hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha }
+const updatePayload: any = { hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha }
+if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalculado !== null) updatePayload.honorario_valor = honorarioCalculado
      if (editEstado === 'confirmada' && editConteoWhatsapp !== '') {
         await supabase.from('contratos').update({ conteo_whatsapp: Number(editConteoWhatsapp) }).eq('id', claseEditando.contratos.id)
       }
