@@ -814,8 +814,8 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
                               {c.contrato_estado === 'activo' ? '📦 Archivar' : '🟢 Activar'}
                             </button>
                           )}
-                          {/* Borrar — solo inasistencias */}
-                          {esInasistencia && (
+                            {/* Borrar */}
+                            {(esInasistencia || c.estado === 'dada') && (
                             confirmarBorrar === c.id ? (
                               <div style={{ display: 'flex', gap: '4px' }}>
                                 <button onClick={() => borrarClase(c.id, c.contrato_id)}
