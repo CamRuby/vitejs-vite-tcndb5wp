@@ -856,19 +856,26 @@ if (err) setError('Error: ' + err.message)
 if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardando(false); return }
 
     let numeroPlan: number | undefined = undefined
-    if (editEstado === 'dada' && claseEditando.estado !== 'dada' && claseEditando.contratos?.id) {
-      const duracionPlan = claseEditando.contratos?.duracion_min || parseInt(editDuracion)
-      const fraccion = parseFloat((parseInt(editDuracion) / duracionPlan).toFixed(4))
-      const clasesTomadas = parseFloat(((claseEditando.contratos?.clases_tomadas || 0) + fraccion).toFixed(4))
-      numeroPlan = clasesTomadas
-      const totalClases = claseEditando.contratos?.total_clases || 0
-      const updateData: any = { clases_tomadas: clasesTomadas }
-      if (totalClases > 0 && clasesTomadas >= totalClases) updateData.estado = 'completado'
-      await supabase.from('contratos').update(updateData).eq('id', claseEditando.contratos.id)
-      // numero_en_plan ya no se almacena — se calcula en tiempo real desde clases_con_numero
-    }
-
-    if (alcance === 'futuras' && claseEditando.patron_id) {
+   let honorarioCalculado: number | null = null
+        if (editEstado === 'dada' && claseEditando.estado !== 'dada' && claseEditando.contratos?.id) {
+          const duracionPlan = claseEditando.contratos?.duracion_min || parseInt(editDuracion)
+          const fraccion = parseFloat((parseInt(editDuracion) / duracionPlan).toFixed(4))
+          const clasesTomadas = parseFloat(((claseEditando.contratos?.clases_tomadas || 0) + fraccion).toFixed(4))
+          numeroPlan = clasesTomadas
+          const totalClases = claseEditando.contratos?.total_clases || 0
+          const updateData: any = { clases_tomadas: clasesTomadas }
+          if (totalClases > 0 && clasesTomadas >= totalClases) updateData.estado = 'completado'
+          await supabase.from('contratos').update(updateData).eq('id', claseEditando.contratos.id)
+          const modalidad = (claseEditando.modalidad || 'presencial').toLowerCase()
+          const { data: tarifa } = await supabase.from('profesor_tarifas').select('valor')
+            .eq('profesor_id', editProfesorId || claseEditando.profesores?.id)
+            .eq('duracion_min', parseInt(editDuracion))
+            .eq('modalidad', modalidad)
+            .maybeSingle()
+          if (tarifa) honorarioCalculado = Number(tarifa.valor)
+        }
+        
+        if (alcance === 'futuras' && claseEditando.patron_id) {
       const { data: clasesFuturas, error: errorBuscar } = await supabase
         .from('clases').select('id')
         .eq('patron_id', claseEditando.patron_id)
