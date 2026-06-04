@@ -509,8 +509,10 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
     .gte('fecha', fechaInicio).lte('fecha', fechaFin).eq('estado', 'cancelada').eq('cancelado_por_academia', false)
     .order('fecha', { ascending: false }).order('hora', { ascending: false })
 ])
-const err = err1 || err2
-const data = [...(dadas || []), ...(inasistencias || [])].sort((a, b) =>
+      console.log('inasistencias:', inasistencias)
+      console.log('err2:', err2)
+      const err = err1 || err2
+      const data = [...(dadas || []), ...(inasistencias || [])].sort((a, b) =>
   b.fecha.localeCompare(a.fecha) || (b.hora || '').localeCompare(a.hora || '')
 )
       if (err) throw err
