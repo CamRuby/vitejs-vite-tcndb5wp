@@ -330,13 +330,14 @@ export default function Profesores() {
   }
 
   function getHon(c: any) {
-    if (c.honorario_valor !== null && c.honorario_valor !== undefined) return Number(c.honorario_valor)
-    if (c.esTaller) return 0
-    const presencial = tarifas.find(x => !x.taller_grupal && x.duracion_min === c.duracion_min && x.modalidad === 'presencial')
-    if (presencial) return presencial.valor || 0
-    const cualquiera = tarifas.find(x => !x.taller_grupal && x.duracion_min === c.duracion_min)
-    return cualquiera?.valor || 0
-  }
+  if (c.honorario_valor !== null && c.honorario_valor !== undefined) return Number(c.honorario_valor)
+  if (c.esTaller) return 0
+  const modalidad = (c.modalidad || 'presencial').toLowerCase()
+  const exacta = tarifas.find(x => !x.taller_grupal && x.duracion_min === c.duracion_min && x.modalidad === modalidad)
+  if (exacta) return exacta.valor || 0
+  const cualquiera = tarifas.find(x => !x.taller_grupal && x.duracion_min === c.duracion_min)
+  return cualquiera?.valor || 0
+}
 
   const clasesFiltradas = filtroVista === 'programadas'
     ? clases.filter(c => c.estado === 'programada' || c.estado === 'confirmada')
