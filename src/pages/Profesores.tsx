@@ -740,7 +740,12 @@ const dadas = clases.filter(c => c.estado === 'dada')
                             }
                           </td>
                           <td style={{ ...tdS, textAlign: 'center' }}>{c.duracion_min} min</td>
-                          <td style={tdS}>{c.salones?.sedes?.nombre || '—'}</td>
+                         <td style={tdS}>
+                              {c.salones?.sedes?.nombre || '—'}
+                              {c.modalidad === 'domicilio' && (
+                                <div style={{ fontSize: '11px', color: '#7c3aed', fontWeight: '600', marginTop: '2px' }}>🏠 Domicilio</div>
+                              )}
+                            </td>
                           <td style={tdS}>
                             <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', background: col.bg, color: col.color, whiteSpace: 'nowrap' }}>
                               {esTarde ? '⚠️ Cancelada (tarde)' : c.estado}
