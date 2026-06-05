@@ -45,7 +45,8 @@ export default function Reportes({ rol }: { rol?: string }) {
       <p style={{ color: '#666', fontSize: '14px', marginBottom: '32px' }}>Selecciona un reporte para visualizarlo.</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
         {REPORTES.map(r => (
-          <button key={r.id} onClick={() => setReporteActivo(r.id)} style={{ background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '12px', padding: '24px 20px', textAlign: 'left', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}
+          <button key={r.id} onClick={() => setReporteActivo(r.id)}
+            style={{ background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '12px', padding: '24px 20px', textAlign: 'left', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 16px rgba(26,138,138,0.15)'; (e.currentTarget as HTMLButtonElement).style.borderColor = TEAL }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 1px 4px rgba(0,0,0,0.06)'; (e.currentTarget as HTMLButtonElement).style.borderColor = TEAL_MID }}>
             <div style={{ fontSize: '28px', marginBottom: '10px' }}>{r.icono}</div>
@@ -58,7 +59,7 @@ export default function Reportes({ rol }: { rol?: string }) {
   )
 }
 
-// ─── REPORTE 1: CLASES TOMADAS POR PLAN ──────────────────────────────────────
+// ─── REPORTE 1 ────────────────────────────────────────────────────────────────
 function ReporteClasesTomadasPorPlan({ onVolver, rol }: { onVolver: () => void; rol?: string }) {
   const [datos, setDatos] = useState<PlanActivo[]>([])
   const [instrumentos, setInstrumentos] = useState<Instrumento[]>([])
@@ -79,12 +80,12 @@ function ReporteClasesTomadasPorPlan({ onVolver, rol }: { onVolver: () => void; 
   async function cargarDatos() {
     setCargando(true); setError(null)
     try {
-      const [{ data, error: err }, { data: instr, error: errInstr }, { data: sedesData, error: errSedes }] = await Promise.all([
+      const [{ data, error: err }, { data: instr }, { data: sedesData }] = await Promise.all([
         supabase.from('contratos').select(`id, cliente_id, sede_id, instrumento_id, total_clases, duracion_min, clases_tomadas, conteo_whatsapp, clientes ( nombres, apellidos, grupo_whatsapp ), sedes ( nombre ), instrumentos ( id, nombre )`).eq('estado', 'activo'),
         supabase.from('instrumentos').select('id, nombre').order('nombre'),
         supabase.from('sedes').select('id, nombre').order('nombre')
       ])
-      if (err) throw err; if (errInstr) throw errInstr; if (errSedes) throw errSedes
+      if (err) throw err
       setInstrumentos(instr || []); setSedesDisponibles(sedesData || [])
       const filas: PlanActivo[] = (data || []).map((row: any) => {
         const tomadas = Number(row.clases_tomadas ?? 0)
@@ -118,12 +119,11 @@ function ReporteClasesTomadasPorPlan({ onVolver, rol }: { onVolver: () => void; 
     const ed = editados[plan.id]
     if (ed && campo in ed) { const v = ed[campo]; return v === null || v === undefined ? '' : v }
     if (campo === 'conteo_whatsapp') return plan.conteo_whatsapp !== null ? plan.conteo_whatsapp : ''
-    if (campo === 'total_clases') return plan.total_clases
-    return plan.duracion_min
+    return campo === 'total_clases' ? plan.total_clases : plan.duracion_min
   }
-  function getTxt(plan: PlanActivo, campo: CampoTexto): string { const ed = editados[plan.id]; if (ed && campo in ed) return ed[campo] ?? ''; return plan.grupo_whatsapp ?? '' }
-  function getInstrumentoId(plan: PlanActivo): string { const ed = editados[plan.id]; if (ed && 'instrumento_id' in ed) return ed.instrumento_id ?? ''; return plan.instrumento_id ?? '' }
-  function getSedeId(plan: PlanActivo): string { const ed = editados[plan.id]; if (ed && 'sede_id' in ed) return ed.sede_id ?? ''; return plan.sede_id ?? '' }
+  function getTxt(plan: PlanActivo, campo: CampoTexto): string { const ed = editados[plan.id]; return ed && campo in ed ? ed[campo] ?? '' : plan.grupo_whatsapp ?? '' }
+  function getInstrumentoId(plan: PlanActivo): string { const ed = editados[plan.id]; return ed && 'instrumento_id' in ed ? ed.instrumento_id ?? '' : plan.instrumento_id ?? '' }
+  function getSedeId(plan: PlanActivo): string { const ed = editados[plan.id]; return ed && 'sede_id' in ed ? ed.sede_id ?? '' : plan.sede_id ?? '' }
   function editarNum(id: string, campo: CampoNumero, valor: string) { setEditados(prev => ({ ...prev, [id]: { ...prev[id], [campo]: valor === '' ? null : Number(valor) } })) }
   function editarTxt(id: string, campo: CampoTexto, valor: string) { setEditados(prev => ({ ...prev, [id]: { ...prev[id], [campo]: valor } })) }
   function editarSede(id: string, valor: string) { setEditados(prev => ({ ...prev, [id]: { ...prev[id], sede_id: valor } })) }
@@ -228,7 +228,7 @@ function ReporteClasesTomadasPorPlan({ onVolver, rol }: { onVolver: () => void; 
   )
 }
 
-// ─── REPORTE 2: CLASES POR RANGO ─────────────────────────────────────────────
+// ─── REPORTE 2 ────────────────────────────────────────────────────────────────
 function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?: string }) {
   const hoy = new Date()
   const primerDiaMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
@@ -236,7 +236,8 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
   const ultimoDiaMesStr = `${ultimoDiaMes.getFullYear()}-${String(ultimoDiaMes.getMonth() + 1).padStart(2, '0')}-${String(ultimoDiaMes.getDate()).padStart(2, '0')}`
 
   const [datos, setDatos] = useState<ClaseDada[]>([])
-  const [salones, setSalones] = useState<{ id: string; nombre: string; sede_id: string; sede_nombre: string }[]>([])
+  const [sedesDisp, setSedesDisp] = useState<Sede[]>([])
+  const [tarifas, setTarifas] = useState<any[]>([])
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fechaInicio, setFechaInicio] = useState(primerDiaMes)
@@ -248,19 +249,33 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
   const [filtroTipo, setFiltroTipo] = useState<'todos' | 'dada' | 'inasistencia' | 'cancelada'>('todos')
   const [busquedaCliente, setBusquedaCliente] = useState('')
   const [modoEdicion, setModoEdicion] = useState(false)
-  const [edits, setEdits] = useState<Record<string, { honorario?: string; duracion?: string; salon_id?: string }>>({})
+  const [edits, setEdits] = useState<Record<string, { duracion?: string; sede_id?: string }>>({})
   const [guardando, setGuardando] = useState(false)
   const [mensajeGuardado, setMensajeGuardado] = useState<string | null>(null)
   const [confirmarBorrar, setConfirmarBorrar] = useState<string | null>(null)
   const [confirmarMover, setConfirmarMover] = useState<string | null>(null)
   const esAdmin = rol === 'superadmin'
 
-  useEffect(() => { cargarSalones() }, [])
+  useEffect(() => { cargarSedes(); cargarTarifas() }, [])
   useEffect(() => { cargarDatos() }, [fechaInicio, fechaFin])
 
-  async function cargarSalones() {
-    const { data } = await supabase.from('salones').select('id, nombre, sede_id, sedes(nombre)').order('nombre')
-    setSalones((data || []).map((s: any) => ({ id: s.id, nombre: s.nombre, sede_id: s.sede_id, sede_nombre: s.sedes?.nombre || '—' })))
+  async function cargarSedes() {
+    const { data } = await supabase.from('sedes').select('id, nombre').order('nombre')
+    setSedesDisp(data || [])
+  }
+
+  async function cargarTarifas() {
+    const { data } = await supabase.from('profesor_tarifas').select('profesor_id, modalidad, duracion_min, valor').eq('taller_grupal', false)
+    setTarifas(data || [])
+  }
+
+  function calcularHonorario(clase: ClaseDada): number | null {
+    if (clase.estado !== 'dada') return clase.honorario_valor
+    const modalidad = (clase.modalidad || 'presencial').toLowerCase()
+    const duracion = clase.duracion_min
+    let tarifa = tarifas.find(t => t.profesor_id === clase.profesor_id && t.modalidad?.toLowerCase() === modalidad && Number(t.duracion_min) === duracion)
+    if (!tarifa) tarifa = tarifas.find(t => t.profesor_id === clase.profesor_id && Number(t.duracion_min) === duracion)
+    return tarifa ? Number(tarifa.valor) : null
   }
 
   async function cargarDatos() {
@@ -314,22 +329,28 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
   const totalMinutos = filtrados.filter(d => d.estado === 'dada').reduce((s, d) => s + d.duracion_min, 0)
   const totalHoras = Math.floor(totalMinutos / 60)
   const minResto = totalMinutos % 60
-  const totalHonorarios = filtrados.reduce((s, d) => s + (d.honorario_valor || 0), 0)
+  const totalHonorarios = filtrados.reduce((s, d) => { const h = calcularHonorario(d); return s + (h || 0) }, 0)
   const totalInasistencias = filtrados.filter(d => d.estado === 'cancelada' && !d.cancelado_por_academia).length
 
   async function guardarEdits() {
     setGuardando(true); let errores = 0
     for (const [id, cambios] of Object.entries(edits)) {
       const payload: any = {}
-      if (cambios.honorario !== undefined) payload.honorario_valor = cambios.honorario === '' ? null : Number(cambios.honorario)
       if (cambios.duracion !== undefined) payload.duracion_min = Number(cambios.duracion)
-      if (cambios.salon_id !== undefined) payload.salon_id = cambios.salon_id
+      if (cambios.sede_id !== undefined) {
+        // Buscar salon_id de la misma sede para esta clase
+        const clase = datos.find(d => d.id === id)
+        if (clase && cambios.sede_id !== clase.sede_id) {
+          // Buscar el primer salon de esa sede
+          const { data: salonesSede } = await supabase.from('salones').select('id').eq('sede_id', cambios.sede_id).order('orden').limit(1)
+          if (salonesSede && salonesSede.length > 0) payload.salon_id = salonesSede[0].id
+        }
+      }
       if (Object.keys(payload).length > 0) { const { error: err } = await supabase.from('clases').update(payload).eq('id', id); if (err) errores++ }
     }
     setGuardando(false); setEdits({}); setModoEdicion(false)
     setMensajeGuardado(errores === 0 ? '✅ Cambios guardados.' : `⚠️ ${errores} error(es).`)
-    setTimeout(() => setMensajeGuardado(null), 4000)
-    await cargarDatos()
+    setTimeout(() => setMensajeGuardado(null), 4000); await cargarDatos()
   }
 
   async function moverClase(claseId: string, contratoId: string, clienteId: string, estadoActual: string) {
@@ -359,7 +380,6 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: '1400px', margin: '0 auto' }}>
-      {/* Encabezado */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <button onClick={onVolver} style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>← Reportes</button>
         <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: 0, flex: 1 }}>📊 Clases tomadas por rango de tiempo</h2>
@@ -375,7 +395,7 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
       </div>
       {mensajeGuardado && <div style={{ background: mensajeGuardado.startsWith('✅') ? '#f0fdf4' : '#fffbeb', border: `1px solid ${mensajeGuardado.startsWith('✅') ? '#bbf7d0' : '#fde68a'}`, borderRadius: '8px', padding: '10px 16px', marginBottom: '16px', fontSize: '14px', color: mensajeGuardado.startsWith('✅') ? '#166534' : '#92400e' }}>{mensajeGuardado}</div>}
 
-      {/* Rango de fechas + buscador cliente */}
+      {/* Fechas + buscador */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <label style={{ fontSize: '13px', color: '#555', fontWeight: 600 }}>Desde:</label>
@@ -389,8 +409,8 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
       </div>
 
       {/* Filtros tipo */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-        {([{ key: 'todos', label: '📋 Todos' }, { key: 'dada', label: '✅ Dadas' }, { key: 'inasistencia', label: '⚠️ Inasistencias' }, { key: 'cancelada', label: '❌ Canceladas por academia' }] as const).map(f => (
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
+        {([{ key: 'todos', label: '📋 Todos' }, { key: 'dada', label: '✅ Dadas' }, { key: 'inasistencia', label: '⚠️ Inasistencias' }, { key: 'cancelada', label: '❌ Canceladas academia' }] as const).map(f => (
           <button key={f.key} onClick={() => setFiltroTipo(f.key)} style={estiloF(filtroTipo === f.key)}>{f.label}</button>
         ))}
         <div style={{ width: '1px', height: '28px', background: '#e2e8f0', margin: '0 4px' }} />
@@ -399,8 +419,8 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
         ))}
       </div>
 
-      {/* Filtros profesor/sede/salón */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+      {/* Filtros dropdowns */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
         <select value={filtroPro} onChange={e => setFiltroPro(e.target.value)} style={{ ...estiloSel, border: `1.5px solid ${filtroPro !== 'todos' ? TEAL : TEAL_MID}`, background: filtroPro !== 'todos' ? TEAL_LIGHT : '#fff', color: filtroPro !== 'todos' ? TEAL_DARK : '#475569' }}>
           {profesores.map(p => <option key={p} value={p}>{p === 'todos' ? '👨‍🏫 Todos los profesores' : p}</option>)}
         </select>
@@ -441,10 +461,9 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
                   const esCancelada = c.estado === 'cancelada' && c.cancelado_por_academia
                   const bgFila = esInasistencia ? '#fff7ed' : esCancelada ? '#fef2f2' : idx % 2 === 0 ? '#fff' : '#fafefe'
                   const editC = edits[c.id] || {}
-                  const honMostrar = editC.honorario !== undefined ? editC.honorario : c.honorario_valor !== null ? String(c.honorario_valor) : ''
                   const durMostrar = editC.duracion !== undefined ? editC.duracion : String(c.duracion_min)
-                  const salonActual = editC.salon_id !== undefined ? editC.salon_id : c.salon_id
-                  const salonesParaSede = salones.filter(s => !c.sede_id || s.sede_id === c.sede_id)
+                  const sedeActual = editC.sede_id !== undefined ? editC.sede_id : c.sede_id
+                  const honorarioCalculado = calcularHonorario(c)
 
                   return (
                     <tr key={c.id} style={{ borderTop: `1px solid ${TEAL_LIGHT}`, background: bgFila }}>
@@ -454,14 +473,14 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
                         <div style={{ fontSize: '12px', color: '#888' }}>{c.hora}</div>
                       </td>
                       <td style={{ padding: '10px 14px', fontWeight: 600, color: '#1e293b' }}>{c.cliente_nombre}</td>
-                      <td style={{ padding: '10px 14px', color: '#475569' }}>{c.sede_nombre}</td>
                       <td style={{ padding: '10px 14px', color: '#475569' }}>
                         {modoEdicion && esAdmin
-                          ? <select value={salonActual} onChange={e => setEdits(prev => ({ ...prev, [c.id]: { ...prev[c.id], salon_id: e.target.value } }))} style={{ padding: '4px 8px', borderRadius: '6px', border: `1.5px solid ${editC.salon_id ? TEAL : TEAL_MID}`, fontSize: '12px', outline: 'none' }}>
-                              {salonesParaSede.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                          ? <select value={sedeActual} onChange={e => setEdits(prev => ({ ...prev, [c.id]: { ...prev[c.id], sede_id: e.target.value } }))} style={{ padding: '4px 8px', borderRadius: '6px', border: `1.5px solid ${editC.sede_id ? TEAL : TEAL_MID}`, fontSize: '12px', outline: 'none', cursor: 'pointer' }}>
+                              {sedesDisp.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                             </select>
-                          : c.salon_nombre}
+                          : c.sede_nombre}
                       </td>
+                      <td style={{ padding: '10px 14px', color: '#475569' }}>{c.salon_nombre}</td>
                       <td style={{ padding: '10px 14px', textAlign: 'center' }}>
                         {c.numero_calculado && c.total_clases
                           ? <span style={{ fontWeight: 700, color: TEAL }}>{c.numero_calculado}/{c.total_clases}</span>
@@ -474,26 +493,19 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
                       </td>
                       <td style={{ padding: '10px 14px', color: '#475569' }}>{c.profesor_nombre}</td>
                       <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                        {modoEdicion && esAdmin
-                          ? <input type="number" value={honMostrar} onChange={e => setEdits(prev => ({ ...prev, [c.id]: { ...prev[c.id], honorario: e.target.value } }))} placeholder="—" style={{ width: '80px', padding: '4px 8px', borderRadius: '6px', border: `1.5px solid ${editC.honorario !== undefined ? TEAL : TEAL_MID}`, fontSize: '13px', outline: 'none', textAlign: 'center' }} />
-                          : c.honorario_valor !== null
-                            ? <span style={{ fontWeight: 600, color: '#16a34a' }}>${c.honorario_valor.toLocaleString('es-CO')}</span>
-                            : esInasistencia ? <span style={{ color: '#d97706', fontSize: '11px', fontWeight: 600 }}>⏳ Pendiente</span>
-                            : <span style={{ color: '#ccc' }}>—</span>}
+                        {honorarioCalculado !== null
+                          ? <span style={{ fontWeight: 600, color: '#16a34a' }}>${honorarioCalculado.toLocaleString('es-CO')}</span>
+                          : esInasistencia ? <span style={{ color: '#d97706', fontSize: '11px', fontWeight: 600 }}>⏳ Pendiente</span>
+                          : <span style={{ color: '#ccc' }}>—</span>}
                       </td>
                       <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                        <span style={{
-                          padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700,
-                          background: esInasistencia ? '#fff7ed' : esCancelada ? '#fef2f2' : c.contrato_estado === 'activo' ? '#dcfce7' : '#f1f5f9',
-                          color: esInasistencia ? '#c2410c' : esCancelada ? '#991b1b' : c.contrato_estado === 'activo' ? '#166534' : '#64748b',
-                        }}>
+                        <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: esInasistencia ? '#fff7ed' : esCancelada ? '#fef2f2' : c.contrato_estado === 'activo' ? '#dcfce7' : '#f1f5f9', color: esInasistencia ? '#c2410c' : esCancelada ? '#991b1b' : c.contrato_estado === 'activo' ? '#166534' : '#64748b' }}>
                           {esInasistencia ? '⚠️ Inasistencia' : esCancelada ? '❌ Cancelada' : c.contrato_estado === 'activo' ? '🟢 Activo' : '📦 Archivo'}
                         </span>
                       </td>
                       {esAdmin && modoEdicion && (
                         <td style={{ padding: '6px 14px', textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                            {/* Mover */}
+                          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                             {!esCancelada && (confirmarMover === c.id
                               ? <div style={{ display: 'flex', gap: '4px' }}>
                                   <button onClick={() => moverClase(c.id, c.contrato_id, c.cliente_id, c.contrato_estado)} style={{ padding: '4px 8px', background: TEAL, color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 700 }}>✓</button>
@@ -503,7 +515,6 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
                                   {c.contrato_estado === 'activo' ? '📦' : '🟢'}
                                 </button>
                             )}
-                            {/* Borrar */}
                             {confirmarBorrar === c.id
                               ? <div style={{ display: 'flex', gap: '4px' }}>
                                   <button onClick={() => borrarClase(c.id, c.contrato_id, c.estado)} style={{ padding: '4px 8px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 700 }}>✓</button>
