@@ -817,7 +817,7 @@ async function verificarConflictosEnMemoria(
           duracion_min: parseInt(duracion), estado: 'programada',
           confirmada_cliente: false, confirmada_profesor: false,
           patron_id: patronId, recurrente: true,
-          modalidad: slotSeleccionado.salon.nombre === 'Domicilio' ? 'domicilio' : 'presencial',
+          modalidad: slotSeleccionado.salon.nombre?.startsWith('Domicilio') ? 'domicilio' : 'presencial',
         })
       }
       const { error: err } = await supabase.from('clases').insert(batch)
@@ -835,7 +835,7 @@ async function verificarConflictosEnMemoria(
         profesor_id: profesorId, fecha: slotSeleccionado.fecha, hora: slotSeleccionado.hora + ':00',
         duracion_min: parseInt(duracion), estado: 'programada',
         confirmada_cliente: false, confirmada_profesor: false,
-        modalidad: slotSeleccionado.salon.nombre === 'Domicilio' ? 'domicilio' : 'presencial',
+        modalidad: slotSeleccionado.salon.nombre?.startsWith('Domicilio') ? 'domicilio' : 'presencial',
        
       })
 if (err) setError('Error: ' + err.message)
