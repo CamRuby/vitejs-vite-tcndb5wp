@@ -174,6 +174,7 @@ export default function Profesores() {
       const { data: d, error } = await supabase
         .from('clases_con_numero')
        .select('id, fecha, hora, duracion_min, estado, es_cortesia, modalidad, observaciones, observaciones_admin, honorario_valor, cancelado_tarde, cancelado_por_academia, numero_calculado, contratos(clientes(nombre), instrumentos(nombre), total_clases), salones(nombre, sedes(nombre))')
+        .eq('profesor_id', p.id)
         .gte('fecha', fi)
         .lte('fecha', ff)
         .order('fecha', { ascending: false })
