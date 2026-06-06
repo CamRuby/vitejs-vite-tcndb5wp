@@ -399,6 +399,7 @@ export default function ProfesorApp() {
   await supabase.from('clases').update({
     estado: 'cancelada',
     cancelado_por_academia: false,
+    cancelado_tarde: true,
     honorario_valor: null,
     observaciones: resumen.trim() || claseActiva.observaciones || null
   }).eq('id', claseActiva.id)
