@@ -355,7 +355,7 @@ function ReporteClasesDadasRango({ onVolver, rol }: { onVolver: () => void; rol?
 
   async function moverClase(claseId: string, contratoId: string, clienteId: string, estadoActual: string) {
     const estadoDestino = estadoActual === 'activo' ? 'archivado' : 'activo'
-    const { data: contratos } = await supabase.from('contratos').select('id, clases_tomadas').eq('cliente_id', clienteId).eq('estado', estadoDestino).order('created_at', { ascending: false }).limit(1)
+    const { data: contratos } = await supabase.from('contratos').select('id, clases_tomadas').eq('cliente_id', clienteId).eq('estado', estadoDestino).order('updated_at', { ascending: false }).limit(1)
     if (!contratos || contratos.length === 0) { alert(`No hay contrato ${estadoDestino} para este cliente.`); return }
     const dest = contratos[0]
     await supabase.from('clases').update({ contrato_id: dest.id }).eq('id', claseId)
