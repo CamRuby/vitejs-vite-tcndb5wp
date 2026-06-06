@@ -27,6 +27,15 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
   const [verNotif, setVerNotif]           = useState(false)
   const [notificaciones, setNotificaciones] = useState<any[]>([])
   const [verMenu, setVerMenu]             = useState(false)
+  const [menuAbierto, setMenuAbierto]     = useState(false)
+
+  // Detectar si es móvil
+  const [esMobil, setEsMobil] = useState(() => window.innerWidth < 768)
+  useEffect(() => {
+    const handler = () => setEsMobil(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   useEffect(() => { cargarNoLeidas() }, [seccion])
 
@@ -64,6 +73,7 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
     if (id === 'clientes')   setClientesKey(k => k + 1)
     if (id === 'profesores') setProfesoresKey(k => k + 1)
     setVerNotif(false)
+    setMenuAbierto(false) // cerrar menú al navegar en móvil
   }
 
   function tiempoRelativo(fecha: string) {
@@ -81,78 +91,148 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
     return { emoji: '📌', color: '#1d4ed8', bg: '#eff6ff' }
   }
 
+  const menuLateral = (
+    <div style={{
+      width: esMobil ? '100%' : '200px',
+      flexShrink: 0,
+      background: '#1e293b',
+      color: 'white',
+      display: 'flex',
+      flexDirection: 'column',
+      padding: '24px 0',
+      ...(esMobil ? {
+        position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 300,
+        width: '240px',
+        transform: menuAbierto ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform 0.25s ease',
+        boxShadow: menuAbierto ? '4px 0 24px rgba(0,0,0,0.3)' : 'none',
+      } : {})
+    }}>
+      <div style={{ padding: '0 24px 24px', borderBottom: '1px solid #334155' }}>
+        <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca"
+          style={{ width: '100%', maxWidth: '152px', display: 'block', marginBottom: '8px' }} />
+      </div>
+      <nav style={{ flex: 1, padding: '16px 0', overflowY: 'auto' }}>
+        {MENU.map(item => (
+          <button key={item.id} onClick={() => navegar(item.id)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
+              padding: '12px 24px', textAlign: 'left',
+              background: seccion === item.id ? '#2563eb' : 'transparent',
+              color: 'white', border: 'none', cursor: 'pointer', fontSize: '15px',
+              borderLeft: seccion === item.id ? '3px solid #60a5fa' : '3px solid transparent'
+            }}>
+            <span style={{ fontSize: '16px' }}>{item.icon}</span>
+            {item.label}
+          </button>
+        ))}
+      </nav>
+
+      {/* Footer: avatar + campana */}
+      <div style={{ padding: '16px 24px', borderTop: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ position: 'relative' }}>
+          <button onClick={() => setVerMenu(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '600', color: '#94a3b8' }}>
+              {(usuario.email || 'A').charAt(0).toUpperCase()}
+            </div>
+            <span style={{ fontSize: '12px', color: '#94a3b8', maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {usuario.email?.split('@')[0]}
+            </span>
+          </button>
+          {verMenu && (
+            <div style={{ position: 'absolute', bottom: '40px', left: 0, background: 'white', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', overflow: 'hidden', minWidth: '160px', zIndex: 400 }}>
+              <div style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9' }}>
+                <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>{usuario.email}</p>
+              </div>
+              <button onClick={() => supabase.auth.signOut()}
+                style={{ display: 'block', width: '100%', padding: '10px 14px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: '#dc2626' }}>
+                Cerrar sesión
+              </button>
+            </div>
+          )}
+        </div>
+        <button onClick={abrirNotificaciones}
+          style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
+          <span style={{ fontSize: '20px' }}>🔔</span>
+          {noLeidas > 0 && (
+            <span style={{ position: 'absolute', top: '-2px', right: '-2px', background: '#ef4444', color: 'white', fontSize: '10px', fontWeight: '700', width: '17px', height: '17px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #1e293b' }}>
+              {noLeidas > 9 ? '9+' : noLeidas}
+            </span>
+          )}
+        </button>
+      </div>
+    </div>
+  )
+
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'sans-serif', overflow: 'hidden' }}>
 
-      {/* Menú lateral */}
-      <div style={{ width: '200px', flexShrink: 0, background: '#1e293b', color: 'white', display: 'flex', flexDirection: 'column', padding: '24px 0' }}>
-        <div style={{ padding: '0 24px 24px', borderBottom: '1px solid #334155' }}>
-          <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca" style={{ width: '100%', maxWidth: '152px', display: 'block', marginBottom: '8px' }} />
-        </div>
-        <nav style={{ flex: 1, padding: '16px 0', overflowY: 'auto' }}>
-          {MENU.map(item => (
-            <button key={item.id} onClick={() => navegar(item.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '12px 24px', textAlign: 'left', background: seccion === item.id ? '#2563eb' : 'transparent', color: 'white', border: 'none', cursor: 'pointer', fontSize: '15px', borderLeft: seccion === item.id ? '3px solid #60a5fa' : '3px solid transparent' }}>
-              <span style={{ fontSize: '16px' }}>{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-        </nav>
+      {/* Menú lateral — desktop: siempre visible, móvil: drawer */}
+      {!esMobil && menuLateral}
+      {esMobil && menuLateral}
 
-        {/* Footer: avatar + campana */}
-        <div style={{ padding: '16px 24px', borderTop: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ position: 'relative' }}>
-            <button onClick={() => setVerMenu(v => !v)}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '600', color: '#94a3b8' }}>
-                {(usuario.email || 'A').charAt(0).toUpperCase()}
-              </div>
-              <span style={{ fontSize: '12px', color: '#94a3b8', maxWidth: '90px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {usuario.email?.split('@')[0]}
-              </span>
-            </button>
-            {verMenu && (
-              <div style={{ position: 'absolute', bottom: '40px', left: 0, background: 'white', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', overflow: 'hidden', minWidth: '160px', zIndex: 100 }}>
-                <div style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9' }}>
-                  <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>{usuario.email}</p>
-                </div>
-                <button onClick={() => supabase.auth.signOut()}
-                  style={{ display: 'block', width: '100%', padding: '10px 14px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: '#dc2626' }}>
-                  Cerrar sesión
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Campana */}
-          <button onClick={abrirNotificaciones}
-            style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
-            <span style={{ fontSize: '20px' }}>🔔</span>
-            {noLeidas > 0 && (
-              <span style={{ position: 'absolute', top: '-2px', right: '-2px', background: '#ef4444', color: 'white', fontSize: '10px', fontWeight: '700', width: '17px', height: '17px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #1e293b' }}>
-                {noLeidas > 9 ? '9+' : noLeidas}
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
+      {/* Overlay oscuro al abrir menú en móvil */}
+      {esMobil && menuAbierto && (
+        <div onClick={() => setMenuAbierto(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 299 }} />
+      )}
 
       {/* Contenido principal */}
-      <div style={{ flex: 1, minWidth: 0, background: '#f8fafc', overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
-        {seccion === 'inicio'     && <Inicio key={inicioKey} onNavegar={navegar} onNuevaNotificacion={cargarNoLeidas} />}
-        {seccion === 'clientes'   && <Clientes key={clientesKey} />}
-        {seccion === 'profesores' && <Profesores key={profesoresKey} />}
-        {seccion === 'horarios'   && <Horarios />}
-        {seccion === 'reportes'   && <Reportes rol={rol ?? undefined} />}
-        {seccion === 'importar'   && <Importar />}
-        {seccion === 'auditoria'  && <Auditoria />}
+      <div style={{ flex: 1, minWidth: 0, background: '#f8fafc', overflowY: 'auto', overflowX: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+
+        {/* Barra superior móvil */}
+        {esMobil && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#1e293b', flexShrink: 0, position: 'sticky', top: 0, zIndex: 200 }}>
+            <button onClick={() => setMenuAbierto(v => !v)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '5px', padding: '4px' }}>
+              <span style={{ display: 'block', width: '22px', height: '2px', background: 'white', borderRadius: '2px' }} />
+              <span style={{ display: 'block', width: '22px', height: '2px', background: 'white', borderRadius: '2px' }} />
+              <span style={{ display: 'block', width: '22px', height: '2px', background: 'white', borderRadius: '2px' }} />
+            </button>
+            <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca"
+              style={{ height: '28px', objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
+            <button onClick={abrirNotificaciones}
+              style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
+              <span style={{ fontSize: '20px' }}>🔔</span>
+              {noLeidas > 0 && (
+                <span style={{ position: 'absolute', top: '-2px', right: '-2px', background: '#ef4444', color: 'white', fontSize: '10px', fontWeight: '700', width: '17px', height: '17px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #1e293b' }}>
+                  {noLeidas > 9 ? '9+' : noLeidas}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
+
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          {seccion === 'inicio'     && <Inicio key={inicioKey} onNavegar={navegar} onNuevaNotificacion={cargarNoLeidas} />}
+          {seccion === 'clientes'   && <Clientes key={clientesKey} />}
+          {seccion === 'profesores' && <Profesores key={profesoresKey} />}
+          {seccion === 'horarios'   && <Horarios />}
+          {seccion === 'reportes'   && <Reportes rol={rol ?? undefined} />}
+          {seccion === 'importar'   && <Importar />}
+          {seccion === 'auditoria'  && <Auditoria />}
+        </div>
       </div>
 
       {/* Panel de notificaciones */}
       {verNotif && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 500 }} onClick={() => setVerNotif(false)}>
           <div onClick={e => e.stopPropagation()}
-            style={{ position: 'absolute', bottom: '72px', left: '24px', width: '380px', background: 'white', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)', overflow: 'hidden', maxHeight: '70vh', display: 'flex', flexDirection: 'column' }}>
+            style={{
+              position: 'absolute',
+              bottom: esMobil ? 0 : '72px',
+              left: esMobil ? 0 : '24px',
+              right: esMobil ? 0 : 'auto',
+              width: esMobil ? '100%' : '380px',
+              background: 'white',
+              borderRadius: esMobil ? '20px 20px 0 0' : '16px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+              overflow: 'hidden',
+              maxHeight: '70vh',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
                 <p style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#1a1a1a' }}>Novedades</p>
