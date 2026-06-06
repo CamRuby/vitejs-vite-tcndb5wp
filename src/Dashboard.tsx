@@ -179,7 +179,7 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
       )}
 
       {/* Contenido principal */}
-      <div style={{ flex: 1, minWidth: 0, background: '#f8fafc', overflowY: 'auto', overflowX: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minWidth: 0, background: '#f8fafc', overflowX: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
 
         {/* Barra superior móvil */}
         {esMobil && (
@@ -204,7 +204,7 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
           </div>
         )}
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingBottom: esMobil ? '16px' : 0 }}>
           {seccion === 'inicio'     && <Inicio key={inicioKey} onNavegar={navegar} onNuevaNotificacion={cargarNoLeidas} />}
           {seccion === 'clientes'   && <Clientes key={clientesKey} />}
           {seccion === 'profesores' && <Profesores key={profesoresKey} />}
