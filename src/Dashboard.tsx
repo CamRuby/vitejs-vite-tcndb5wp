@@ -19,6 +19,12 @@ const MENU = [
 ]
 
 const BARRA_MOVIL = 52 // altura en px de la barra superior móvil
+useEffect(() => {
+  document.documentElement.style.setProperty(
+    '--app-height', esMobil ? `calc(100vh - ${BARRA_MOVIL}px)` : '100vh'
+  )
+}, [esMobil])
+
 
 export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string | null }) {
   const [seccion, setSeccion]             = useState(() => sessionStorage.getItem('seccion') || 'inicio')
