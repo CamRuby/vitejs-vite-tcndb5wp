@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { calcularNumeracion } from '../utils/numeracionClases'
+
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
@@ -38,28 +39,35 @@ interface Clase {
   estado: string
   cancelado_por_academia: boolean | null
   cancelado_tarde: boolean | null
+  es_cortesia: boolean
+  inasistencia_perdonada: boolean
   honorario_valor: number | null
   numero_calculado: number | null
   total_clases: number
   profesor_nombre: string
+  profesor_id: string
   contrato_id: string
   contrato_estado: string
   cliente_id: string
 }
 
 function etiquetaEstado(c: Clase): string {
+  if (c.es_cortesia) return 'Cortesía'
   if (c.estado === 'dada') return 'Dada'
   if (c.estado === 'confirmada') return 'Confirmada'
   if (c.estado === 'programada') return 'Programada'
+  if (c.estado === 'cancelada' && !c.cancelado_por_academia && c.inasistencia_perdonada) return 'Inasistencia perdonada'
   if (c.estado === 'cancelada' && !c.cancelado_por_academia) return 'Inasistencia'
   if (c.estado === 'cancelada') return 'Cancelada'
   return c.estado
 }
 
 function colorEstado(c: Clase) {
+  if (c.es_cortesia) return { bg: '#e0f2fe', color: '#0369a1' }
   if (c.estado === 'dada') return { bg: '#fefce8', color: '#854d0e' }
   if (c.estado === 'confirmada') return { bg: '#dcfce7', color: '#166534' }
   if (c.estado === 'programada') return { bg: '#eff6ff', color: '#1d4ed8' }
+  if (c.estado === 'cancelada' && !c.cancelado_por_academia && c.inasistencia_perdonada) return { bg: '#f3e8ff', color: '#7c3aed' }
   if (c.estado === 'cancelada' && !c.cancelado_por_academia) return { bg: '#fff7ed', color: '#c2410c' }
   return { bg: '#fee2e2', color: '#991b1b' }
 }
@@ -226,10 +234,11 @@ export default function AdminApp() {
   }
 
   async function cargarClases(planId: string, clienteId: string) {
+    // Consultar directamente la tabla clases (no la vista) para tener es_cortesia e inasistencia_perdonada
     const { data } = await supabase
-      .from('clases_con_numero')
+      .from('clases')
       .select(`id, fecha, hora, duracion_min, estado, cancelado_por_academia, cancelado_tarde,
-        honorario_valor, numero_calculado, contrato_id,
+        honorario_valor, contrato_id, es_cortesia, inasistencia_perdonada,
         contratos(id, estado, cliente_id, total_clases),
         profesores(id, nombre)`)
       .eq('contrato_id', planId)
@@ -247,8 +256,10 @@ export default function AdminApp() {
         estado: c.estado,
         cancelado_por_academia: c.cancelado_por_academia,
         cancelado_tarde: c.cancelado_tarde,
+        es_cortesia: c.es_cortesia || false,
+        inasistencia_perdonada: c.inasistencia_perdonada || false,
         honorario_valor: c.honorario_valor !== null ? Number(c.honorario_valor) : null,
-        numero_calculado: c.numero_calculado,
+        numero_calculado: null,
         total_clases: c.contratos?.total_clases || 0,
         profesor_nombre: c.profesores?.nombre || '—',
         profesor_id: c.profesores?.id || '',
@@ -256,24 +267,25 @@ export default function AdminApp() {
         contrato_estado: c.contratos?.estado || '—',
         cliente_id: clienteId,
       }))
-      // Clases programadas: solo mostrar las de la semana vigente
       .filter((c: Clase) =>
         c.estado !== 'programada' || (c.fecha >= lunes && c.fecha <= sabado)
       )
 
-       const { data: planData } = await supabase
-        .from('contratos')
-        .select('duracion_min')
-        .eq('id', planId)
-        .single()
+    // Obtener duración del plan para calcular fracciones
+    const { data: planData } = await supabase
+      .from('contratos')
+      .select('duracion_min')
+      .eq('id', planId)
+      .single()
 
-const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
-       clases.forEach(c => {
+    // Calcular numeración con la función centralizada
+    const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
+    clases.forEach(c => {
       c.numero_calculado = numeracion.get(c.id) ?? null
-      })
+    })
 
-   setClasesPlan(prev => ({ ...prev, [planId]: clases }))
-     }
+    setClasesPlan(prev => ({ ...prev, [planId]: clases }))
+  }
 
   // ─── FILTROS ─────────────────────────────────────────────────────────────
   const clientesFiltrados = clientes
@@ -344,8 +356,13 @@ const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
     setEditandoClase(clase)
     setEditFecha(clase.fecha)
     setEditHora(clase.hora)
-    setEditProfesorId((clase as any).profesor_id || '')
-    setEditEstado(clase.estado === 'cancelada' && !clase.cancelado_por_academia ? 'inasistencia' : clase.estado)
+    setEditProfesorId(clase.profesor_id || '')
+    // Detectar estado real para el selector
+    const estadoEdicion =
+      clase.es_cortesia ? 'cortesia' :
+      clase.estado === 'cancelada' && !clase.cancelado_por_academia ? 'inasistencia' :
+      clase.estado
+    setEditEstado(estadoEdicion)
     setEditHonorario(clase.honorario_valor !== null ? String(clase.honorario_valor) : '')
   }
 
@@ -355,8 +372,11 @@ const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
     if (editFecha !== editandoClase.fecha) cambios.push(`fecha a ${editFecha}`)
     if (editHora !== editandoClase.hora) cambios.push(`hora a ${editHora}`)
     const profNombre = profesores.find(p => p.id === editProfesorId)?.nombre
-    if (editProfesorId !== (editandoClase as any).profesor_id) cambios.push(`profesor a ${profNombre}`)
-    const estadoOriginal = editandoClase.estado === 'cancelada' && !editandoClase.cancelado_por_academia ? 'inasistencia' : editandoClase.estado
+    if (editProfesorId !== editandoClase.profesor_id) cambios.push(`profesor a ${profNombre}`)
+    const estadoOriginal =
+      editandoClase.es_cortesia ? 'cortesia' :
+      editandoClase.estado === 'cancelada' && !editandoClase.cancelado_por_academia ? 'inasistencia' :
+      editandoClase.estado
     if (editEstado !== estadoOriginal) cambios.push(`estado a ${editEstado}`)
     if (editHonorario !== (editandoClase.honorario_valor !== null ? String(editandoClase.honorario_valor) : '')) cambios.push(`honorario a $${Number(editHonorario).toLocaleString('es-CO')}`)
 
@@ -371,17 +391,27 @@ const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
           profesor_id: editProfesorId,
           honorario_valor: editHonorario !== '' ? Number(editHonorario) : null,
         }
+
         if (editEstado === 'inasistencia') {
           payload.estado = 'cancelada'
           payload.cancelado_por_academia = false
           payload.cancelado_tarde = true
+          payload.es_cortesia = false
+          payload.inasistencia_perdonada = false
+        } else if (editEstado === 'cortesia') {
+          payload.estado = 'dada'
+          payload.es_cortesia = true
+          payload.cancelado_por_academia = null
+          payload.cancelado_tarde = false
         } else {
           payload.estado = editEstado
+          payload.es_cortesia = false
           if (editEstado !== 'cancelada') {
             payload.cancelado_por_academia = null
             payload.cancelado_tarde = false
           }
         }
+
         await supabase.from('clases').update(payload).eq('id', editandoClase.id)
         setEditandoClase(null)
         await cargarClases(editandoClase.contrato_id, editandoClase.cliente_id)
@@ -406,7 +436,7 @@ const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
         const dest = cts[0]
         await supabase.from('clases').update({ contrato_id: dest.id }).eq('id', clase.id)
         const { data: origen } = await supabase.from('contratos').select('clases_tomadas').eq('id', clase.contrato_id).single()
-        if (origen && clase.estado === 'dada') {
+        if (origen && clase.estado === 'dada' && !clase.es_cortesia) {
           await supabase.from('contratos').update({ clases_tomadas: Math.max(0, (origen.clases_tomadas || 0) - 1) }).eq('id', clase.contrato_id)
           await supabase.from('contratos').update({ clases_tomadas: (dest.clases_tomadas || 0) + 1 }).eq('id', dest.id)
         }
@@ -423,7 +453,7 @@ const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
     setConfirmarCambio({
       mensaje: `¿Está seguro de BORRAR la clase de ${clienteNombre} del ${clase.fecha}? Esta acción no se puede deshacer.`,
       accion: async () => {
-        if (clase.estado === 'dada') {
+        if (clase.estado === 'dada' && !clase.es_cortesia) {
           const { data: ct } = await supabase.from('contratos').select('clases_tomadas').eq('id', clase.contrato_id).single()
           if (ct) await supabase.from('contratos').update({ clases_tomadas: Math.max(0, (ct.clases_tomadas || 0) - 1) }).eq('id', clase.contrato_id)
         }
@@ -546,7 +576,6 @@ const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
                 <option value="">🏢 Todas las sedes</option>
                 {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
-              {/* FIX: sin async, sin loop — solo actualiza el estado */}
               <select value={filtroProfesor} onChange={e => setFiltroProfesor(e.target.value)}
                 style={{ flex: 1, padding: '9px 10px', border: `1.5px solid ${filtroProfesor ? TEAL : TEAL_MID}`, borderRadius: '10px', fontSize: '13px', background: filtroProfesor ? TEAL_LIGHT : 'white' }}>
                 <option value="">👨‍🏫 Todos los profes</option>
@@ -637,7 +666,9 @@ const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
                                     <span style={{ fontSize: '11px', color: '#9ca3af', whiteSpace: 'nowrap' }}>{clase.fecha}<br />{clase.hora}</span>
                                     <div>
                                       <p style={{ margin: 0, fontSize: '11px', color: '#6b7280' }}>{clase.profesor_nombre}</p>
-                                      {clase.numero_calculado && <p style={{ margin: 0, fontSize: '11px', fontWeight: '700', color: TEAL }}>{clase.numero_calculado}/{clase.total_clases}</p>}
+                                      {clase.numero_calculado !== null && (
+                                        <p style={{ margin: 0, fontSize: '11px', fontWeight: '700', color: TEAL }}>{clase.numero_calculado}/{clase.total_clases}</p>
+                                      )}
                                     </div>
                                     <span style={{ fontSize: '11px', fontWeight: '600', color: '#166534', whiteSpace: 'nowrap' }}>
                                       {clase.honorario_valor !== null ? `$${clase.honorario_valor.toLocaleString('es-CO')}` : '—'}
@@ -759,6 +790,7 @@ const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
                     { k: 'programada', l: 'Programada' },
                     { k: 'confirmada', l: 'Confirmada' },
                     { k: 'dada', l: 'Dada' },
+                    { k: 'cortesia', l: '🎁 Cortesía' },
                     { k: 'inasistencia', l: 'Inasistencia' },
                     { k: 'cancelada', l: 'Cancelada' },
                   ].map(op => (
