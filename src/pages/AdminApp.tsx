@@ -132,6 +132,7 @@ export default function AdminApp() {
   const [filtroVista, setFiltroVista] = useState<'todos' | 'activos'>('activos')
   const [filtroSede, setFiltroSede] = useState('')
   const [filtroProfesor, setFiltroProfesor] = useState('')
+  const [clientesConProfesor, setClientesConProfesor] = useState<Set<string> | null>(null)
   const [busqueda, setBusqueda] = useState('')
 
   const [clienteExpandido, setClienteExpandido] = useState<string | null>(null)
@@ -350,10 +351,8 @@ export default function AdminApp() {
     })
     .filter(c => {
       if (!filtroProfesor) return true
-      const planes = planesCliente[c.id]
-      if (!planes) return true
-      const nombreProf = profesores.find(p => p.id === filtroProfesor)?.nombre
-      return planes.some(p => p.profesor_nombre === nombreProf)
+      if (!clientesConProfesor) return false
+      return clientesConProfesor.has(c.id)
     })
 
   // ─── ACCIONES PLAN ───────────────────────────────────────────────────────
@@ -592,7 +591,7 @@ export default function AdminApp() {
 
   // ─── APP PRINCIPAL ────────────────────────────────────────────────────────
   return (
-   <div style={{ position: 'fixed', inset: 0, background: '#f8fafc', fontFamily: 'system-ui, sans-serif', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+    <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
       <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} *{box-sizing:border-box}`}</style>
 
       {/* Header */}
@@ -650,16 +649,15 @@ export default function AdminApp() {
                 <option value="">🏢 Todas las sedes</option>
                 {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
-             <select value={filtroProfesor} onChange={async e => {
-                    const prof = e.target.value
-                    setFiltroProfesor(prof)
-                    if (prof) {
-                      // Cargar planes de todos los clientes que no estén en memoria
-                      for (const c of clientes) {
-                        if (!planesCliente[c.id]) await cargarPlanes(c.id)
-                          }
-                        }
-                      }}
+              <select value={filtroProfesor} onChange={async e => {
+                const prof = e.target.value
+                setFiltroProfesor(prof)
+                if (!prof) { setClientesConProfesor(null); return }
+                const { data } = await supabase.from('contratos')
+                  .select('cliente_id')
+                  .eq('profesor_id', prof)
+                setClientesConProfesor(new Set((data || []).map((c: any) => c.cliente_id)))
+              }}
                 style={{ flex: 1, padding: '9px 10px', border: `1.5px solid ${filtroProfesor ? TEAL : TEAL_MID}`, borderRadius: '10px', fontSize: '13px', background: filtroProfesor ? TEAL_LIGHT : 'white' }}>
                 <option value="">👨‍🏫 Todos los profes</option>
                 {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
