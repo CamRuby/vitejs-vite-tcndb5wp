@@ -650,7 +650,16 @@ export default function AdminApp() {
                 <option value="">🏢 Todas las sedes</option>
                 {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
-              <select value={filtroProfesor} onChange={e => setFiltroProfesor(e.target.value)}
+             <select value={filtroProfesor} onChange={async e => {
+                    const prof = e.target.value
+                    setFiltroProfesor(prof)
+                    if (prof) {
+                      // Cargar planes de todos los clientes que no estén en memoria
+                      for (const c of clientes) {
+                        if (!planesCliente[c.id]) await cargarPlanes(c.id)
+                          }
+                        }
+                      }}
                 style={{ flex: 1, padding: '9px 10px', border: `1.5px solid ${filtroProfesor ? TEAL : TEAL_MID}`, borderRadius: '10px', fontSize: '13px', background: filtroProfesor ? TEAL_LIGHT : 'white' }}>
                 <option value="">👨‍🏫 Todos los profes</option>
                 {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
