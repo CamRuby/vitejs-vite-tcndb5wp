@@ -732,7 +732,7 @@ export default function AdminApp() {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
                               {[
                                 { l: 'Duración', v: `${plan.duracion_min} min` },
-                                { l: 'Plan', v: `${Math.round(plan.clases_tomadas)}/${plan.total_clases}` },
+                               { l: 'Plan', v: `${(plan as any)._conteo ?? Math.round(plan.clases_tomadas)}/${plan.total_clases}` },
                                 { l: 'Pagado', v: `$${plan.total_pagado.toLocaleString('es-CO')}` },
                                 { l: 'Valor', v: plan.valor_plan ? `$${plan.valor_plan.toLocaleString('es-CO')}` : '—' },
                               ].map(d => (
