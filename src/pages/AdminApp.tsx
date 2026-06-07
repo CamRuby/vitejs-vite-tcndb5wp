@@ -1,0 +1,857 @@
+import { useState, useEffect } from 'react'
+import { supabase } from '../supabase'
+
+const TEAL = '#1a8a8a'
+const TEAL_LIGHT = '#e8f5f5'
+const TEAL_MID = '#b2d8d8'
+const TEAL_DARK = '#146f6f'
+
+// ─── TIPOS ───────────────────────────────────────────────────────────────────
+interface Cliente {
+  id: string
+  nombre: string
+  grupo_whatsapp: string | null
+  sede_nombre: string
+  sede_id: string | null
+}
+
+interface Plan {
+  id: string
+  cliente_id: string
+  estado: string
+  fecha_inicio: string | null
+  fecha_fin: string | null
+  duracion_min: number
+  total_clases: number
+  clases_tomadas: number
+  valor_plan: number | null
+  total_pagado: number
+  instrumento_nombre: string
+  profesor_nombre: string
+  sede_nombre: string
+}
+
+interface Clase {
+  id: string
+  fecha: string
+  hora: string
+  duracion_min: number
+  estado: string
+  cancelado_por_academia: boolean | null
+  cancelado_tarde: boolean | null
+  honorario_valor: number | null
+  numero_calculado: number | null
+  total_clases: number
+  profesor_nombre: string
+  contrato_id: string
+  contrato_estado: string
+  cliente_id: string
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function etiquetaEstado(c: Clase): string {
+  if (c.estado === 'dada') return 'Dada'
+  if (c.estado === 'confirmada') return 'Confirmada'
+  if (c.estado === 'programada') return 'Programada'
+  if (c.estado === 'cancelada' && !c.cancelado_por_academia) return 'Inasistencia'
+  if (c.estado === 'cancelada') return 'Cancelada'
+  return c.estado
+}
+
+function colorEstado(c: Clase) {
+  if (c.estado === 'dada') return { bg: '#fefce8', color: '#854d0e' }
+  if (c.estado === 'confirmada') return { bg: '#dcfce7', color: '#166534' }
+  if (c.estado === 'programada') return { bg: '#eff6ff', color: '#1d4ed8' }
+  if (c.estado === 'cancelada' && !c.cancelado_por_academia) return { bg: '#fff7ed', color: '#c2410c' }
+  return { bg: '#fee2e2', color: '#991b1b' }
+}
+
+// ─── COMPONENTE PRINCIPAL ────────────────────────────────────────────────────
+export default function AdminApp() {
+  const [sesion, setSesion] = useState<any>(null)
+  const [rolVerificado, setRolVerificado] = useState<'cargando' | 'ok' | 'denegado'>('cargando')
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPass, setLoginPass] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const [loginCargando, setLoginCargando] = useState(false)
+
+  const [vistaActual, setVistaActual] = useState<'clientes' | 'reportes'>('clientes')
+
+  // Datos
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
+  const [profesores, setProfesores] = useState<{ id: string; nombre: string }[]>([])
+  const [cargando, setCargando] = useState(false)
+
+  // Filtros
+  const [filtroVista, setFiltroVista] = useState<'todos' | 'activos'>('activos')
+  const [filtroSede, setFiltroSede] = useState('')
+  const [filtroProfesor, setFiltroProfesor] = useState('')
+  const [busqueda, setBusqueda] = useState('')
+
+  // Estado expandido
+  const [clienteExpandido, setClienteExpandido] = useState<string | null>(null)
+  const [planesCliente, setPlanesCliente] = useState<Record<string, Plan[]>>({})
+  const [planExpandido, setPlanExpandido] = useState<string | null>(null)
+  const [clasesPlан, setClasesPlан] = useState<Record<string, Clase[]>>({})
+
+  // Edición
+  const [editandoClase, setEditandoClase] = useState<Clase | null>(null)
+  const [editandoPlan, setEditandoPlan] = useState<Plan | null>(null)
+  const [confirmarCambio, setConfirmarCambio] = useState<{ mensaje: string; accion: () => Promise<void> } | null>(null)
+  const [guardando, setGuardando] = useState(false)
+  const [mensajeOk, setMensajeOk] = useState('')
+
+  // Campos edición clase
+  const [editFecha, setEditFecha] = useState('')
+  const [editHora, setEditHora] = useState('')
+  const [editProfesorId, setEditProfesorId] = useState('')
+  const [editEstado, setEditEstado] = useState('')
+  const [editHonorario, setEditHonorario] = useState('')
+
+  // Campos edición plan
+  const [editPlanEstado, setEditPlanEstado] = useState('')
+  const [editPlanFechaFin, setEditPlanFechaFin] = useState('')
+  const [editPlanDuracion, setEditPlanDuracion] = useState('')
+  const [editPlanTotalClases, setEditPlanTotalClases] = useState('')
+  const [editPlanValorPagado, setEditPlanValorPagado] = useState('')
+
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) { setRolVerificado('denegado'); return }
+      setSesion(session)
+      const { data } = await supabase.from('roles').select('rol').eq('email', session.user.email).single()
+      if (data?.rol === 'superadmin') {
+        setRolVerificado('ok')
+        cargarBase()
+      } else {
+        setRolVerificado('denegado')
+      }
+    })
+  }, [])
+
+  async function login() {
+    if (!loginEmail || !loginPass) { setLoginError('Ingresa correo y contraseña'); return }
+    setLoginCargando(true); setLoginError('')
+    const { data, error } = await supabase.auth.signInWithPassword({ email: loginEmail.trim().toLowerCase(), password: loginPass })
+    if (error) { setLoginError('Correo o contraseña incorrectos'); setLoginCargando(false); return }
+    const { data: rolData } = await supabase.from('roles').select('rol').eq('email', data.user.email).single()
+    if (rolData?.rol !== 'superadmin') { setLoginError('No tienes acceso a este panel'); await supabase.auth.signOut(); setLoginCargando(false); return }
+    setSesion(data.session)
+    setRolVerificado('ok')
+    setLoginCargando(false)
+    cargarBase()
+  }
+
+  async function cargarBase() {
+    const [{ data: sedesData }, { data: profsData }] = await Promise.all([
+      supabase.from('sedes').select('id, nombre').order('nombre'),
+      supabase.from('profesores').select('id, nombre').eq('activo', true).order('nombre'),
+    ])
+    setSedes(sedesData || [])
+    setProfesores(profsData || [])
+    cargarClientes()
+  }
+
+  async function cargarClientes() {
+    setCargando(true)
+    // Traer clientes con su último contrato para sede
+    const { data: contratos } = await supabase
+      .from('contratos')
+      .select('cliente_id, sede_id, estado, updated_at, sedes(nombre)')
+      .order('updated_at', { ascending: false })
+
+    const { data: clientesData } = await supabase
+      .from('clientes')
+      .select('id, nombre, grupo_whatsapp')
+      .eq('estado', 'activo')
+      .order('nombre')
+
+    if (!clientesData) { setCargando(false); return }
+
+    // Para cada cliente, encontrar el contrato activo más reciente o el último archivado
+    const contratosPorCliente: Record<string, any> = {}
+    ;(contratos || []).forEach((ct: any) => {
+      if (!contratosPorCliente[ct.cliente_id]) {
+        contratosPorCliente[ct.cliente_id] = ct
+      } else {
+        const actual = contratosPorCliente[ct.cliente_id]
+        // Priorizar activo sobre archivado
+        if (ct.estado === 'activo' && actual.estado !== 'activo') {
+          contratosPorCliente[ct.cliente_id] = ct
+        }
+      }
+    })
+
+    const lista: Cliente[] = clientesData.map((c: any) => ({
+      id: c.id,
+      nombre: c.nombre,
+      grupo_whatsapp: c.grupo_whatsapp,
+      sede_nombre: contratosPorCliente[c.id]?.sedes?.nombre || '—',
+      sede_id: contratosPorCliente[c.id]?.sede_id || null,
+    }))
+
+    setClientes(lista)
+    setCargando(false)
+  }
+
+  async function cargarPlanes(clienteId: string) {
+    const { data } = await supabase
+      .from('contratos')
+      .select(`id, estado, fecha_inicio, fecha_fin, duracion_min, total_clases, clases_tomadas, valor_plan,
+        instrumentos(nombre), profesores(nombre), sedes(nombre), cliente_id`)
+      .eq('cliente_id', clienteId)
+      .order('fecha_inicio', { ascending: false })
+
+    const ids = (data || []).map((p: any) => p.id)
+    let pagosMap: Record<string, number> = {}
+    if (ids.length > 0) {
+      const { data: pagos } = await supabase.from('pagos').select('contrato_id, monto').in('contrato_id', ids)
+      ;(pagos || []).forEach((p: any) => { pagosMap[p.contrato_id] = (pagosMap[p.contrato_id] || 0) + Number(p.monto) })
+    }
+
+    const planes: Plan[] = (data || []).map((p: any) => ({
+      id: p.id,
+      cliente_id: p.cliente_id,
+      estado: p.estado,
+      fecha_inicio: p.fecha_inicio,
+      fecha_fin: p.fecha_fin,
+      duracion_min: p.duracion_min,
+      total_clases: p.total_clases,
+      clases_tomadas: p.clases_tomadas,
+      valor_plan: p.valor_plan,
+      total_pagado: pagosMap[p.id] || 0,
+      instrumento_nombre: p.instrumentos?.nombre || '—',
+      profesor_nombre: p.profesores?.nombre || '—',
+      sede_nombre: p.sedes?.nombre || '—',
+    }))
+
+    setPlanesCliente(prev => ({ ...prev, [clienteId]: planes }))
+  }
+
+  async function cargarClases(planId: string, clienteId: string) {
+    const { data } = await supabase
+      .from('clases_con_numero')
+      .select(`id, fecha, hora, duracion_min, estado, cancelado_por_academia, cancelado_tarde,
+        honorario_valor, numero_calculado, contrato_id,
+        contratos(id, estado, cliente_id, total_clases),
+        profesores(id, nombre)`)
+      .eq('contrato_id', planId)
+      .order('fecha', { ascending: false })
+      .order('hora', { ascending: false })
+
+    const clases: Clase[] = (data || []).map((c: any) => ({
+      id: c.id,
+      fecha: c.fecha,
+      hora: c.hora?.substring(0, 5) || '—',
+      duracion_min: c.duracion_min,
+      estado: c.estado,
+      cancelado_por_academia: c.cancelado_por_academia,
+      cancelado_tarde: c.cancelado_tarde,
+      honorario_valor: c.honorario_valor !== null ? Number(c.honorario_valor) : null,
+      numero_calculado: c.numero_calculado,
+      total_clases: c.contratos?.total_clases || 0,
+      profesor_nombre: c.profesores?.nombre || '—',
+      profesor_id: c.profesores?.id || '',
+      contrato_id: planId,
+      contrato_estado: c.contratos?.estado || '—',
+      cliente_id: clienteId,
+    }))
+
+    setClasesPlан(prev => ({ ...prev, [planId]: clases }))
+  }
+
+  // ─── FILTROS ─────────────────────────────────────────────────────────────
+  const clientesFiltrados = clientes.filter(c => {
+    if (busqueda && !c.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
+    if (filtroSede && c.sede_id !== filtroSede) return false
+    return true
+  }).filter(c => {
+    if (filtroVista === 'activos') {
+      const planes = planesCliente[c.id]
+      if (!planes) return true // aún no cargado, mostrar
+      return planes.some(p => p.estado === 'activo')
+    }
+    return true
+  }).filter(c => {
+    if (!filtroProfesor) return true
+    const planes = planesCliente[c.id]
+    if (!planes) return true
+    return planes.some(p => p.profesor_nombre === profesores.find(p2 => p2.id === filtroProfesor)?.nombre)
+  })
+
+  // ─── ACCIONES PLAN ───────────────────────────────────────────────────────
+  function abrirEditarPlan(plan: Plan) {
+    setEditandoPlan(plan)
+    setEditPlanEstado(plan.estado)
+    setEditPlanFechaFin(plan.fecha_fin || '')
+    setEditPlanDuracion(String(plan.duracion_min))
+    setEditPlanTotalClases(String(plan.total_clases))
+    setEditPlanValorPagado(String(plan.total_pagado))
+  }
+
+  async function guardarPlan() {
+    if (!editandoPlan) return
+    const cambios: string[] = []
+    if (editPlanEstado !== editandoPlan.estado) cambios.push(`estado a "${editPlanEstado}"`)
+    if (editPlanFechaFin !== (editandoPlan.fecha_fin || '')) cambios.push(`fecha fin a "${editPlanFechaFin || 'sin fecha'}"`)
+    if (editPlanDuracion !== String(editandoPlan.duracion_min)) cambios.push(`duración a ${editPlanDuracion} min`)
+    if (editPlanTotalClases !== String(editandoPlan.total_clases)) cambios.push(`clases contratadas a ${editPlanTotalClases}`)
+
+    const planNombre = `${editandoPlan.instrumento_nombre} (${editandoPlan.sede_nombre})`
+    setConfirmarCambio({
+      mensaje: `¿Está seguro de modificar ${cambios.join(', ')} del plan ${planNombre}?`,
+      accion: async () => {
+        const payload: any = {
+          estado: editPlanEstado,
+          duracion_min: parseInt(editPlanDuracion),
+          total_clases: parseInt(editPlanTotalClases),
+        }
+        if (editPlanFechaFin) payload.fecha_fin = editPlanFechaFin
+        await supabase.from('contratos').update(payload).eq('id', editandoPlan.id)
+
+        // Si cambió el valor pagado, agregar abono
+        const diferencia = Number(editPlanValorPagado) - editandoPlan.total_pagado
+        if (diferencia > 0) {
+          await supabase.from('pagos').insert({ contrato_id: editandoPlan.id, monto: diferencia, fecha: new Date().toISOString().split('T')[0], metodo: 'Ajuste manual' })
+        }
+
+        setEditandoPlan(null)
+        await cargarPlanes(editandoPlan.cliente_id)
+        setMensajeOk('Plan actualizado correctamente')
+        setTimeout(() => setMensajeOk(''), 3000)
+      }
+    })
+  }
+
+  // ─── ACCIONES CLASE ──────────────────────────────────────────────────────
+  function abrirEditarClase(clase: Clase) {
+    setEditandoClase(clase)
+    setEditFecha(clase.fecha)
+    setEditHora(clase.hora)
+    setEditProfesorId((clase as any).profesor_id || '')
+    setEditEstado(clase.estado === 'cancelada' && !clase.cancelado_por_academia ? 'inasistencia' : clase.estado)
+    setEditHonorario(clase.honorario_valor !== null ? String(clase.honorario_valor) : '')
+  }
+
+  async function guardarClase() {
+    if (!editandoClase) return
+    const cambios: string[] = []
+    if (editFecha !== editandoClase.fecha) cambios.push(`fecha a ${editFecha}`)
+    if (editHora !== editandoClase.hora) cambios.push(`hora a ${editHora}`)
+    const profNombre = profesores.find(p => p.id === editProfesorId)?.nombre
+    if (editProfesorId !== (editandoClase as any).profesor_id) cambios.push(`profesor a ${profNombre}`)
+    if (editEstado !== (editandoClase.estado === 'cancelada' && !editandoClase.cancelado_por_academia ? 'inasistencia' : editandoClase.estado)) cambios.push(`estado a ${editEstado}`)
+    if (editHonorario !== (editandoClase.honorario_valor !== null ? String(editandoClase.honorario_valor) : '')) cambios.push(`honorario a $${Number(editHonorario).toLocaleString('es-CO')}`)
+
+    const fecha = editandoClase.fecha
+    const clienteNombre = clientes.find(c => c.id === editandoClase.cliente_id)?.nombre || '—'
+
+    setConfirmarCambio({
+      mensaje: `¿Está seguro de modificar ${cambios.join(', ')} de la clase de ${clienteNombre} del ${fecha}?`,
+      accion: async () => {
+        const payload: any = {
+          fecha: editFecha,
+          hora: editHora + ':00',
+          profesor_id: editProfesorId,
+          honorario_valor: editHonorario !== '' ? Number(editHonorario) : null,
+        }
+
+        // Estado
+        if (editEstado === 'inasistencia') {
+          payload.estado = 'cancelada'
+          payload.cancelado_por_academia = false
+          payload.cancelado_tarde = true
+        } else {
+          payload.estado = editEstado
+          if (editEstado !== 'cancelada') {
+            payload.cancelado_por_academia = null
+            payload.cancelado_tarde = false
+          }
+        }
+
+        await supabase.from('clases').update(payload).eq('id', editandoClase.id)
+        setEditandoClase(null)
+        await cargarClases(editandoClase.contrato_id, editandoClase.cliente_id)
+        setMensajeOk('Clase actualizada correctamente')
+        setTimeout(() => setMensajeOk(''), 3000)
+      }
+    })
+  }
+
+  async function moverClase(clase: Clase, destino: 'activo' | 'archivado') {
+    const clienteNombre = clientes.find(c => c.id === clase.cliente_id)?.nombre || '—'
+    setConfirmarCambio({
+      mensaje: `¿Mover la clase de ${clienteNombre} del ${clase.fecha} al plan ${destino}?`,
+      accion: async () => {
+        const { data: contratos } = await supabase.from('contratos')
+          .select('id, clases_tomadas')
+          .eq('cliente_id', clase.cliente_id)
+          .eq('estado', destino)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+        if (!contratos?.length) { alert(`No hay plan ${destino} para este cliente`); return }
+        const dest = contratos[0]
+        await supabase.from('clases').update({ contrato_id: dest.id }).eq('id', clase.id)
+        // Ajustar contadores
+        const { data: origen } = await supabase.from('contratos').select('clases_tomadas').eq('id', clase.contrato_id).single()
+        if (origen && clase.estado === 'dada') {
+          await supabase.from('contratos').update({ clases_tomadas: Math.max(0, (origen.clases_tomadas || 0) - 1) }).eq('id', clase.contrato_id)
+          await supabase.from('contratos').update({ clases_tomadas: (dest.clases_tomadas || 0) + 1 }).eq('id', dest.id)
+        }
+        await cargarClases(clase.contrato_id, clase.cliente_id)
+        await cargarPlanes(clase.cliente_id)
+        setMensajeOk('Clase movida correctamente')
+        setTimeout(() => setMensajeOk(''), 3000)
+      }
+    })
+  }
+
+  async function borrarClase(clase: Clase) {
+    const clienteNombre = clientes.find(c => c.id === clase.cliente_id)?.nombre || '—'
+    setConfirmarCambio({
+      mensaje: `¿Está seguro de BORRAR la clase de ${clienteNombre} del ${clase.fecha}? Esta acción no se puede deshacer.`,
+      accion: async () => {
+        if (clase.estado === 'dada') {
+          const { data: ct } = await supabase.from('contratos').select('clases_tomadas').eq('id', clase.contrato_id).single()
+          if (ct) await supabase.from('contratos').update({ clases_tomadas: Math.max(0, (ct.clases_tomadas || 0) - 1) }).eq('id', clase.contrato_id)
+        }
+        await supabase.from('clases').delete().eq('id', clase.id)
+        await cargarClases(clase.contrato_id, clase.cliente_id)
+        await cargarPlanes(clase.cliente_id)
+        setMensajeOk('Clase eliminada')
+        setTimeout(() => setMensajeOk(''), 3000)
+      }
+    })
+  }
+
+  // ─── PANTALLA LOGIN ───────────────────────────────────────────────────────
+  if (rolVerificado === 'cargando') return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: TEAL }}>
+      <div style={{ width: '36px', height: '36px', border: '3px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  )
+
+  if (rolVerificado === 'denegado' && !sesion) return (
+    <div style={{ minHeight: '100vh', background: `linear-gradient(150deg,${TEAL} 0%,#0d5f5f 100%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+      <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      <div style={{ width: '100%', maxWidth: '360px', animation: 'fadeUp 0.4s ease' }}>
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <img src="/apple-touch-icon.png" alt="Logo" style={{ width: '80px', height: '80px', borderRadius: '24px', margin: '0 auto 16px', display: 'block', background: 'white', padding: '6px', boxSizing: 'border-box' }} />
+          <h1 style={{ margin: 0, color: 'white', fontSize: '26px', fontWeight: '800' }}>Academia Ruby</h1>
+          <p style={{ margin: '6px 0 0', color: 'rgba(255,255,255,0.6)', fontSize: '13px', letterSpacing: '0.5px' }}>PANEL ADMINISTRATIVO</p>
+        </div>
+        <div style={{ background: 'white', borderRadius: '20px', padding: '28px' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#6b7280', marginBottom: '8px', letterSpacing: '1px' }}>CORREO</label>
+            <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && login()}
+              placeholder="correo@ejemplo.com"
+              style={{ width: '100%', padding: '13px 14px', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '15px', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#6b7280', marginBottom: '8px', letterSpacing: '1px' }}>CONTRASEÑA</label>
+            <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && login()}
+              placeholder="••••••••"
+              style={{ width: '100%', padding: '13px 14px', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '15px', boxSizing: 'border-box' }} />
+          </div>
+          {loginError && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', color: '#dc2626', fontSize: '13px' }}>{loginError}</div>}
+          <button onClick={login} disabled={loginCargando}
+            style={{ width: '100%', padding: '14px', background: loginCargando ? TEAL_MID : TEAL, color: 'white', border: 'none', borderRadius: '10px', fontSize: '16px', fontWeight: '700', cursor: 'pointer' }}>
+            {loginCargando ? 'Entrando...' : 'Entrar →'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  // ─── APP PRINCIPAL ────────────────────────────────────────────────────────
+  return (
+    <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
+      <style>{`
+        @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        * { box-sizing: border-box; }
+      `}</style>
+
+      {/* Header */}
+      <div style={{ background: TEAL_DARK, padding: '0', position: 'sticky', top: 0, zIndex: 100 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img src="/Logo_RubySalamanca.png" alt="Logo" style={{ height: '28px', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
+            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px' }}>ADMIN</span>
+          </div>
+          <button onClick={() => supabase.auth.signOut()}
+            style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', padding: '6px 12px', borderRadius: '20px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+            Salir
+          </button>
+        </div>
+        {/* Tabs */}
+        <div style={{ display: 'flex', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+          {[
+            { key: 'clientes', label: '👥 Clientes' },
+            { key: 'reportes', label: '📊 Reportes' },
+          ].map(tab => (
+            <button key={tab.key} onClick={() => setVistaActual(tab.key as any)}
+              style={{ flex: 1, padding: '12px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: '700', fontFamily: 'inherit',
+                background: vistaActual === tab.key ? 'white' : 'transparent',
+                color: vistaActual === tab.key ? TEAL_DARK : 'rgba(255,255,255,0.7)',
+                borderRadius: vistaActual === tab.key ? '12px 12px 0 0' : '0' }}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Mensaje ok */}
+      {mensajeOk && (
+        <div style={{ background: '#dcfce7', border: '1px solid #86efac', margin: '12px 16px', padding: '12px 16px', borderRadius: '10px', color: '#166534', fontSize: '14px', fontWeight: '600', animation: 'fadeUp 0.3s ease' }}>
+          ✓ {mensajeOk}
+        </div>
+      )}
+
+      {/* ── VISTA REPORTES ── */}
+      {vistaActual === 'reportes' && (
+        <div style={{ padding: '32px 16px', textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
+          <p style={{ fontSize: '18px', fontWeight: '700', color: '#374151', margin: '0 0 8px' }}>Reportes</p>
+          <p style={{ fontSize: '14px', color: '#9ca3af', margin: 0 }}>Próximamente — módulo de reportes en desarrollo.</p>
+        </div>
+      )}
+
+      {/* ── VISTA CLIENTES ── */}
+      {vistaActual === 'clientes' && (
+        <div style={{ padding: '16px' }}>
+
+          {/* Filtros */}
+          <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <input type="text" placeholder="🔍 Buscar cliente..." value={busqueda} onChange={e => setBusqueda(e.target.value)}
+              style={{ width: '100%', padding: '11px 14px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {([{ k: 'activos', l: '🟢 Con plan activo' }, { k: 'todos', l: '👥 Todos' }] as const).map(f => (
+                <button key={f.k} onClick={() => setFiltroVista(f.k)}
+                  style={{ padding: '8px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', border: `1.5px solid ${filtroVista === f.k ? TEAL : TEAL_MID}`, background: filtroVista === f.k ? TEAL : 'white', color: filtroVista === f.k ? 'white' : TEAL_DARK }}>
+                  {f.l}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)}
+                style={{ flex: 1, padding: '9px 10px', border: `1.5px solid ${filtroSede ? TEAL : TEAL_MID}`, borderRadius: '10px', fontSize: '13px', background: filtroSede ? TEAL_LIGHT : 'white' }}>
+                <option value="">🏢 Todas las sedes</option>
+                {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              </select>
+              <select value={filtroProfesor} onChange={async e => {
+                setFiltroProfesor(e.target.value)
+                // Cargar planes de todos los clientes para filtrar
+                for (const c of clientes) {
+                  if (!planesCliente[c.id]) await cargarPlanes(c.id)
+                }
+              }}
+                style={{ flex: 1, padding: '9px 10px', border: `1.5px solid ${filtroProfesor ? TEAL : TEAL_MID}`, borderRadius: '10px', fontSize: '13px', background: filtroProfesor ? TEAL_LIGHT : 'white' }}>
+                <option value="">👨‍🏫 Todos los profes</option>
+                {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {cargando && <p style={{ textAlign: 'center', color: '#9ca3af', padding: '40px 0' }}>Cargando...</p>}
+
+          {/* Lista clientes */}
+          {clientesFiltrados.map(cliente => {
+            const expandido = clienteExpandido === cliente.id
+            const planes = planesCliente[cliente.id] || []
+
+            return (
+              <div key={cliente.id} style={{ background: 'white', borderRadius: '14px', marginBottom: '10px', overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+                {/* Fila cliente */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '8px', alignItems: 'center', padding: '14px 16px' }}>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: '700', fontSize: '14px', color: '#1f2937' }}>{cliente.nombre}</p>
+                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#9ca3af' }}>{cliente.grupo_whatsapp || '—'}</p>
+                  </div>
+                  <span style={{ fontSize: '12px', color: '#6b7280', whiteSpace: 'nowrap' }}>{cliente.sede_nombre}</span>
+                  <button onClick={async () => {
+                    if (expandido) { setClienteExpandido(null); return }
+                    setClienteExpandido(cliente.id)
+                    if (!planesCliente[cliente.id]) await cargarPlanes(cliente.id)
+                  }}
+                    style={{ padding: '6px 14px', background: TEAL_LIGHT, color: TEAL_DARK, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}>
+                    {expandido ? '▲ Cerrar' : '▼ Ver'}
+                  </button>
+                </div>
+
+                {/* Planes */}
+                {expandido && (
+                  <div style={{ borderTop: `1px solid ${TEAL_LIGHT}`, background: '#f8fafc' }}>
+                    {planes.length === 0 && <p style={{ padding: '16px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Sin planes registrados</p>}
+                    {planes.map(plan => {
+                      const planExp = planExpandido === plan.id
+                      const clases = clasesPlан[plan.id] || []
+                      const esActivo = plan.estado === 'activo'
+
+                      return (
+                        <div key={plan.id} style={{ borderBottom: `1px solid ${TEAL_LIGHT}` }}>
+                          {/* Fila plan */}
+                          <div style={{ padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                              <div>
+                                <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700',
+                                  background: esActivo ? '#dcfce7' : '#f1f5f9',
+                                  color: esActivo ? '#166534' : '#64748b' }}>
+                                  {esActivo ? '🟢 Activo' : plan.fecha_fin || 'Archivado'}
+                                </span>
+                                <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7280' }}>{plan.instrumento_nombre} · {plan.profesor_nombre}</p>
+                              </div>
+                              <button onClick={() => abrirEditarPlan(plan)}
+                                style={{ padding: '5px 12px', background: 'white', color: TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: '700' }}>
+                                ✏️ Editar
+                              </button>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                              {[
+                                { l: 'Duración', v: `${plan.duracion_min} min` },
+                                { l: 'Plan', v: `${Math.round(plan.clases_tomadas)}/${plan.total_clases}` },
+                                { l: 'Pagado', v: `$${plan.total_pagado.toLocaleString('es-CO')}` },
+                                { l: 'Valor', v: plan.valor_plan ? `$${plan.valor_plan.toLocaleString('es-CO')}` : '—' },
+                              ].map(d => (
+                                <div key={d.l} style={{ background: 'white', borderRadius: '8px', padding: '8px', textAlign: 'center', border: `1px solid ${TEAL_MID}` }}>
+                                  <p style={{ margin: 0, fontSize: '10px', color: '#9ca3af', fontWeight: '600' }}>{d.l}</p>
+                                  <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: '700', color: '#1f2937' }}>{d.v}</p>
+                                </div>
+                              ))}
+                            </div>
+                            <button onClick={async () => {
+                              if (planExp) { setPlanExpandido(null); return }
+                              setPlanExpandido(plan.id)
+                              if (!clasesPlан[plan.id]) await cargarClases(plan.id, cliente.id)
+                            }}
+                              style={{ width: '100%', padding: '8px', background: planExp ? TEAL : 'white', color: planExp ? 'white' : TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
+                              {planExp ? '▲ Ocultar clases' : `▼ Ver clases (${clases.length || '...'})`}
+                            </button>
+                          </div>
+
+                          {/* Clases */}
+                          {planExp && (
+                            <div style={{ background: 'white', borderTop: `1px solid ${TEAL_LIGHT}` }}>
+                              {clases.length === 0 && <p style={{ padding: '16px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Sin clases registradas</p>}
+                              {clases.map((clase, ci) => {
+                                const col = colorEstado(clase)
+                                return (
+                                  <div key={clase.id} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto auto', gap: '6px', alignItems: 'center', padding: '10px 16px', borderBottom: ci < clases.length - 1 ? `1px solid ${TEAL_LIGHT}` : 'none', background: ci % 2 === 0 ? 'white' : '#fafefe' }}>
+                                    <span style={{ fontSize: '11px', color: '#9ca3af', whiteSpace: 'nowrap' }}>{clase.fecha}<br />{clase.hora}</span>
+                                    <div>
+                                      <p style={{ margin: 0, fontSize: '11px', color: '#6b7280' }}>{clase.profesor_nombre}</p>
+                                      {clase.numero_calculado && <p style={{ margin: 0, fontSize: '11px', fontWeight: '700', color: TEAL }}>{clase.numero_calculado}/{clase.total_clases}</p>}
+                                    </div>
+                                    <span style={{ fontSize: '11px', fontWeight: '600', color: '#166534', whiteSpace: 'nowrap' }}>
+                                      {clase.honorario_valor !== null ? `$${clase.honorario_valor.toLocaleString('es-CO')}` : '—'}
+                                    </span>
+                                    <span style={{ padding: '2px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '700', background: col.bg, color: col.color, whiteSpace: 'nowrap' }}>
+                                      {etiquetaEstado(clase)}
+                                    </span>
+                                    <button onClick={() => abrirEditarClase(clase)}
+                                      style={{ padding: '4px 8px', background: TEAL_LIGHT, color: TEAL_DARK, border: `1px solid ${TEAL_MID}`, borderRadius: '6px', cursor: 'pointer', fontSize: '10px', fontWeight: '700' }}>
+                                      ✏️
+                                    </button>
+                                    <button onClick={() => borrarClase(clase)}
+                                      style={{ padding: '4px 8px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '6px', cursor: 'pointer', fontSize: '10px', fontWeight: '700' }}>
+                                      🗑
+                                    </button>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── MODAL EDITAR PLAN ── */}
+      {editandoPlan && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 200 }}>
+          <div style={{ background: 'white', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '480px', padding: '24px 20px 36px', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div style={{ width: '44px', height: '5px', background: '#e5e7eb', borderRadius: '3px', margin: '0 auto 20px' }} />
+            <p style={{ margin: '0 0 20px', fontSize: '17px', fontWeight: '800', color: '#111' }}>Editar plan — {editandoPlan.instrumento_nombre}</p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Estado del plan</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {[{ k: 'activo', l: '🟢 Activo' }, { k: 'archivado', l: '📦 Archivado' }, { k: 'completado', l: '✅ Completado' }].map(op => (
+                    <button key={op.k} onClick={() => setEditPlanEstado(op.k)}
+                      style={{ flex: 1, padding: '9px 6px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700',
+                        border: `2px solid ${editPlanEstado === op.k ? TEAL : '#e5e7eb'}`,
+                        background: editPlanEstado === op.k ? TEAL_LIGHT : 'white',
+                        color: editPlanEstado === op.k ? TEAL_DARK : '#666' }}>
+                      {op.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Fecha de finalización</label>
+                <input type="date" value={editPlanFechaFin} onChange={e => setEditPlanFechaFin(e.target.value)}
+                  style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Duración (min)</label>
+                  <select value={editPlanDuracion} onChange={e => setEditPlanDuracion(e.target.value)}
+                    style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }}>
+                    {[30, 45, 60, 90, 120].map(d => <option key={d} value={d}>{d} min</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Clases contratadas</label>
+                  <input type="number" value={editPlanTotalClases} onChange={e => setEditPlanTotalClases(e.target.value)}
+                    style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Valor pagado ($)</label>
+                <input type="number" value={editPlanValorPagado} onChange={e => setEditPlanValorPagado(e.target.value)}
+                  style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#9ca3af' }}>Si aumenta el valor, se registra un abono por la diferencia</p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
+              <button onClick={guardarPlan}
+                style={{ flex: 1, padding: '14px', background: TEAL, color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '15px', fontWeight: '800' }}>
+                Guardar cambios
+              </button>
+              <button onClick={() => setEditandoPlan(null)}
+                style={{ padding: '14px 20px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '14px' }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL EDITAR CLASE ── */}
+      {editandoClase && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 200 }}>
+          <div style={{ background: 'white', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '480px', padding: '24px 20px 36px', maxHeight: '85vh', overflowY: 'auto' }}>
+            <div style={{ width: '44px', height: '5px', background: '#e5e7eb', borderRadius: '3px', margin: '0 auto 20px' }} />
+            <p style={{ margin: '0 0 4px', fontSize: '17px', fontWeight: '800', color: '#111' }}>Editar clase</p>
+            <p style={{ margin: '0 0 20px', fontSize: '13px', color: '#9ca3af' }}>{editandoClase.fecha} · {editandoClase.hora} · {editandoClase.profesor_nombre}</p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Fecha</label>
+                  <input type="date" value={editFecha} onChange={e => setEditFecha(e.target.value)}
+                    style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Hora</label>
+                  <input type="time" value={editHora} onChange={e => setEditHora(e.target.value)}
+                    style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Profesor</label>
+                <select value={editProfesorId} onChange={e => setEditProfesorId(e.target.value)}
+                  style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }}>
+                  <option value="">— Sin profesor —</option>
+                  {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Estado</label>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {[
+                    { k: 'programada', l: 'Programada' },
+                    { k: 'confirmada', l: 'Confirmada' },
+                    { k: 'dada', l: 'Dada' },
+                    { k: 'inasistencia', l: 'Inasistencia' },
+                    { k: 'cancelada', l: 'Cancelada' },
+                  ].map(op => (
+                    <button key={op.k} onClick={() => setEditEstado(op.k)}
+                      style={{ padding: '7px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700',
+                        border: `2px solid ${editEstado === op.k ? TEAL : '#e5e7eb'}`,
+                        background: editEstado === op.k ? TEAL_LIGHT : 'white',
+                        color: editEstado === op.k ? TEAL_DARK : '#666' }}>
+                      {op.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Honorario ($)</label>
+                <input type="number" value={editHonorario} onChange={e => setEditHonorario(e.target.value)}
+                  placeholder="Sin honorario"
+                  style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+              </div>
+
+              {/* Mover clase */}
+              <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '12px' }}>
+                <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: '700', color: '#6b7280' }}>Mover clase a otro plan</p>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={() => { setEditandoClase(null); moverClase(editandoClase, 'activo') }}
+                    style={{ flex: 1, padding: '9px', background: '#dcfce7', color: '#166534', border: '1px solid #86efac', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
+                    → Plan activo
+                  </button>
+                  <button onClick={() => { setEditandoClase(null); moverClase(editandoClase, 'archivado') }}
+                    style={{ flex: 1, padding: '9px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
+                    → Plan archivado
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
+              <button onClick={guardarClase}
+                style={{ flex: 1, padding: '14px', background: TEAL, color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '15px', fontWeight: '800' }}>
+                Guardar cambios
+              </button>
+              <button onClick={() => setEditandoClase(null)}
+                style={{ padding: '14px 20px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '14px' }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL CONFIRMAR ── */}
+      {confirmarCambio && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: '24px' }}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '24px', maxWidth: '360px', width: '100%' }}>
+            <p style={{ margin: '0 0 8px', fontSize: '16px', fontWeight: '800', color: '#111' }}>¿Confirmar cambio?</p>
+            <p style={{ margin: '0 0 24px', fontSize: '14px', color: '#6b7280', lineHeight: '1.5' }}>{confirmarCambio.mensaje}</p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={async () => {
+                setGuardando(true)
+                await confirmarCambio.accion()
+                setConfirmarCambio(null)
+                setGuardando(false)
+              }} disabled={guardando}
+                style={{ flex: 1, padding: '13px', background: TEAL, color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '15px', fontWeight: '800' }}>
+                {guardando ? 'Guardando...' : 'Aceptar'}
+              </button>
+              <button onClick={() => setConfirmarCambio(null)}
+                style={{ padding: '13px 20px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px' }}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
