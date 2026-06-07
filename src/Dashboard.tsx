@@ -204,7 +204,7 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
           </div>
         )}
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingBottom: esMobil ? '16px' : 0 }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', paddingBottom: esMobil ? '52px' : 0 }}>
           {seccion === 'inicio'     && <Inicio key={inicioKey} onNavegar={navegar} onNuevaNotificacion={cargarNoLeidas} />}
           {seccion === 'clientes'   && <Clientes key={clientesKey} />}
           {seccion === 'profesores' && <Profesores key={profesoresKey} />}
