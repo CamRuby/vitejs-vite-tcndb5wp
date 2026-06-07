@@ -261,8 +261,13 @@ export default function AdminApp() {
         c.estado !== 'programada' || (c.fecha >= lunes && c.fecha <= sabado)
       )
 
-    setClasesPlan(prev => ({ ...prev, [planId]: clases }))
-  }
+       const numeracion = calcularNumeracion(clases)
+       clases.forEach(c => {
+      c.numero_calculado = numeracion.get(c.id) ?? null
+      })
+
+   setClasesPlan(prev => ({ ...prev, [planId]: clases }))
+     }
 
   // ─── FILTROS ─────────────────────────────────────────────────────────────
   const clientesFiltrados = clientes
