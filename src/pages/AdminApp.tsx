@@ -261,7 +261,13 @@ export default function AdminApp() {
         c.estado !== 'programada' || (c.fecha >= lunes && c.fecha <= sabado)
       )
 
-       const numeracion = calcularNumeracion(clases)
+       const { data: planData } = await supabase
+        .from('contratos')
+        .select('duracion_min')
+        .eq('id', planId)
+        .single()
+
+const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
        clases.forEach(c => {
       c.numero_calculado = numeracion.get(c.id) ?? null
       })
