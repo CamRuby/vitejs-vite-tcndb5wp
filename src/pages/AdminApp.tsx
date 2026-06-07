@@ -777,8 +777,11 @@ export default function AdminApp() {
                                     <span style={{ fontSize: '11px', color: '#9ca3af', whiteSpace: 'nowrap' }}>{clase.fecha}<br />{clase.hora}</span>
                                     <div>
                                       <p style={{ margin: 0, fontSize: '11px', color: '#6b7280' }}>{clase.profesor_nombre}</p>
-                                      {clase.numero_calculado !== null && (
+                                     {clase.numero_calculado !== null && (
                                         <p style={{ margin: 0, fontSize: '11px', fontWeight: '700', color: TEAL }}>{clase.numero_calculado}/{clase.total_clases}</p>
+                                      )}
+                                      {clase.numero_calculado === null && clase.numero_proyectado !== null && clase.estado === 'confirmada' && (
+                                        <p style={{ margin: 0, fontSize: '11px', fontWeight: '700', color: '#9ca3af' }}>~{clase.numero_proyectado}/{clase.total_clases}</p>
                                       )}
                                     </div>
                                     <span style={{ fontSize: '11px', fontWeight: '600', color: '#166534', whiteSpace: 'nowrap' }}>
