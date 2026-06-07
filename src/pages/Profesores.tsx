@@ -353,7 +353,7 @@ const dadas = clases.filter(c => c.estado === 'dada')
   }
 
   return (
-    <div style={{ padding: '20px 24px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
+    <div style={{ padding: '20px 24px', height: 'var(--app-height, 100vh)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
         <div>
