@@ -14,9 +14,10 @@ export function calcularNumeracion(clases: any[], duracionPlan: number = 60): Ma
   let conteo = 0
 
   ordenadas.forEach(c => {
-    const esInasistencia = c.estado === 'cancelada'
+   const esInasistencia = c.estado === 'cancelada'
       && c.cancelado_por_academia === false
       && c.cancelado_tarde === true
+      && !c.inasistencia_perdonada
 
     const cuentaEnPlan = (c.estado === 'dada' && !c.es_cortesia) || esInasistencia
 
