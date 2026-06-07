@@ -36,6 +36,7 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [])
   if (esProfesor) return <ProfesorApp />
+  if (esAdmin) return <AdminApp />
   if (!listo) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p>Cargando...</p>
