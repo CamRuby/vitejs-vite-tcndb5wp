@@ -1247,7 +1247,7 @@ await cargarDatosCliente(cliente)
   const planesArchivados = planes.filter(p => p.estado === 'archivado')
 
   return (
-    <div style={{ padding: '16px 12px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ padding: '16px 12px', height: 'var(--app-height, 100vh)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexShrink: 0 }}>
         <div style={{ textAlign: 'left' }}>
           <h2 style={{ margin: 0, fontSize: '26px', color: '#1a1a1a' }}>Clientes</h2>
