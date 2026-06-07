@@ -6,7 +6,6 @@ const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
 const TEAL_DARK = '#146f6f'
 
-// ─── TIPOS ───────────────────────────────────────────────────────────────────
 interface Cliente {
   id: string
   nombre: string
@@ -48,7 +47,6 @@ interface Clase {
   cliente_id: string
 }
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
 function etiquetaEstado(c: Clase): string {
   if (c.estado === 'dada') return 'Dada'
   if (c.estado === 'confirmada') return 'Confirmada'
@@ -66,7 +64,18 @@ function colorEstado(c: Clase) {
   return { bg: '#fee2e2', color: '#991b1b' }
 }
 
-// ─── COMPONENTE PRINCIPAL ────────────────────────────────────────────────────
+function semanaVigente(): { lunes: string; sabado: string } {
+  const hoy = new Date()
+  const dia = hoy.getDay()
+  const lunesDiff = dia === 0 ? -6 : 1 - dia
+  const lunes = new Date(hoy)
+  lunes.setDate(hoy.getDate() + lunesDiff)
+  const sabado = new Date(lunes)
+  sabado.setDate(lunes.getDate() + 6)
+  const fmt = (d: Date) => d.toISOString().split('T')[0]
+  return { lunes: fmt(lunes), sabado: fmt(sabado) }
+}
+
 export default function AdminApp() {
   const [sesion, setSesion] = useState<any>(null)
   const [rolVerificado, setRolVerificado] = useState<'cargando' | 'ok' | 'denegado'>('cargando')
@@ -77,39 +86,33 @@ export default function AdminApp() {
 
   const [vistaActual, setVistaActual] = useState<'clientes' | 'reportes'>('clientes')
 
-  // Datos
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
   const [profesores, setProfesores] = useState<{ id: string; nombre: string }[]>([])
   const [cargando, setCargando] = useState(false)
 
-  // Filtros
   const [filtroVista, setFiltroVista] = useState<'todos' | 'activos'>('activos')
   const [filtroSede, setFiltroSede] = useState('')
   const [filtroProfesor, setFiltroProfesor] = useState('')
   const [busqueda, setBusqueda] = useState('')
 
-  // Estado expandido
   const [clienteExpandido, setClienteExpandido] = useState<string | null>(null)
   const [planesCliente, setPlanesCliente] = useState<Record<string, Plan[]>>({})
   const [planExpandido, setPlanExpandido] = useState<string | null>(null)
-  const [clasesPlан, setClasesPlан] = useState<Record<string, Clase[]>>({})
+  const [clasesPlan, setClasesPlan] = useState<Record<string, Clase[]>>({})
 
-  // Edición
   const [editandoClase, setEditandoClase] = useState<Clase | null>(null)
   const [editandoPlan, setEditandoPlan] = useState<Plan | null>(null)
   const [confirmarCambio, setConfirmarCambio] = useState<{ mensaje: string; accion: () => Promise<void> } | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [mensajeOk, setMensajeOk] = useState('')
 
-  // Campos edición clase
   const [editFecha, setEditFecha] = useState('')
   const [editHora, setEditHora] = useState('')
   const [editProfesorId, setEditProfesorId] = useState('')
   const [editEstado, setEditEstado] = useState('')
   const [editHonorario, setEditHonorario] = useState('')
 
-  // Campos edición plan
   const [editPlanEstado, setEditPlanEstado] = useState('')
   const [editPlanFechaFin, setEditPlanFechaFin] = useState('')
   const [editPlanDuracion, setEditPlanDuracion] = useState('')
@@ -121,12 +124,8 @@ export default function AdminApp() {
       if (!session) { setRolVerificado('denegado'); return }
       setSesion(session)
       const { data } = await supabase.from('roles').select('rol').eq('email', session.user.email).single()
-      if (data?.rol === 'superadmin') {
-        setRolVerificado('ok')
-        cargarBase()
-      } else {
-        setRolVerificado('denegado')
-      }
+      if (data?.rol === 'superadmin') { setRolVerificado('ok'); cargarBase() }
+      else setRolVerificado('denegado')
     })
   }, [])
 
@@ -155,7 +154,6 @@ export default function AdminApp() {
 
   async function cargarClientes() {
     setCargando(true)
-    // Traer clientes con su último contrato para sede
     const { data: contratos } = await supabase
       .from('contratos')
       .select('cliente_id, sede_id, estado, updated_at, sedes(nombre)')
@@ -169,14 +167,12 @@ export default function AdminApp() {
 
     if (!clientesData) { setCargando(false); return }
 
-    // Para cada cliente, encontrar el contrato activo más reciente o el último archivado
     const contratosPorCliente: Record<string, any> = {}
     ;(contratos || []).forEach((ct: any) => {
       if (!contratosPorCliente[ct.cliente_id]) {
         contratosPorCliente[ct.cliente_id] = ct
       } else {
         const actual = contratosPorCliente[ct.cliente_id]
-        // Priorizar activo sobre archivado
         if (ct.estado === 'activo' && actual.estado !== 'activo') {
           contratosPorCliente[ct.cliente_id] = ct
         }
@@ -240,45 +236,56 @@ export default function AdminApp() {
       .order('fecha', { ascending: false })
       .order('hora', { ascending: false })
 
-    const clases: Clase[] = (data || []).map((c: any) => ({
-      id: c.id,
-      fecha: c.fecha,
-      hora: c.hora?.substring(0, 5) || '—',
-      duracion_min: c.duracion_min,
-      estado: c.estado,
-      cancelado_por_academia: c.cancelado_por_academia,
-      cancelado_tarde: c.cancelado_tarde,
-      honorario_valor: c.honorario_valor !== null ? Number(c.honorario_valor) : null,
-      numero_calculado: c.numero_calculado,
-      total_clases: c.contratos?.total_clases || 0,
-      profesor_nombre: c.profesores?.nombre || '—',
-      profesor_id: c.profesores?.id || '',
-      contrato_id: planId,
-      contrato_estado: c.contratos?.estado || '—',
-      cliente_id: clienteId,
-    }))
+    const { lunes, sabado } = semanaVigente()
 
-    setClasesPlан(prev => ({ ...prev, [planId]: clases }))
+    const clases: Clase[] = (data || [])
+      .map((c: any) => ({
+        id: c.id,
+        fecha: c.fecha,
+        hora: c.hora?.substring(0, 5) || '—',
+        duracion_min: c.duracion_min,
+        estado: c.estado,
+        cancelado_por_academia: c.cancelado_por_academia,
+        cancelado_tarde: c.cancelado_tarde,
+        honorario_valor: c.honorario_valor !== null ? Number(c.honorario_valor) : null,
+        numero_calculado: c.numero_calculado,
+        total_clases: c.contratos?.total_clases || 0,
+        profesor_nombre: c.profesores?.nombre || '—',
+        profesor_id: c.profesores?.id || '',
+        contrato_id: planId,
+        contrato_estado: c.contratos?.estado || '—',
+        cliente_id: clienteId,
+      }))
+      // Clases programadas: solo mostrar las de la semana vigente
+      .filter((c: Clase) =>
+        c.estado !== 'programada' || (c.fecha >= lunes && c.fecha <= sabado)
+      )
+
+    setClasesPlan(prev => ({ ...prev, [planId]: clases }))
   }
 
   // ─── FILTROS ─────────────────────────────────────────────────────────────
-  const clientesFiltrados = clientes.filter(c => {
-    if (busqueda && !c.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
-    if (filtroSede && c.sede_id !== filtroSede) return false
-    return true
-  }).filter(c => {
-    if (filtroVista === 'activos') {
+  const clientesFiltrados = clientes
+    .filter(c => {
+      if (busqueda && !c.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
+      if (filtroSede && c.sede_id !== filtroSede) return false
+      return true
+    })
+    .filter(c => {
+      if (filtroVista === 'activos') {
+        const planes = planesCliente[c.id]
+        if (!planes) return true
+        return planes.some(p => p.estado === 'activo')
+      }
+      return true
+    })
+    .filter(c => {
+      if (!filtroProfesor) return true
       const planes = planesCliente[c.id]
-      if (!planes) return true // aún no cargado, mostrar
-      return planes.some(p => p.estado === 'activo')
-    }
-    return true
-  }).filter(c => {
-    if (!filtroProfesor) return true
-    const planes = planesCliente[c.id]
-    if (!planes) return true
-    return planes.some(p => p.profesor_nombre === profesores.find(p2 => p2.id === filtroProfesor)?.nombre)
-  })
+      if (!planes) return true
+      const nombreProf = profesores.find(p => p.id === filtroProfesor)?.nombre
+      return planes.some(p => p.profesor_nombre === nombreProf)
+    })
 
   // ─── ACCIONES PLAN ───────────────────────────────────────────────────────
   function abrirEditarPlan(plan: Plan) {
@@ -309,13 +316,10 @@ export default function AdminApp() {
         }
         if (editPlanFechaFin) payload.fecha_fin = editPlanFechaFin
         await supabase.from('contratos').update(payload).eq('id', editandoPlan.id)
-
-        // Si cambió el valor pagado, agregar abono
         const diferencia = Number(editPlanValorPagado) - editandoPlan.total_pagado
         if (diferencia > 0) {
           await supabase.from('pagos').insert({ contrato_id: editandoPlan.id, monto: diferencia, fecha: new Date().toISOString().split('T')[0], metodo: 'Ajuste manual' })
         }
-
         setEditandoPlan(null)
         await cargarPlanes(editandoPlan.cliente_id)
         setMensajeOk('Plan actualizado correctamente')
@@ -341,14 +345,14 @@ export default function AdminApp() {
     if (editHora !== editandoClase.hora) cambios.push(`hora a ${editHora}`)
     const profNombre = profesores.find(p => p.id === editProfesorId)?.nombre
     if (editProfesorId !== (editandoClase as any).profesor_id) cambios.push(`profesor a ${profNombre}`)
-    if (editEstado !== (editandoClase.estado === 'cancelada' && !editandoClase.cancelado_por_academia ? 'inasistencia' : editandoClase.estado)) cambios.push(`estado a ${editEstado}`)
+    const estadoOriginal = editandoClase.estado === 'cancelada' && !editandoClase.cancelado_por_academia ? 'inasistencia' : editandoClase.estado
+    if (editEstado !== estadoOriginal) cambios.push(`estado a ${editEstado}`)
     if (editHonorario !== (editandoClase.honorario_valor !== null ? String(editandoClase.honorario_valor) : '')) cambios.push(`honorario a $${Number(editHonorario).toLocaleString('es-CO')}`)
 
-    const fecha = editandoClase.fecha
     const clienteNombre = clientes.find(c => c.id === editandoClase.cliente_id)?.nombre || '—'
 
     setConfirmarCambio({
-      mensaje: `¿Está seguro de modificar ${cambios.join(', ')} de la clase de ${clienteNombre} del ${fecha}?`,
+      mensaje: `¿Está seguro de modificar ${cambios.join(', ')} de la clase de ${clienteNombre} del ${editandoClase.fecha}?`,
       accion: async () => {
         const payload: any = {
           fecha: editFecha,
@@ -356,8 +360,6 @@ export default function AdminApp() {
           profesor_id: editProfesorId,
           honorario_valor: editHonorario !== '' ? Number(editHonorario) : null,
         }
-
-        // Estado
         if (editEstado === 'inasistencia') {
           payload.estado = 'cancelada'
           payload.cancelado_por_academia = false
@@ -369,7 +371,6 @@ export default function AdminApp() {
             payload.cancelado_tarde = false
           }
         }
-
         await supabase.from('clases').update(payload).eq('id', editandoClase.id)
         setEditandoClase(null)
         await cargarClases(editandoClase.contrato_id, editandoClase.cliente_id)
@@ -384,16 +385,15 @@ export default function AdminApp() {
     setConfirmarCambio({
       mensaje: `¿Mover la clase de ${clienteNombre} del ${clase.fecha} al plan ${destino}?`,
       accion: async () => {
-        const { data: contratos } = await supabase.from('contratos')
+        const { data: cts } = await supabase.from('contratos')
           .select('id, clases_tomadas')
           .eq('cliente_id', clase.cliente_id)
           .eq('estado', destino)
           .order('updated_at', { ascending: false })
           .limit(1)
-        if (!contratos?.length) { alert(`No hay plan ${destino} para este cliente`); return }
-        const dest = contratos[0]
+        if (!cts?.length) { alert(`No hay plan ${destino} para este cliente`); return }
+        const dest = cts[0]
         await supabase.from('clases').update({ contrato_id: dest.id }).eq('id', clase.id)
-        // Ajustar contadores
         const { data: origen } = await supabase.from('contratos').select('clases_tomadas').eq('id', clase.contrato_id).single()
         if (origen && clase.estado === 'dada') {
           await supabase.from('contratos').update({ clases_tomadas: Math.max(0, (origen.clases_tomadas || 0) - 1) }).eq('id', clase.contrato_id)
@@ -425,11 +425,11 @@ export default function AdminApp() {
     })
   }
 
-  // ─── PANTALLA LOGIN ───────────────────────────────────────────────────────
+  // ─── LOGIN ────────────────────────────────────────────────────────────────
   if (rolVerificado === 'cargando') return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: TEAL }}>
-      <div style={{ width: '36px', height: '36px', border: '3px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <div style={{ width: '36px', height: '36px', border: '3px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
     </div>
   )
 
@@ -438,7 +438,7 @@ export default function AdminApp() {
       <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}`}</style>
       <div style={{ width: '100%', maxWidth: '360px', animation: 'fadeUp 0.4s ease' }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <img src="/apple-touch-icon.png" alt="Logo" style={{ width: '80px', height: '80px', borderRadius: '24px', margin: '0 auto 16px', display: 'block', background: 'white', padding: '6px', boxSizing: 'border-box' }} />
+          <img src="/apple-touch-icon.png" alt="Logo" style={{ width: '80px', height: '80px', borderRadius: '24px', margin: '0 auto 16px', display: 'block', background: 'white', padding: '6px', boxSizing: 'border-box' as const }} />
           <h1 style={{ margin: 0, color: 'white', fontSize: '26px', fontWeight: '800' }}>Academia Ruby</h1>
           <p style={{ margin: '6px 0 0', color: 'rgba(255,255,255,0.6)', fontSize: '13px', letterSpacing: '0.5px' }}>PANEL ADMINISTRATIVO</p>
         </div>
@@ -447,13 +447,13 @@ export default function AdminApp() {
             <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#6b7280', marginBottom: '8px', letterSpacing: '1px' }}>CORREO</label>
             <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && login()}
               placeholder="correo@ejemplo.com"
-              style={{ width: '100%', padding: '13px 14px', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '15px', boxSizing: 'border-box' }} />
+              style={{ width: '100%', padding: '13px 14px', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '15px', boxSizing: 'border-box' as const }} />
           </div>
           <div style={{ marginBottom: '20px' }}>
             <label style={{ display: 'block', fontSize: '11px', fontWeight: '800', color: '#6b7280', marginBottom: '8px', letterSpacing: '1px' }}>CONTRASEÑA</label>
             <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} onKeyDown={e => e.key === 'Enter' && login()}
               placeholder="••••••••"
-              style={{ width: '100%', padding: '13px 14px', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '15px', boxSizing: 'border-box' }} />
+              style={{ width: '100%', padding: '13px 14px', border: '2px solid #e5e7eb', borderRadius: '10px', fontSize: '15px', boxSizing: 'border-box' as const }} />
           </div>
           {loginError && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px', color: '#dc2626', fontSize: '13px' }}>{loginError}</div>}
           <button onClick={login} disabled={loginCargando}
@@ -468,13 +468,10 @@ export default function AdminApp() {
   // ─── APP PRINCIPAL ────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
-      <style>{`
-        @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-        * { box-sizing: border-box; }
-      `}</style>
+      <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} *{box-sizing:border-box}`}</style>
 
       {/* Header */}
-      <div style={{ background: TEAL_DARK, padding: '0', position: 'sticky', top: 0, zIndex: 100 }}>
+      <div style={{ background: TEAL_DARK, position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <img src="/Logo_RubySalamanca.png" alt="Logo" style={{ height: '28px', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
@@ -485,12 +482,8 @@ export default function AdminApp() {
             Salir
           </button>
         </div>
-        {/* Tabs */}
         <div style={{ display: 'flex', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-          {[
-            { key: 'clientes', label: '👥 Clientes' },
-            { key: 'reportes', label: '📊 Reportes' },
-          ].map(tab => (
+          {[{ key: 'clientes', label: '👥 Clientes' }, { key: 'reportes', label: '📊 Reportes' }].map(tab => (
             <button key={tab.key} onClick={() => setVistaActual(tab.key as any)}
               style={{ flex: 1, padding: '12px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: '700', fontFamily: 'inherit',
                 background: vistaActual === tab.key ? 'white' : 'transparent',
@@ -502,14 +495,13 @@ export default function AdminApp() {
         </div>
       </div>
 
-      {/* Mensaje ok */}
       {mensajeOk && (
         <div style={{ background: '#dcfce7', border: '1px solid #86efac', margin: '12px 16px', padding: '12px 16px', borderRadius: '10px', color: '#166534', fontSize: '14px', fontWeight: '600', animation: 'fadeUp 0.3s ease' }}>
           ✓ {mensajeOk}
         </div>
       )}
 
-      {/* ── VISTA REPORTES ── */}
+      {/* Reportes */}
       {vistaActual === 'reportes' && (
         <div style={{ padding: '32px 16px', textAlign: 'center' }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
@@ -518,9 +510,9 @@ export default function AdminApp() {
         </div>
       )}
 
-      {/* ── VISTA CLIENTES ── */}
+      {/* Clientes */}
       {vistaActual === 'clientes' && (
-        <div style={{ padding: '16px' }}>
+        <div style={{ padding: '16px', paddingBottom: '48px' }}>
 
           {/* Filtros */}
           <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -529,7 +521,10 @@ export default function AdminApp() {
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {([{ k: 'activos', l: '🟢 Con plan activo' }, { k: 'todos', l: '👥 Todos' }] as const).map(f => (
                 <button key={f.k} onClick={() => setFiltroVista(f.k)}
-                  style={{ padding: '8px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', border: `1.5px solid ${filtroVista === f.k ? TEAL : TEAL_MID}`, background: filtroVista === f.k ? TEAL : 'white', color: filtroVista === f.k ? 'white' : TEAL_DARK }}>
+                  style={{ padding: '8px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', cursor: 'pointer',
+                    border: `1.5px solid ${filtroVista === f.k ? TEAL : TEAL_MID}`,
+                    background: filtroVista === f.k ? TEAL : 'white',
+                    color: filtroVista === f.k ? 'white' : TEAL_DARK }}>
                   {f.l}
                 </button>
               ))}
@@ -540,13 +535,8 @@ export default function AdminApp() {
                 <option value="">🏢 Todas las sedes</option>
                 {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
-              <select value={filtroProfesor} onChange={async e => {
-                setFiltroProfesor(e.target.value)
-                // Cargar planes de todos los clientes para filtrar
-                for (const c of clientes) {
-                  if (!planesCliente[c.id]) await cargarPlanes(c.id)
-                }
-              }}
+              {/* FIX: sin async, sin loop — solo actualiza el estado */}
+              <select value={filtroProfesor} onChange={e => setFiltroProfesor(e.target.value)}
                 style={{ flex: 1, padding: '9px 10px', border: `1.5px solid ${filtroProfesor ? TEAL : TEAL_MID}`, borderRadius: '10px', fontSize: '13px', background: filtroProfesor ? TEAL_LIGHT : 'white' }}>
                 <option value="">👨‍🏫 Todos los profes</option>
                 {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
@@ -563,13 +553,11 @@ export default function AdminApp() {
 
             return (
               <div key={cliente.id} style={{ background: 'white', borderRadius: '14px', marginBottom: '10px', overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
-                {/* Fila cliente */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '8px', alignItems: 'center', padding: '14px 16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '8px', alignItems: 'center', padding: '14px 16px' }}>
                   <div>
                     <p style={{ margin: 0, fontWeight: '700', fontSize: '14px', color: '#1f2937' }}>{cliente.nombre}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#9ca3af' }}>{cliente.grupo_whatsapp || '—'}</p>
+                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#9ca3af' }}>{cliente.grupo_whatsapp || '—'} · {cliente.sede_nombre}</p>
                   </div>
-                  <span style={{ fontSize: '12px', color: '#6b7280', whiteSpace: 'nowrap' }}>{cliente.sede_nombre}</span>
                   <button onClick={async () => {
                     if (expandido) { setClienteExpandido(null); return }
                     setClienteExpandido(cliente.id)
@@ -580,7 +568,6 @@ export default function AdminApp() {
                   </button>
                 </div>
 
-                {/* Planes */}
                 {expandido && (
                   <div style={{ borderTop: `1px solid ${TEAL_LIGHT}`, background: '#f8fafc' }}>
                     {planes.length === 0 && <p style={{ padding: '16px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Sin planes registrados</p>}
@@ -591,7 +578,6 @@ export default function AdminApp() {
 
                       return (
                         <div key={plan.id} style={{ borderBottom: `1px solid ${TEAL_LIGHT}` }}>
-                          {/* Fila plan */}
                           <div style={{ padding: '12px 16px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                               <div>
@@ -626,11 +612,10 @@ export default function AdminApp() {
                               if (!clasesPlан[plan.id]) await cargarClases(plan.id, cliente.id)
                             }}
                               style={{ width: '100%', padding: '8px', background: planExp ? TEAL : 'white', color: planExp ? 'white' : TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
-                              {planExp ? '▲ Ocultar clases' : `▼ Ver clases (${clases.length || '...'})`}
+                              {planExp ? '▲ Ocultar clases' : `▼ Ver clases`}
                             </button>
                           </div>
 
-                          {/* Clases */}
                           {planExp && (
                             <div style={{ background: 'white', borderTop: `1px solid ${TEAL_LIGHT}` }}>
                               {clases.length === 0 && <p style={{ padding: '16px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Sin clases registradas</p>}
@@ -673,13 +658,12 @@ export default function AdminApp() {
         </div>
       )}
 
-      {/* ── MODAL EDITAR PLAN ── */}
+      {/* Modal editar plan */}
       {editandoPlan && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 200 }}>
           <div style={{ background: 'white', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '480px', padding: '24px 20px 36px', maxHeight: '85vh', overflowY: 'auto' }}>
             <div style={{ width: '44px', height: '5px', background: '#e5e7eb', borderRadius: '3px', margin: '0 auto 20px' }} />
             <p style={{ margin: '0 0 20px', fontSize: '17px', fontWeight: '800', color: '#111' }}>Editar plan — {editandoPlan.instrumento_nombre}</p>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Estado del plan</label>
@@ -695,13 +679,11 @@ export default function AdminApp() {
                   ))}
                 </div>
               </div>
-
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Fecha de finalización</label>
                 <input type="date" value={editPlanFechaFin} onChange={e => setEditPlanFechaFin(e.target.value)}
                   style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
               </div>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Duración (min)</label>
@@ -716,7 +698,6 @@ export default function AdminApp() {
                     style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
                 </div>
               </div>
-
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Valor pagado ($)</label>
                 <input type="number" value={editPlanValorPagado} onChange={e => setEditPlanValorPagado(e.target.value)}
@@ -724,29 +705,21 @@ export default function AdminApp() {
                 <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#9ca3af' }}>Si aumenta el valor, se registra un abono por la diferencia</p>
               </div>
             </div>
-
             <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
-              <button onClick={guardarPlan}
-                style={{ flex: 1, padding: '14px', background: TEAL, color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '15px', fontWeight: '800' }}>
-                Guardar cambios
-              </button>
-              <button onClick={() => setEditandoPlan(null)}
-                style={{ padding: '14px 20px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '14px' }}>
-                Cancelar
-              </button>
+              <button onClick={guardarPlan} style={{ flex: 1, padding: '14px', background: TEAL, color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '15px', fontWeight: '800' }}>Guardar cambios</button>
+              <button onClick={() => setEditandoPlan(null)} style={{ padding: '14px 20px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '14px' }}>Cancelar</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── MODAL EDITAR CLASE ── */}
+      {/* Modal editar clase */}
       {editandoClase && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 200 }}>
           <div style={{ background: 'white', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '480px', padding: '24px 20px 36px', maxHeight: '85vh', overflowY: 'auto' }}>
             <div style={{ width: '44px', height: '5px', background: '#e5e7eb', borderRadius: '3px', margin: '0 auto 20px' }} />
             <p style={{ margin: '0 0 4px', fontSize: '17px', fontWeight: '800', color: '#111' }}>Editar clase</p>
             <p style={{ margin: '0 0 20px', fontSize: '13px', color: '#9ca3af' }}>{editandoClase.fecha} · {editandoClase.hora} · {editandoClase.profesor_nombre}</p>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
@@ -760,7 +733,6 @@ export default function AdminApp() {
                     style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
                 </div>
               </div>
-
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Profesor</label>
                 <select value={editProfesorId} onChange={e => setEditProfesorId(e.target.value)}
@@ -769,7 +741,6 @@ export default function AdminApp() {
                   {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
               </div>
-
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Estado</label>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -790,15 +761,12 @@ export default function AdminApp() {
                   ))}
                 </div>
               </div>
-
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Honorario ($)</label>
                 <input type="number" value={editHonorario} onChange={e => setEditHonorario(e.target.value)}
                   placeholder="Sin honorario"
                   style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
               </div>
-
-              {/* Mover clase */}
               <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '12px' }}>
                 <p style={{ margin: '0 0 8px', fontSize: '12px', fontWeight: '700', color: '#6b7280' }}>Mover clase a otro plan</p>
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -813,22 +781,15 @@ export default function AdminApp() {
                 </div>
               </div>
             </div>
-
             <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
-              <button onClick={guardarClase}
-                style={{ flex: 1, padding: '14px', background: TEAL, color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '15px', fontWeight: '800' }}>
-                Guardar cambios
-              </button>
-              <button onClick={() => setEditandoClase(null)}
-                style={{ padding: '14px 20px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '14px' }}>
-                Cancelar
-              </button>
+              <button onClick={guardarClase} style={{ flex: 1, padding: '14px', background: TEAL, color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '15px', fontWeight: '800' }}>Guardar cambios</button>
+              <button onClick={() => setEditandoClase(null)} style={{ padding: '14px 20px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '14px' }}>Cancelar</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── MODAL CONFIRMAR ── */}
+      {/* Modal confirmar */}
       {confirmarCambio && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: '24px' }}>
           <div style={{ background: 'white', borderRadius: '16px', padding: '24px', maxWidth: '360px', width: '100%' }}>
