@@ -330,8 +330,22 @@ export default function AdminApp() {
       .filter((c: Clase) => c.estado !== 'programada' || (c.fecha >= lunes && c.fecha <= sabado))
       const { data: planData } = await supabase.from('contratos').select('duracion_min').eq('id', planId).single()
       const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
-      clases.forEach(c => { c.numero_calculado = numeracion.get(c.id) ?? null })
-      const maxNumeracion = numeracion.size > 0 ? Math.max(...numeracion.values()) : 0
+        clases.forEach(c => { c.numero_calculado = numeracion.get(c.id) ?? null })
+        const maxNumeracion = numeracion.size > 0 ? Math.max(...numeracion.values()) : 0
+        
+        // Calcular numeración proyectada para clases confirmadas
+        const durPlan = planData?.duracion_min || 60
+        const clasesOrdenadas = [...clases].sort((a, b) =>
+          (a.fecha + a.hora).localeCompare(b.fecha + b.hora)
+        )
+        let conteoProyectado = maxNumeracion
+        clasesOrdenadas.forEach(c => {
+          if (c.estado === 'confirmada') {
+            const fraccion = parseFloat(((c.duracion_min || durPlan) / durPlan).toFixed(4))
+            conteoProyectado = parseFloat((conteoProyectado + fraccion).toFixed(4))
+            c.numero_proyectado = conteoProyectado
+          }
+        })
       setClasesPlan(prev => ({ ...prev, [planId]: clases }))
       setPlanesCliente(prev => {
         const planes = prev[clienteId] || []
