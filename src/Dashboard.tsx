@@ -18,6 +18,8 @@ const MENU = [
   { id: 'auditoria',  label: 'Auditoría',  icon: '🔍' },
 ]
 
+const BARRA_MOVIL = 52 // altura en px de la barra superior móvil
+
 export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string | null }) {
   const [seccion, setSeccion]             = useState(() => sessionStorage.getItem('seccion') || 'inicio')
   const [inicioKey, setInicioKey]         = useState(0)
@@ -29,7 +31,6 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
   const [verMenu, setVerMenu]             = useState(false)
   const [menuAbierto, setMenuAbierto]     = useState(false)
 
-  // Detectar si es móvil
   const [esMobil, setEsMobil] = useState(() => window.innerWidth < 768)
   useEffect(() => {
     const handler = () => setEsMobil(window.innerWidth < 768)
@@ -73,7 +74,7 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
     if (id === 'clientes')   setClientesKey(k => k + 1)
     if (id === 'profesores') setProfesoresKey(k => k + 1)
     setVerNotif(false)
-    setMenuAbierto(false) // cerrar menú al navegar en móvil
+    setMenuAbierto(false)
   }
 
   function tiempoRelativo(fecha: string) {
@@ -91,9 +92,12 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
     return { emoji: '📌', color: '#1d4ed8', bg: '#eff6ff' }
   }
 
+  // Altura disponible para el contenido en móvil
+  const alturaContenido = esMobil ? `calc(100vh - ${BARRA_MOVIL}px)` : '100vh'
+
   const menuLateral = (
     <div style={{
-      width: esMobil ? '100%' : '200px',
+      width: '200px',
       flexShrink: 0,
       background: '#1e293b',
       color: 'white',
@@ -127,8 +131,6 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
           </button>
         ))}
       </nav>
-
-      {/* Footer: avatar + campana */}
       <div style={{ padding: '16px 24px', borderTop: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ position: 'relative' }}>
           <button onClick={() => setVerMenu(v => !v)}
@@ -168,9 +170,8 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'sans-serif', overflow: 'hidden' }}>
 
-      {/* Menú lateral — desktop: siempre visible, móvil: drawer */}
-      {!esMobil && menuLateral}
-      {esMobil && menuLateral}
+      {/* Menú lateral */}
+      {menuLateral}
 
       {/* Overlay oscuro al abrir menú en móvil */}
       {esMobil && menuAbierto && (
@@ -179,11 +180,22 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
       )}
 
       {/* Contenido principal */}
-      <div style={{ flex: 1, minWidth: 0, background: '#f8fafc', overflowX: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+      <div style={{
+        flex: 1, minWidth: 0, background: '#f8fafc',
+        display: 'flex', flexDirection: 'column',
+        height: '100vh', overflow: 'hidden',
+        // En móvil el menú está en position:fixed, así que el contenido ocupa todo el ancho
+        marginLeft: 0,
+      }}>
 
         {/* Barra superior móvil */}
-       {esMobil && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#1e293b', flexShrink: 0, position: 'sticky', top: 0, zIndex: 200, height: '52px', boxSizing: 'border-box' }}>
+        {esMobil && (
+          <div style={{
+            height: `${BARRA_MOVIL}px`,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '0 16px', background: '#1e293b',
+            flexShrink: 0, zIndex: 200,
+          }}>
             <button onClick={() => setMenuAbierto(v => !v)}
               style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '5px', padding: '4px' }}>
               <span style={{ display: 'block', width: '22px', height: '2px', background: 'white', borderRadius: '2px' }} />
@@ -204,7 +216,13 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
           </div>
         )}
 
-       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {/* Área de módulos — altura exacta disponible */}
+        <div style={{
+          flex: 1,
+          height: alturaContenido,
+          overflow: 'hidden',
+          position: 'relative',
+        }}>
           {seccion === 'inicio'     && <Inicio key={inicioKey} onNavegar={navegar} onNuevaNotificacion={cargarNoLeidas} />}
           {seccion === 'clientes'   && <Clientes key={clientesKey} />}
           {seccion === 'profesores' && <Profesores key={profesoresKey} />}
