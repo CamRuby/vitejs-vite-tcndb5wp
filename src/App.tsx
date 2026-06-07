@@ -4,6 +4,8 @@ import Login from './Login'
 import Dashboard from './Dashboard'
 import ProfesorApp from './pages/ProfesorApp'
 const esProfesor = window.location.pathname.startsWith('/profesor')
+import AdminApp from './pages/AdminApp'
+const esAdmin = window.location.pathname.startsWith('/admin')
 export default function App() {
   const [sesion, setSesion] = useState<any>(null)
   const [rol, setRol] = useState<string | null>(null)
