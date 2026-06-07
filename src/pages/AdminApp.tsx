@@ -328,10 +328,18 @@ export default function AdminApp() {
         cliente_id: clienteId,
       }))
       .filter((c: Clase) => c.estado !== 'programada' || (c.fecha >= lunes && c.fecha <= sabado))
-    const { data: planData } = await supabase.from('contratos').select('duracion_min').eq('id', planId).single()
-    const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
-    clases.forEach(c => { c.numero_calculado = numeracion.get(c.id) ?? null })
-    setClasesPlan(prev => ({ ...prev, [planId]: clases }))
+      const { data: planData } = await supabase.from('contratos').select('duracion_min').eq('id', planId).single()
+      const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
+      clases.forEach(c => { c.numero_calculado = numeracion.get(c.id) ?? null })
+      const maxNumeracion = numeracion.size > 0 ? Math.max(...numeracion.values()) : 0
+      setClasesPlan(prev => ({ ...prev, [planId]: clases }))
+      setPlanesCliente(prev => {
+        const planes = prev[clienteId] || []
+        return {
+    ...prev,
+    [clienteId]: planes.map(p => p.id === planId ? { ...p, _conteo: maxNumeracion } : p)
+  }
+})
   }
 
   // ─── FILTROS ─────────────────────────────────────────────────────────────
