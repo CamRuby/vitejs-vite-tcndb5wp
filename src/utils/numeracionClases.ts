@@ -2,7 +2,7 @@
 // Fuente única de verdad para calcular la numeración de clases en un plan.
 // Usar esta función en todos los módulos: Clientes, AdminApp, Reportes, Horarios.
 
-export function calcularNumeracion(clases: any[]): Map<string, number> {
+export function calcularNumeracion(clases: any[], duracionPlan: number = 60): Map<string, number> {
   // Ordenar cronológicamente: fecha ascendente, luego hora ascendente
   const ordenadas = [...clases].sort((a, b) => {
     const fechaDiff = (a.fecha || '').localeCompare(b.fecha || '')
@@ -21,7 +21,9 @@ export function calcularNumeracion(clases: any[]): Map<string, number> {
     const cuentaEnPlan = (c.estado === 'dada' && !c.es_cortesia) || esInasistencia
 
     if (cuentaEnPlan) {
-      conteo++
+      const durClase = Number(c.duracion_min) || duracionPlan
+      const fraccion = parseFloat((durClase / duracionPlan).toFixed(4))
+      conteo = parseFloat((conteo + fraccion).toFixed(4))
       mapa.set(c.id, conteo)
     }
   })
