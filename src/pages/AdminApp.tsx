@@ -52,6 +52,7 @@ interface Clase {
   contrato_id: string
   contrato_estado: string
   cliente_id: string
+  numero_proyectado?: number | null
 }
 
 interface Taller {
