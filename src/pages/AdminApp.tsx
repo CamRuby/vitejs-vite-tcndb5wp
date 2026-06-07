@@ -653,10 +653,14 @@ export default function AdminApp() {
                 const prof = e.target.value
                 setFiltroProfesor(prof)
                 if (!prof) { setClientesConProfesor(null); return }
-                const { data } = await supabase.from('contratos')
-                  .select('cliente_id')
-                  .eq('profesor_id', prof)
-                setClientesConProfesor(new Set((data || []).map((c: any) => c.cliente_id)))
+               const { data } = await supabase.from('clases')
+                    .select('contratos(cliente_id)')
+                    .eq('profesor_id', prof)
+                  setClientesConProfesor(new Set(
+                    (data || [])
+                      .map((c: any) => c.contratos?.cliente_id)
+                      .filter(Boolean)
+                  ))
               }}
                 style={{ flex: 1, padding: '9px 10px', border: `1.5px solid ${filtroProfesor ? TEAL : TEAL_MID}`, borderRadius: '10px', fontSize: '13px', background: filtroProfesor ? TEAL_LIGHT : 'white' }}>
                 <option value="">👨‍🏫 Todos los profes</option>
