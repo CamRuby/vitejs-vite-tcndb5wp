@@ -573,7 +573,7 @@ export default function AdminApp() {
                     {planes.length === 0 && <p style={{ padding: '16px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Sin planes registrados</p>}
                     {planes.map(plan => {
                       const planExp = planExpandido === plan.id
-                      const clases = clasesPlан[plan.id] || []
+                      const clases = clasesPlan[plan.id] || []
                       const esActivo = plan.estado === 'activo'
 
                       return (
@@ -609,7 +609,7 @@ export default function AdminApp() {
                             <button onClick={async () => {
                               if (planExp) { setPlanExpandido(null); return }
                               setPlanExpandido(plan.id)
-                              if (!clasesPlан[plan.id]) await cargarClases(plan.id, cliente.id)
+                              if (!clasesPlan[plan.id]) await cargarClases(plan.id, cliente.id)
                             }}
                               style={{ width: '100%', padding: '8px', background: planExp ? TEAL : 'white', color: planExp ? 'white' : TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
                               {planExp ? '▲ Ocultar clases' : `▼ Ver clases`}
