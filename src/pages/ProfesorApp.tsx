@@ -1542,11 +1542,16 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
           <span style={{ padding:'4px 10px', borderRadius:'20px', fontSize:'11px', fontWeight:'700', background:badge.bg, color:badge.color, whiteSpace:'nowrap' }}>
             {badge.label}
           </span>
-          {mostrarFecha && !c.esTaller && !c.es_cortesia && c.numero_calculado && c.contratos?.total_clases && (
-            <span style={{ fontSize:'12px', fontWeight:'800', color:TEAL, background:'#e8f5f5', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
-              {c.numero_calculado}/{c.contratos.total_clases}
-            </span>
-          )}
+         {!c.esTaller && !c.es_cortesia && c.numero_calculado && c.contratos?.total_clases && !c.numero_proyectado && (
+  <span style={{ fontSize:'12px', fontWeight:'800', color: TEAL, background:'#e8f5f5', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
+    clase {c.numero_calculado}/{c.contratos.total_clases}
+  </span>
+)}
+{!c.esTaller && !c.es_cortesia && c.numero_proyectado && c.contratos?.total_clases && (
+  <span style={{ fontSize:'12px', fontWeight:'800', color:'#9f1239', background:'#fff1f2', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
+    ~clase {c.numero_proyectado}/{c.contratos.total_clases}
+  </span>
+)}
           {mostrarHonorario && (
             honorario === 'pendiente'
               ? <span style={{ fontSize:'11px', fontWeight:'700', color:'#c2410c', background:'#fff7ed', padding:'3px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>⏳ Pendiente</span>
