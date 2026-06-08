@@ -1864,9 +1864,22 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                                 if (total > 0 && tomadas >= total) { setPlanCompleto(true); setConfirmarDada(false) }
                                else {
                                 setEditEstado('confirmada'); setPlanCompleto(false)
-                                const { data: ctWA } = await supabase.from('contratos').select('conteo_whatsapp').eq('id', claseEditando.contratos.id).single()
+                                const [{ data: ctWA }, { data: todasClases }] = await Promise.all([
+                                  supabase.from('contratos').select('conteo_whatsapp').eq('id', claseEditando.contratos.id).single(),
+                                  supabase.from('clases')
+                                    .select('id, fecha, hora, duracion_min, estado, cancelado_por_academia, cancelado_tarde, es_cortesia, inasistencia_perdonada, contrato_id, contratos(duracion_min)')
+                                    .eq('contrato_id', claseEditando.contratos.id)
+                                    .order('fecha', { ascending: true })
+                                    .order('hora', { ascending: true })
+                                ])
                                 setEditConteoWhatsapp(ctWA?.conteo_whatsapp != null ? ctWA.conteo_whatsapp + 1 : '')
-}
+                                const durPlan = claseEditando.contratos?.duracion_min || claseEditando.duracion_min || 60
+                                const numeracion = calcularNumeracion(todasClases || [], durPlan)
+                                const maxNumeracion = numeracion.size > 0 ? Math.max(...numeracion.values()) : 0
+                                const fraccion = parseFloat(((claseEditando.duracion_min || durPlan) / durPlan).toFixed(4))
+                                const proyectado = parseFloat((maxNumeracion + fraccion).toFixed(4))
+                                setClaseEditando((prev: any) => ({ ...prev, numero_calculado: proyectado, numero_proyectado: proyectado }))
+                                }
                               } else if (est === 'dada' && editEstado !== 'dada') {
                                 if (editEstado !== 'confirmada') { setEditError('La clase debe estar Confirmada antes de marcarla como Dada'); return }
                                 setConfirmarDada(true); setPlanCompleto(false)
