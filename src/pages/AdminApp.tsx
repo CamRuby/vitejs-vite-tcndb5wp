@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { calcularNumeracion } from '../utils/numeracionClases'
 
-const TEAL = '#1a8a8a'
+const TEAL = '#1a8a8a' 
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
 const TEAL_DARK = '#146f6f'
