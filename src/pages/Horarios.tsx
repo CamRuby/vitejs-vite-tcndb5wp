@@ -1991,18 +1991,29 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                       {salones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                     </select>
                   </div>
-            {editEstado === 'confirmada' && (
-  <div style={{ marginBottom: '20px' }}>
-    <label style={labelStyle}>
-      <span style={{ color: '#dc2626', fontWeight: '700' }}>Conteo WhatsApp</span>
-      <span style={{ fontSize: '11px', color: '#aaa', marginLeft: '6px' }}>(número de clase según WhatsApp)</span>
-    </label>
-    <input type="number" min={1} value={editConteoWhatsapp}
-      onChange={e => setEditConteoWhatsapp(e.target.value === '' ? '' : Number(e.target.value))}
-      placeholder="Sin conteo"
-      style={{ ...fieldStyle, borderColor: '#dc2626', color: '#dc2626', fontWeight: '700' }} />
-  </div>
-)}
+          {editEstado === 'confirmada' && (
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStyle}>
+                      <span style={{ color: '#b45309', fontWeight: '700' }}>Número proyectado</span>
+                    </label>
+                    <div style={{ padding: '9px 12px', border: `1px solid #fde68a`, borderRadius: '8px', fontSize: '14px', background: '#fffbeb', color: '#b45309', fontWeight: '700' }}>
+                      {claseEditando?.numero_calculado ?? '—'}
+                    </div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStyle}>
+                      <span style={{ color: '#dc2626', fontWeight: '700' }}>Conteo WhatsApp</span>
+                    </label>
+                    <input type="number" min={1} value={editConteoWhatsapp}
+                      onChange={e => setEditConteoWhatsapp(e.target.value === '' ? '' : Number(e.target.value))}
+                      placeholder="Sin conteo"
+                      style={{ ...fieldStyle, borderColor: '#dc2626', color: '#dc2626', fontWeight: '700' }} />
+                  </div>
+                </div>
+              </div>
+            )}
                 </>
               )}
 
