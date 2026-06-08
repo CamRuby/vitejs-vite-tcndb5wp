@@ -368,7 +368,7 @@ export default function AdminApp() {
       if (filtroVista === 'activos') {
         const planes = planesCliente[c.id]
         if (!planes) return true
-        return planes.some(p => p.estado === 'activo')
+        return planes.some(p => p.estado === 'activo' || p.estado === 'completado')
       }
       return true
     })
