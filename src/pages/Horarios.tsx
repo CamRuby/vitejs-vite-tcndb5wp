@@ -1229,9 +1229,12 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                       {mainClass && !taller && (() => {
                         const col2 = getColorEstado(mainClass.es_cortesia ? 'dada' : mainClass.estado, mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && mainClass.cancelado_tarde)
                         // número calculado en tiempo real desde la view de Supabase
+                       const esProyectado = mainClass.estado === 'confirmada' && mainClass.numero_proyectado
                         const numPlan = mainClass.contratos?.total_clases && mainClass.numero_calculado
-                          ? `${mainClass.numero_calculado}/${mainClass.contratos.total_clases}`
+                          ? `${esProyectado ? '~' : ''}${mainClass.numero_calculado}/${mainClass.contratos.total_clases}`
                           : ''
+                        const colorNum = esProyectado ? '#b45309' : undefined
+                        
                         return (
                           <div onClick={(e) => abrirClaseExistente(e, mainClass)} title="Clic para editar"
                             style={{
