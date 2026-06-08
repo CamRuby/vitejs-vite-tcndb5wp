@@ -301,6 +301,46 @@ export default function ProfesorApp() {
         }
       })
     }
+   // Calcular número proyectado para clases confirmadas
+    const contratosHoy = [...new Set(clasesFinales.map((c: any) => c.contrato_id).filter(Boolean))]
+    let numeracionHoyMap: Map<string, number> = new Map()
+    if (contratosHoy.length > 0) {
+      const { data: todasClasesHoy } = await supabase
+        .from('clases')
+        .select('id, fecha, hora, duracion_min, estado, cancelado_por_academia, cancelado_tarde, es_cortesia, inasistencia_perdonada, contrato_id, contratos(duracion_min)')
+        .in('contrato_id', contratosHoy)
+        .order('fecha', { ascending: true })
+        .order('hora', { ascending: true })
+      const porContratoHoy: Record<string, any[]> = {}
+      ;(todasClasesHoy || []).forEach((c: any) => {
+        if (!porContratoHoy[c.contrato_id]) porContratoHoy[c.contrato_id] = []
+        porContratoHoy[c.contrato_id].push(c)
+      })
+      // Número real (dadas e inasistencias)
+      const numeracionReal: Record<string, number> = {}
+      Object.entries(porContratoHoy).forEach(([contratoId, clases]) => {
+        const durPlan = clases[0]?.contratos?.duracion_min || 60
+        const numMap = calcularNumeracion(clases, durPlan)
+        numMap.forEach((num, id) => { numeracionHoyMap.set(id, num); numeracionReal[contratoId] = Math.max(numeracionReal[contratoId] || 0, num) })
+      })
+      // Número proyectado para confirmadas (en orden cronológico)
+      const confirmadas = clasesFinales
+        .filter((c: any) => c.estado === 'confirmada' && c.contrato_id)
+        .sort((a: any, b: any) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`))
+      confirmadas.forEach((c: any) => {
+        const durPlan = porContratoHoy[c.contrato_id]?.[0]?.contratos?.duracion_min || 60
+        const fraccion = parseFloat(((c.duracion_min || durPlan) / durPlan).toFixed(4))
+        const base = numeracionReal[c.contrato_id] || 0
+        const proyectado = parseFloat((base + fraccion).toFixed(4))
+        numeracionReal[c.contrato_id] = proyectado
+        numeracionHoyMap.set(c.id, proyectado)
+        c.numero_proyectado = proyectado
+      })
+    }
+    clasesFinales.forEach((c: any) => {
+      if (numeracionHoyMap.has(c.id)) c.numero_calculado = numeracionHoyMap.get(c.id)
+    })
+
     clasesFinales.sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`))
     setClases(clasesFinales)
     setCargandoClases(false)
