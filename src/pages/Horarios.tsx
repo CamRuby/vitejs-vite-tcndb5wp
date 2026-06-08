@@ -1996,7 +1996,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <div style={{ flex: 1 }}>
                     <label style={labelStyle}>
-                      <span style={{ color: '#b45309', fontWeight: '700' }}>Número proyectado</span>
+                      <span style={{ color: '#b45309', fontWeight: '700' }}>Número de la clase confirmada</span>
                     </label>
                     <div style={{ padding: '9px 12px', border: `1px solid #fde68a`, borderRadius: '8px', fontSize: '14px', background: '#fffbeb', color: '#b45309', fontWeight: '700' }}>
                       {claseEditando?.numero_calculado ?? '—'}
