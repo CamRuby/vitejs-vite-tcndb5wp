@@ -347,7 +347,33 @@ export default function ProfesorApp() {
       contratos: null, cancelado_por_academia: false, es_cortesia: false,
       honorario_valor: s.honorario_valor ?? null, modalidad: 'taller'
     }))
-    const merged = [...(data || []), ...tallerClases]
+   // Cargar todas las clases de todos los contratos del profesor para numeración correcta
+    const contratosDelMes = [...new Set((data || []).map((c: any) => c.contrato_id).filter(Boolean))]
+    let numeracionMap: Map<string, number> = new Map()
+    if (contratosDelMes.length > 0) {
+      const { data: todasClases } = await supabase
+        .from('clases')
+        .select('id, fecha, hora, duracion_min, estado, cancelado_por_academia, cancelado_tarde, es_cortesia, inasistencia_perdonada, contrato_id, contratos(duracion_min)')
+        .in('contrato_id', contratosDelMes)
+        .order('fecha', { ascending: true })
+        .order('hora', { ascending: true })
+      // Agrupar por contrato y calcular numeración
+      const porContrato: Record<string, any[]> = {}
+      ;(todasClases || []).forEach((c: any) => {
+        if (!porContrato[c.contrato_id]) porContrato[c.contrato_id] = []
+        porContrato[c.contrato_id].push(c)
+      })
+      Object.entries(porContrato).forEach(([contratoId, clases]) => {
+        const durPlan = clases[0]?.contratos?.duracion_min || 60
+        const numMap = calcularNumeracion(clases, durPlan)
+        numMap.forEach((num, id) => numeracionMap.set(id, num))
+      })
+    }
+
+    const merged = [...(data || []).map((c: any) => ({
+      ...c,
+      numero_calculado: numeracionMap.get(c.id) ?? null
+    })), ...tallerClases]
       .sort((a, b) => {
         const fechaDiff = b.fecha.localeCompare(a.fecha)
         if (fechaDiff !== 0) return fechaDiff
