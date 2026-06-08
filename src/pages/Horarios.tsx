@@ -1,7 +1,7 @@
-    import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../supabase'
 import { auditar } from '../auditoria'
-
+import { calcularNumeracion } from '../utils/numeracionClases'
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
@@ -286,8 +286,55 @@ export default function Horarios() {
       .gte('fecha', fechaInicio)
       .lte('fecha', fechaFin)
       .not('hora', 'is', null)
-    setClases((data || []).filter((c: any) => c.salones?.sede_id === sedeSeleccionada))
-    setCargando(false)
+    const clasesFiltradas = (data || []).filter((c: any) => c.salones?.sede_id === sedeSeleccionada)
+const contratosUnicos = [...new Set(clasesFiltradas.map((c: any) => c.contratos?.id).filter(Boolean))]
+let numeracionMap: Map<string, number> = new Map()
+if (contratosUnicos.length > 0) {
+  const { data: todasClases } = await supabase
+    .from('clases')
+    .select('id, fecha, hora, duracion_min, estado, cancelado_por_academia, cancelado_tarde, es_cortesia, inasistencia_perdonada, contrato_id, contratos(duracion_min)')
+    .in('contrato_id', contratosUnicos)
+    .order('fecha', { ascending: true })
+    .order('hora', { ascending: true })
+  const porContrato: Record<string, any[]> = {}
+  ;(todasClases || []).forEach((c: any) => {
+    if (!porContrato[c.contrato_id]) porContrato[c.contrato_id] = []
+    porContrato[c.contrato_id].push(c)
+  })
+  Object.entries(porContrato).forEach(([_, clases]) => {
+    const durPlan = clases[0]?.contratos?.duracion_min || 60
+    const numMap = calcularNumeracion(clases, durPlan)
+    numMap.forEach((num, id) => numeracionMap.set(id, num))
+  })
+  // Calcular proyectados para confirmadas
+  const confirmadas = clasesFiltradas
+    .filter((c: any) => c.estado === 'confirmada' && c.contratos?.id)
+    .sort((a: any, b: any) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`))
+  const numeracionReal: Record<string, number> = {}
+  contratosUnicos.forEach(id => {
+    let max = 0
+    numeracionMap.forEach((num, claseId) => {
+      const clase = (todasClases || []).find((c: any) => c.id === claseId)
+      if (clase?.contrato_id === id) max = Math.max(max, num)
+    })
+    numeracionReal[id] = max
+  })
+  confirmadas.forEach((c: any) => {
+    const durPlan = porContrato[c.contratos.id]?.[0]?.contratos?.duracion_min || 60
+    const fraccion = parseFloat(((c.duracion_min || durPlan) / durPlan).toFixed(4))
+    const base = numeracionReal[c.contratos.id] || 0
+    const proyectado = parseFloat((base + fraccion).toFixed(4))
+    numeracionReal[c.contratos.id] = proyectado
+    numeracionMap.set(c.id, proyectado)
+    c.numero_proyectado = proyectado
+  })
+}
+const clasesConNumero = clasesFiltradas.map((c: any) => ({
+  ...c,
+  numero_calculado: numeracionMap.get(c.id) ?? c.numero_calculado ?? null
+}))
+setClases(clasesConNumero)
+setCargando(false)
   }
 
   async function cargarTalleres() {
