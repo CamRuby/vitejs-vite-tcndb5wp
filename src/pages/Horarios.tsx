@@ -5,7 +5,7 @@ import { calcularNumeracion } from '../utils/numeracionClases'
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
-const ROW_H = 20 
+const ROW_H = 20  
 
 const TALLER_BG     = '#f3e8ff'
 const TALLER_COLOR  = '#7c3aed'
