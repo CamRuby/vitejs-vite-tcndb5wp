@@ -83,6 +83,7 @@ function minutosParaClase(fecha: string, hora: string): number {
 
 const SELECT_CLASES = [
   'id', 'fecha', 'hora', 'duracion_min', 'estado', 'modalidad', 'cancelado_por_academia',
+  'cancelado_tarde', 'es_cortesia', 'inasistencia_perdonada',
   'observaciones', 'contrato_id', 'honorario_valor', 'motivo_cancelacion',
   'contratos(clientes(nombre, nombres, apellidos), instrumentos(nombre), duracion_min, clases_tomadas, total_clases)',
   'salones(nombre, sedes(nombre))'
