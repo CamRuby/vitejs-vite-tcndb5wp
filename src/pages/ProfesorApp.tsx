@@ -1542,7 +1542,12 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
           <span style={{ padding:'4px 10px', borderRadius:'20px', fontSize:'11px', fontWeight:'700', background:badge.bg, color:badge.color, whiteSpace:'nowrap' }}>
             {badge.label}
           </span>
-       {!c.esTaller && !c.es_cortesia && c.numero_proyectado && c.contratos?.total_clases && (
+       {mostrarFecha && !c.esTaller && !c.es_cortesia && c.numero_calculado && c.contratos?.total_clases && (
+  <span style={{ fontSize:'12px', fontWeight:'800', color:TEAL, background:'#e8f5f5', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
+    clase {c.numero_calculado}/{c.contratos.total_clases}
+  </span>
+)}
+{!mostrarFecha && !c.esTaller && !c.es_cortesia && c.numero_proyectado && c.contratos?.total_clases && (
   <span style={{ fontSize:'12px', fontWeight:'800', color:'#b45309', background:'#fffbeb', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
     ~clase {c.numero_proyectado}/{c.contratos.total_clases}
   </span>
@@ -1550,11 +1555,6 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
 {!c.esTaller && c.es_cortesia && (
   <span style={{ fontSize:'12px', fontWeight:'800', color:'#0369a1', background:'#e0f2fe', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
     🎁 Cortesía
-  </span>
-)}
-{!c.esTaller && !c.es_cortesia && c.numero_proyectado && c.contratos?.total_clases && (
-  <span style={{ fontSize:'12px', fontWeight:'800', color:'#9f1239', background:'#fff1f2', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
-    ~clase {c.numero_proyectado}/{c.contratos.total_clases}
   </span>
 )}
           {mostrarHonorario && (
