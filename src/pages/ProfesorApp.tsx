@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import { calcularNumeracion } from '../utils/numeracionClases'
 import pdfMake from 'pdfmake/build/pdfmake'
 import pdfFonts from 'pdfmake/build/vfs_fonts'
 pdfMake.vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs
