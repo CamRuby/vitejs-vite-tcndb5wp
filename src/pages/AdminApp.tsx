@@ -848,47 +848,33 @@ export default function AdminApp() {
                       const planExp = planExpandido === plan.id
                       const clases = clasesPlan[plan.id] || []
                       const esActivo = plan.estado === 'activo'
+                      const conteo = (plan as any)._conteo ?? Math.round(plan.clases_tomadas)
                       return (
                         <div key={plan.id} style={{ borderBottom: `1px solid ${TEAL_LIGHT}` }}>
-                          <div style={{ padding: '12px 16px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                              <div>
-                                <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: esActivo ? '#dcfce7' : '#f1f5f9', color: esActivo ? '#166534' : '#64748b' }}>
-                                  {esActivo ? '🟢 Activo' : plan.fecha_fin || 'Archivado'}
-                                </span>
-                                <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#6b7280' }}>{plan.instrumento_nombre} · {plan.profesor_nombre}</p>
-                              </div>
-                              <button onClick={() => abrirEditarPlan(plan)}
-                                style={{ padding: '5px 12px', background: 'white', color: TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: '700' }}>
-                                ✏️ Editar
-                              </button>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-                              {[
-                                { l: 'Duración', v: `${plan.duracion_min} min` },
-                                { l: 'Plan', v: `${(plan as any)._conteo ?? Math.round(plan.clases_tomadas)}/${plan.total_clases}` },
-                                { l: 'Pagado', v: `$${plan.total_pagado.toLocaleString('es-CO')}` },
-                                { l: 'Valor', v: plan.valor_plan ? `$${plan.valor_plan.toLocaleString('es-CO')}` : '—' },
-                              ].map(d => (
-                                <div key={d.l} style={{ background: 'white', borderRadius: '8px', padding: '8px', textAlign: 'center', border: `1px solid ${TEAL_MID}` }}>
-                                  <p style={{ margin: 0, fontSize: '10px', color: '#9ca3af', fontWeight: '600' }}>{d.l}</p>
-                                  <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: '700', color: '#1f2937' }}>{d.v}</p>
-                                </div>
-                              ))}
-                            </div>
-                            <button onClick={async () => {
+                          {/* Fila compacta clickeable */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', cursor: 'pointer' }}
+                            onClick={async (e) => {
+                              if ((e.target as HTMLElement).closest('button')) return
                               if (planExp) { setPlanExpandido(null); return }
                               setPlanExpandido(plan.id)
                               if (!clasesPlan[plan.id]) await cargarClases(plan.id, cliente.id)
-                            }}
-                              style={{ width: '100%', padding: '8px', background: planExp ? TEAL : 'white', color: planExp ? 'white' : TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
-                              {planExp ? '▲ Ocultar clases' : '▼ Ver clases'}
+                            }}>
+                            <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: esActivo ? '#dcfce7' : '#f1f5f9', color: esActivo ? '#166534' : '#64748b', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                              {esActivo ? '🟢 Activo' : plan.fecha_fin ? plan.fecha_fin.substring(0,7) : 'Archivado'}
+                            </span>
+                            <span style={{ fontSize: '12px', color: '#6b7280', flexShrink: 0 }}>{plan.instrumento_nombre}</span>
+                            <span style={{ fontSize: '12px', color: '#9ca3af', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{plan.profesor_nombre}</span>
+                            <span style={{ fontSize: '12px', fontWeight: '700', color: '#1f2937', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                              {conteo}/{plan.total_clases} · {plan.duracion_min}m{plan.valor_plan ? ` · $${plan.valor_plan.toLocaleString('es-CO')}` : ''}
+                            </span>
+                            <button onClick={e => { e.stopPropagation(); abrirEditarPlan(plan) }}
+                              style={{ padding: '5px 8px', background: 'white', color: TEAL, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', flexShrink: 0 }}>
+                              ✏️
                             </button>
                           </div>
 
                           {planExp && (
                             <div style={{ background: 'white', borderTop: `1px solid ${TEAL_LIGHT}` }}>
-                              {/* Botón agregar clase dada */}
                               <div style={{ padding: '8px 16px', borderBottom: `1px solid ${TEAL_LIGHT}` }}>
                                 <button onClick={() => {
                                   setCreandoClase({ planId: plan.id, clienteId: cliente.id })
