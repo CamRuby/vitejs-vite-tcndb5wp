@@ -45,16 +45,18 @@ const METODOS_PAGO = [
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
+type FiltroPago = 'todos' | 'al_dia' | 'parcial' | 'sin_pago'
+
 function mesActual(): string {
   const h = new Date()
   return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`
 }
 
 export default function Reportes({ rol }: { rol?: string }) {
-  return <ReporteControlPagos rol={rol} />
+  return <ReporteControlPagos />
 }
 
-function ReporteControlPagos({ rol }: { rol?: string }) {
+function ReporteControlPagos() {
   const [datos, setDatos] = useState<PlanControl[]>([])
   const [sedes, setSedes] = useState<Sede[]>([])
   const [cargando, setCargando] = useState(true)
@@ -62,14 +64,16 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
   const [mes, setMes] = useState(mesActual())
   const [filtroSede, setFiltroSede] = useState('')
   const [filtroMetodo, setFiltroMetodo] = useState('')
+  const [filtroPago, setFiltroPago] = useState<FiltroPago>('todos')
   const [busqueda, setBusqueda] = useState('')
 
-  // Modo edición (agregar pago)
+  // Modo edición
   const [modoEdicion, setModoEdicion] = useState(false)
   const [pagoModal, setPagoModal] = useState<PlanControl | null>(null)
   const [nuevoMonto, setNuevoMonto] = useState('')
   const [nuevoMetodo, setNuevoMetodo] = useState(METODOS_PAGO[0])
   const [nuevoFecha, setNuevoFecha] = useState(new Date().toISOString().split('T')[0])
+  const [nuevoValorPlan, setNuevoValorPlan] = useState('')
   const [guardandoPago, setGuardandoPago] = useState(false)
   const [errorPago, setErrorPago] = useState('')
   const [mensajeOk, setMensajeOk] = useState('')
@@ -93,7 +97,7 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
       const { data: contratos, error: err } = await supabase
         .from('contratos')
         .select(`
-          id, cliente_id, sede_id, estado, fecha_inicio, fecha_fin,
+          id, cliente_id, sede_id, estado, fecha_inicio,
           total_clases, duracion_min, clases_tomadas, valor_plan,
           clientes(nombre, grupo_whatsapp),
           sedes(nombre),
@@ -152,22 +156,44 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
     }
   }
 
+  function estadoPago(plan: PlanControl): FiltroPago {
+    if (!plan.valor_plan || plan.valor_plan === 0) return 'sin_pago'
+    if (plan.total_pagado === 0) return 'sin_pago'
+    if (plan.saldo <= 0) return 'al_dia'
+    return 'parcial'
+  }
+
   async function registrarPago() {
     if (!pagoModal) return
-    if (!nuevoMonto || isNaN(Number(nuevoMonto)) || Number(nuevoMonto) <= 0) { setErrorPago('Ingresa un monto válido'); return }
+    if (!nuevoMonto || isNaN(Number(nuevoMonto)) || Number(nuevoMonto) <= 0) {
+      setErrorPago('Ingresa un monto válido'); return
+    }
+    // Si no tiene valor de plan y es el primer abono, el valor es obligatorio
+    if (!pagoModal.valor_plan && !nuevoValorPlan) {
+      setErrorPago('El plan no tiene valor registrado. Ingresa el valor del plan antes de continuar.'); return
+    }
     setGuardandoPago(true); setErrorPago('')
+
+    // Si se ingresó valor del plan, actualizarlo primero
+    if (nuevoValorPlan && Number(nuevoValorPlan) > 0) {
+      await supabase.from('contratos').update({ valor_plan: Number(nuevoValorPlan) }).eq('id', pagoModal.id)
+    }
+
     const { error } = await supabase.from('pagos').insert({
       contrato_id: pagoModal.id,
       monto: Number(nuevoMonto),
       metodo: nuevoMetodo,
       fecha: nuevoFecha,
     })
+
     if (error) { setErrorPago('Error al guardar: ' + error.message); setGuardandoPago(false); return }
+
     setGuardandoPago(false)
     setPagoModal(null)
     setNuevoMonto('')
     setNuevoMetodo(METODOS_PAGO[0])
     setNuevoFecha(new Date().toISOString().split('T')[0])
+    setNuevoValorPlan('')
     setMensajeOk('Pago registrado')
     setTimeout(() => setMensajeOk(''), 3000)
     await cargarDatos()
@@ -176,6 +202,7 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
   const filtrados = datos.filter(d => {
     if (filtroSede && d.sede_id !== filtroSede) return false
     if (filtroMetodo && !d.abonos.some(a => a.metodo === filtroMetodo)) return false
+    if (filtroPago !== 'todos' && estadoPago(d) !== filtroPago) return false
     if (busqueda) {
       const q = busqueda.toLowerCase()
       if (!d.cliente_nombre.toLowerCase().includes(q) &&
@@ -191,6 +218,13 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
   const [anioSel, mesSel] = mes.split('-')
   const labelMes = `${MESES[parseInt(mesSel) - 1]} ${anioSel}`
 
+  const conteosPago = {
+    todos: datos.length,
+    al_dia: datos.filter(d => estadoPago(d) === 'al_dia').length,
+    parcial: datos.filter(d => estadoPago(d) === 'parcial').length,
+    sin_pago: datos.filter(d => estadoPago(d) === 'sin_pago').length,
+  }
+
   return (
     <div style={{ padding: '24px 28px', maxWidth: '1200px', margin: '0 auto' }}>
 
@@ -204,13 +238,13 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
           {mensajeOk && <span style={{ fontSize: '13px', color: '#16a34a', fontWeight: 600 }}>✓ {mensajeOk}</span>}
           <button onClick={() => setModoEdicion(!modoEdicion)}
             style={{ padding: '7px 14px', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${modoEdicion ? TEAL : TEAL_MID}`, background: modoEdicion ? TEAL : 'white', color: modoEdicion ? 'white' : TEAL_DARK }}>
-            {modoEdicion ? '✓ Modo edición ON' : '✏️ Registrar pagos'}
+            {modoEdicion ? '✓ Edición ON' : '✏️ Registrar pagos'}
           </button>
         </div>
       </div>
 
-      {/* Filtros */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+      {/* Filtros línea 1 */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
         <input type="month" value={mes} onChange={e => setMes(e.target.value)}
           style={{ padding: '7px 12px', borderRadius: '10px', border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', fontWeight: 600, color: TEAL_DARK, outline: 'none', background: TEAL_LIGHT }} />
         <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)}
@@ -225,6 +259,26 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
         </select>
         <input type="text" placeholder="🔍 Buscar cliente..." value={busqueda} onChange={e => setBusqueda(e.target.value)}
           style={{ padding: '7px 12px', borderRadius: '10px', border: `1.5px solid ${busqueda ? TEAL : TEAL_MID}`, fontSize: '13px', outline: 'none', minWidth: '180px', marginLeft: 'auto' }} />
+      </div>
+
+      {/* Filtros estado de pago */}
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        {([
+          { k: 'todos',    l: 'Todos',          color: TEAL,      count: conteosPago.todos },
+          { k: 'al_dia',   l: '✓ Al día',        color: '#16a34a', count: conteosPago.al_dia },
+          { k: 'parcial',  l: '⚠ Abono parcial', color: '#d97706', count: conteosPago.parcial },
+          { k: 'sin_pago', l: '✗ Sin pago',      color: '#dc2626', count: conteosPago.sin_pago },
+        ] as const).map(f => (
+          <button key={f.k} onClick={() => setFiltroPago(f.k)}
+            style={{
+              padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+              border: `1.5px solid ${filtroPago === f.k ? f.color : '#e5e7eb'}`,
+              background: filtroPago === f.k ? f.color : 'white',
+              color: filtroPago === f.k ? 'white' : f.color,
+            }}>
+            {f.l} <span style={{ opacity: 0.8, fontWeight: 400 }}>({f.count})</span>
+          </button>
+        ))}
       </div>
 
       {/* Totales */}
@@ -249,7 +303,7 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
 
       {!cargando && !error && filtrados.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
-          No hay planes iniciados en {labelMes}.
+          No hay planes con los filtros seleccionados en {labelMes}.
         </div>
       )}
 
@@ -259,9 +313,10 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
             const saldoColor = plan.saldo > 0 ? '#dc2626' : plan.saldo < 0 ? '#7c3aed' : '#16a34a'
             const saldoBg = plan.saldo > 0 ? '#fef2f2' : plan.saldo < 0 ? '#f3e8ff' : '#f0fdf4'
             const estaArchivado = plan.estado !== 'activo'
+            const ep = estadoPago(plan)
 
             return (
-              <div key={plan.id} style={{ background: 'white', borderRadius: '12px', border: `1px solid #e5e7eb`, padding: '16px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <div key={plan.id} style={{ background: 'white', borderRadius: '12px', border: `1px solid ${ep === 'sin_pago' ? '#fecaca' : ep === 'parcial' ? '#fde68a' : '#e5e7eb'}`, padding: '16px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '180px 200px 1fr', gap: '24px', alignItems: 'start' }}>
 
                   {/* COLUMNA 1: Cliente */}
@@ -275,8 +330,8 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
                       {estaArchivado
-                        ? <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: '#f1f5f9', color: '#64748b' }}>📦</span>
-                        : <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#22c55e', display: 'inline-block', flexShrink: 0 }} />
+                        ? <span style={{ fontSize: '14px' }}>📦</span>
+                        : <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#22c55e', display: 'inline-block', flexShrink: 0 }} />
                       }
                       <span style={{ fontSize: '12px', color: '#6b7280' }}>{plan.fecha_inicio}</span>
                     </div>
@@ -296,7 +351,7 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: '12px', color: '#9ca3af' }}>Valor</span>
                         <span style={{ fontSize: '15px', fontWeight: 700, color: '#374151' }}>
-                          {plan.valor_plan ? `$${plan.valor_plan.toLocaleString('es-CO')}` : '—'}
+                          {plan.valor_plan ? `$${plan.valor_plan.toLocaleString('es-CO')}` : <span style={{ color: '#dc2626', fontSize: '12px' }}>Sin valor</span>}
                         </span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -317,6 +372,7 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
                           setNuevoMonto('')
                           setNuevoMetodo(METODOS_PAGO[0])
                           setNuevoFecha(new Date().toISOString().split('T')[0])
+                          setNuevoValorPlan('')
                           setErrorPago('')
                         }}
                           style={{ marginTop: '6px', padding: '7px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}>
@@ -359,9 +415,21 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
       {/* Modal registrar pago */}
       {pagoModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '24px' }}>
-          <div style={{ background: 'white', borderRadius: '16px', padding: '28px', maxWidth: '380px', width: '100%' }}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '28px', maxWidth: '400px', width: '100%' }}>
             <p style={{ margin: '0 0 4px', fontSize: '17px', fontWeight: 800, color: '#111' }}>+ Registrar pago</p>
             <p style={{ margin: '0 0 20px', fontSize: '13px', color: '#9ca3af' }}>{pagoModal.cliente_nombre}</p>
+
+            {/* Si no tiene valor de plan, pedirlo primero */}
+            {!pagoModal.valor_plan && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
+                <p style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 700, color: '#dc2626' }}>⚠ Este plan no tiene valor registrado</p>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>Valor del plan ($) *</label>
+                <input type="number" value={nuevoValorPlan} onChange={e => setNuevoValorPlan(e.target.value)}
+                  placeholder="Ej: 250000" autoFocus
+                  style={{ width: '100%', padding: '11px 12px', border: `1.5px solid #fca5a5`, borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box' as const }} />
+              </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>Fecha</label>
@@ -376,9 +444,16 @@ function ReporteControlPagos({ rol }: { rol?: string }) {
                 </select>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>Monto ($)</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>
+                  Monto ($)
+                  {pagoModal.valor_plan && pagoModal.saldo > 0 && (
+                    <span style={{ marginLeft: '8px', fontSize: '11px', color: '#9ca3af', fontWeight: 400 }}>
+                      Saldo: ${pagoModal.saldo.toLocaleString('es-CO')}
+                    </span>
+                  )}
+                </label>
                 <input type="number" value={nuevoMonto} onChange={e => setNuevoMonto(e.target.value)}
-                  placeholder="0" autoFocus
+                  placeholder="0"
                   style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box' as const }} />
               </div>
               {errorPago && <p style={{ margin: 0, color: '#dc2626', fontSize: '13px' }}>{errorPago}</p>}
