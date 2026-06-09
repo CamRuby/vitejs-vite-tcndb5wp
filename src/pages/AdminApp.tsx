@@ -32,6 +32,9 @@ interface Plan {
   instrumento_nombre: string
   profesor_nombre: string
   sede_nombre: string
+  instrumento_id?: string
+  profesor_id?: string
+  sede_id?: string
 }
 
 interface Clase {
@@ -82,6 +85,11 @@ interface SesionTaller {
   inscripcion_id: string
 }
 
+interface Instrumento {
+  id: string
+  nombre: string
+}
+
 function etiquetaEstado(c: Clase): string {
   if (c.es_cortesia && c.estado === 'cancelada' && !c.cancelado_por_academia && c.cancelado_tarde) return 'Inasistencia perdonada'
   if (c.es_cortesia) return 'Cortesía'
@@ -128,6 +136,7 @@ export default function AdminApp() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
   const [profesores, setProfesores] = useState<{ id: string; nombre: string }[]>([])
+  const [instrumentos, setInstrumentos] = useState<Instrumento[]>([])
   const [cargando, setCargando] = useState(false)
 
   const [filtroVista, setFiltroVista] = useState<'todos' | 'activos'>('activos')
@@ -157,7 +166,7 @@ export default function AdminApp() {
   const [editProfesorId, setEditProfesorId] = useState('')
   const [editEstado, setEditEstado] = useState('')
   const [editHonorario, setEditHonorario] = useState('')
-  const [editDuracion, setEditDuracion] = useState('')  // CAMBIO 1
+  const [editDuracion, setEditDuracion] = useState('')
 
   const [editSesionFecha, setEditSesionFecha] = useState('')
   const [editSesionHora, setEditSesionHora] = useState('')
@@ -167,9 +176,34 @@ export default function AdminApp() {
 
   const [editPlanEstado, setEditPlanEstado] = useState('')
   const [editPlanFechaFin, setEditPlanFechaFin] = useState('')
+  const [editPlanFechaInicio, setEditPlanFechaInicio] = useState('')
   const [editPlanDuracion, setEditPlanDuracion] = useState('')
   const [editPlanTotalClases, setEditPlanTotalClases] = useState('')
   const [editPlanValorPagado, setEditPlanValorPagado] = useState('')
+  const [editPlanValorPlan, setEditPlanValorPlan] = useState('')
+  const [editPlanInstrumentoId, setEditPlanInstrumentoId] = useState('')
+  const [editPlanProfesorId, setEditPlanProfesorId] = useState('')
+  const [editPlanSedeId, setEditPlanSedeId] = useState('')
+
+  // Nuevo plan
+  const [creandoPlan, setCreandoPlan] = useState<string | null>(null) // clienteId
+  const [nuevoPlanInstrumentoId, setNuevoPlanInstrumentoId] = useState('')
+  const [nuevoPlanProfesorId, setNuevoPlanProfesorId] = useState('')
+  const [nuevoPlanSedeId, setNuevoPlanSedeId] = useState('')
+  const [nuevoPlanTotalClases, setNuevoPlanTotalClases] = useState('4')
+  const [nuevoPlanDuracion, setNuevoPlanDuracion] = useState('60')
+  const [nuevoPlanValor, setNuevoPlanValor] = useState('')
+  const [nuevoPlanFechaInicio, setNuevoPlanFechaInicio] = useState(new Date().toISOString().split('T')[0])
+  const [nuevoPlanError, setNuevoPlanError] = useState('')
+
+  // Nueva clase dada
+  const [creandoClase, setCreandoClase] = useState<{ planId: string; clienteId: string } | null>(null)
+  const [nuevaClaseFecha, setNuevaClaseFecha] = useState(new Date().toISOString().split('T')[0])
+  const [nuevaClaseHora, setNuevaClaseHora] = useState('09:00')
+  const [nuevaClaseProfesorId, setNuevaClaseProfesorId] = useState('')
+  const [nuevaClaseHonorario, setNuevaClaseHonorario] = useState('')
+  const [nuevaClaseDuracion, setNuevaClaseDuracion] = useState('60')
+  const [nuevaClaseError, setNuevaClaseError] = useState('')
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -192,12 +226,14 @@ export default function AdminApp() {
   }
 
   async function cargarBase() {
-    const [{ data: sedesData }, { data: profsData }] = await Promise.all([
+    const [{ data: sedesData }, { data: profsData }, { data: instData }] = await Promise.all([
       supabase.from('sedes').select('id, nombre').order('nombre'),
       supabase.from('profesores').select('id, nombre').eq('activo', true).order('nombre'),
+      supabase.from('instrumentos').select('id, nombre').order('nombre'),
     ])
     setSedes(sedesData || [])
     setProfesores(profsData || [])
+    setInstrumentos(instData || [])
     cargarClientes()
   }
 
@@ -231,7 +267,7 @@ export default function AdminApp() {
   async function cargarPlanes(clienteId: string) {
     const { data } = await supabase.from('contratos')
       .select(`id, estado, fecha_inicio, fecha_fin, duracion_min, total_clases, clases_tomadas, valor_plan,
-        instrumentos(nombre), profesores(nombre), sedes(nombre), cliente_id`)
+        instrumentos(id, nombre), profesores(id, nombre), sedes(id, nombre), cliente_id`)
       .eq('cliente_id', clienteId).order('fecha_inicio', { ascending: false })
     const ids = (data || []).map((p: any) => p.id)
     let pagosMap: Record<string, number> = {}
@@ -248,6 +284,9 @@ export default function AdminApp() {
       instrumento_nombre: p.instrumentos?.nombre || '—',
       profesor_nombre: p.profesores?.nombre || '—',
       sede_nombre: p.sedes?.nombre || '—',
+      instrumento_id: p.instrumentos?.id || '',
+      profesor_id: p.profesores?.id || '',
+      sede_id: p.sedes?.id || '',
     }))
     setPlanesCliente(prev => ({ ...prev, [clienteId]: planes }))
   }
@@ -377,24 +416,33 @@ export default function AdminApp() {
     setEditandoPlan(plan)
     setEditPlanEstado(plan.estado)
     setEditPlanFechaFin(plan.fecha_fin || '')
+    setEditPlanFechaInicio(plan.fecha_inicio || '')
     setEditPlanDuracion(String(plan.duracion_min))
     setEditPlanTotalClases(String(plan.total_clases))
     setEditPlanValorPagado(String(plan.total_pagado))
+    setEditPlanValorPlan(plan.valor_plan ? String(plan.valor_plan) : '')
+    setEditPlanInstrumentoId(plan.instrumento_id || '')
+    setEditPlanProfesorId(plan.profesor_id || '')
+    setEditPlanSedeId(plan.sede_id || '')
   }
 
   async function guardarPlan() {
     if (!editandoPlan) return
-    const cambios: string[] = []
-    if (editPlanEstado !== editandoPlan.estado) cambios.push(`estado a "${editPlanEstado}"`)
-    if (editPlanFechaFin !== (editandoPlan.fecha_fin || '')) cambios.push(`fecha fin a "${editPlanFechaFin || 'sin fecha'}"`)
-    if (editPlanDuracion !== String(editandoPlan.duracion_min)) cambios.push(`duración a ${editPlanDuracion} min`)
-    if (editPlanTotalClases !== String(editandoPlan.total_clases)) cambios.push(`clases contratadas a ${editPlanTotalClases}`)
     const planNombre = `${editandoPlan.instrumento_nombre} (${editandoPlan.sede_nombre})`
     setConfirmarCambio({
-      mensaje: `¿Está seguro de modificar ${cambios.join(', ')} del plan ${planNombre}?`,
+      mensaje: `¿Confirmar cambios en el plan ${planNombre}?`,
       accion: async () => {
-        const payload: any = { estado: editPlanEstado, duracion_min: parseInt(editPlanDuracion), total_clases: parseInt(editPlanTotalClases) }
+        const payload: any = {
+          estado: editPlanEstado,
+          duracion_min: parseInt(editPlanDuracion),
+          total_clases: parseInt(editPlanTotalClases),
+          instrumento_id: editPlanInstrumentoId || null,
+          profesor_id: editPlanProfesorId || null,
+          sede_id: editPlanSedeId || null,
+          valor_plan: editPlanValorPlan !== '' ? Number(editPlanValorPlan) : null,
+        }
         if (editPlanFechaFin) payload.fecha_fin = editPlanFechaFin
+        if (editPlanFechaInicio) payload.fecha_inicio = editPlanFechaInicio
         await supabase.from('contratos').update(payload).eq('id', editandoPlan.id)
         const diferencia = Number(editPlanValorPagado) - editandoPlan.total_pagado
         if (diferencia > 0) await supabase.from('pagos').insert({ contrato_id: editandoPlan.id, monto: diferencia, fecha: new Date().toISOString().split('T')[0], metodo: 'Ajuste manual' })
@@ -404,6 +452,84 @@ export default function AdminApp() {
         setTimeout(() => setMensajeOk(''), 3000)
       }
     })
+  }
+
+  async function borrarPlanVacio(plan: Plan) {
+    setConfirmarCambio({
+      mensaje: `¿Borrar el plan de ${plan.instrumento_nombre} (${plan.sede_nombre})? Solo se puede borrar si no tiene clases dadas.`,
+      accion: async () => {
+        await supabase.from('pagos').delete().eq('contrato_id', plan.id)
+        await supabase.from('clases').delete().eq('contrato_id', plan.id)
+        await supabase.from('contratos').delete().eq('id', plan.id)
+        setEditandoPlan(null)
+        await cargarPlanes(plan.cliente_id)
+        setMensajeOk('Plan eliminado')
+        setTimeout(() => setMensajeOk(''), 3000)
+      }
+    })
+  }
+
+  async function crearPlan() {
+    if (!creandoPlan) return
+    if (!nuevoPlanInstrumentoId) { setNuevoPlanError('Selecciona un instrumento'); return }
+    if (!nuevoPlanProfesorId) { setNuevoPlanError('Selecciona un profesor'); return }
+    if (!nuevoPlanSedeId) { setNuevoPlanError('Selecciona una sede'); return }
+    setNuevoPlanError('')
+    setGuardando(true)
+    const { error } = await supabase.from('contratos').insert({
+      cliente_id: creandoPlan,
+      instrumento_id: nuevoPlanInstrumentoId,
+      profesor_id: nuevoPlanProfesorId,
+      sede_id: nuevoPlanSedeId,
+      total_clases: parseInt(nuevoPlanTotalClases),
+      duracion_min: parseInt(nuevoPlanDuracion),
+      valor_plan: nuevoPlanValor !== '' ? Number(nuevoPlanValor) : null,
+      fecha_inicio: nuevoPlanFechaInicio,
+      estado: 'activo',
+      clases_tomadas: 0,
+    })
+    if (error) { setNuevoPlanError('Error: ' + error.message); setGuardando(false); return }
+    setCreandoPlan(null)
+    await cargarPlanes(creandoPlan)
+    setMensajeOk('Plan creado correctamente')
+    setTimeout(() => setMensajeOk(''), 3000)
+    setGuardando(false)
+  }
+
+  async function crearClaseDada() {
+    if (!creandoClase) return
+    if (!nuevaClaseProfesorId) { setNuevaClaseError('Selecciona un profesor'); return }
+    setNuevaClaseError('')
+    setGuardando(true)
+    const durMin = parseInt(nuevaClaseDuracion)
+    const { data: planData } = await supabase.from('contratos').select('duracion_min, clases_tomadas, total_clases').eq('id', creandoClase.planId).single()
+    const durPlan = planData?.duracion_min || durMin
+    const fraccion = parseFloat((durMin / durPlan).toFixed(4))
+    const tomadas = parseFloat(Number(planData?.clases_tomadas || 0).toFixed(4))
+    const nuevasTomadas = parseFloat((tomadas + fraccion).toFixed(4))
+    const { error } = await supabase.from('clases').insert({
+      contrato_id: creandoClase.planId,
+      profesor_id: nuevaClaseProfesorId,
+      fecha: nuevaClaseFecha,
+      hora: nuevaClaseHora + ':00',
+      duracion_min: durMin,
+      estado: 'dada',
+      honorario_valor: nuevaClaseHonorario !== '' ? Number(nuevaClaseHonorario) : null,
+      es_cortesia: false,
+      cancelado_por_academia: null,
+      cancelado_tarde: false,
+    })
+    if (error) { setNuevaClaseError('Error: ' + error.message); setGuardando(false); return }
+    const totalClases = planData?.total_clases || 0
+    const updateContrato: any = { clases_tomadas: nuevasTomadas }
+    if (totalClases > 0 && nuevasTomadas >= totalClases) updateContrato.estado = 'completado'
+    await supabase.from('contratos').update(updateContrato).eq('id', creandoClase.planId)
+    setCreandoClase(null)
+    await cargarClases(creandoClase.planId, creandoClase.clienteId)
+    await cargarPlanes(creandoClase.clienteId)
+    setMensajeOk('Clase agregada correctamente')
+    setTimeout(() => setMensajeOk(''), 3000)
+    setGuardando(false)
   }
 
   function abrirEditarClase(clase: Clase) {
@@ -418,7 +544,7 @@ export default function AdminApp() {
       clase.estado
     setEditEstado(estadoEdicion)
     setEditHonorario(clase.honorario_valor !== null ? String(clase.honorario_valor) : '')
-    setEditDuracion(String(clase.duracion_min || 60))  // CAMBIO 2
+    setEditDuracion(String(clase.duracion_min || 60))
   }
 
   async function guardarClase() {
@@ -439,7 +565,6 @@ export default function AdminApp() {
     setConfirmarCambio({
       mensaje: `¿Está seguro de modificar ${cambios.join(', ')} de la clase de ${clienteNombre} del ${editandoClase.fecha}?`,
       accion: async () => {
-        // CAMBIO 3: incluir duracion_min en el payload
         const payload: any = { fecha: editFecha, hora: editHora + ':00', profesor_id: editProfesorId, honorario_valor: editHonorario !== '' ? Number(editHonorario) : null, duracion_min: parseInt(editDuracion) }
         if (editEstado === 'inasistencia') {
           payload.estado = 'cancelada'; payload.cancelado_por_academia = false; payload.cancelado_tarde = true; payload.es_cortesia = false; payload.inasistencia_perdonada = false
@@ -661,14 +786,12 @@ export default function AdminApp() {
                 const prof = e.target.value
                 setFiltroProfesor(prof)
                 if (!prof) { setClientesConProfesor(null); return }
-               const { data } = await supabase.from('clases')
-                    .select('contratos(cliente_id)')
-                    .eq('profesor_id', prof)
-                  setClientesConProfesor(new Set(
-                    (data || [])
-                      .map((c: any) => c.contratos?.cliente_id)
-                      .filter(Boolean)
-                  ))
+                const { data } = await supabase.from('clases')
+                  .select('contratos(cliente_id)')
+                  .eq('profesor_id', prof)
+                setClientesConProfesor(new Set(
+                  (data || []).map((c: any) => c.contratos?.cliente_id).filter(Boolean)
+                ))
               }}
                 style={{ flex: 1, padding: '9px 10px', border: `1.5px solid ${filtroProfesor ? TEAL : TEAL_MID}`, borderRadius: '10px', fontSize: '13px', background: filtroProfesor ? TEAL_LIGHT : 'white' }}>
                 <option value="">👨‍🏫 Todos los profes</option>
@@ -686,24 +809,37 @@ export default function AdminApp() {
 
             return (
               <div key={cliente.id} style={{ background: 'white', borderRadius: '14px', marginBottom: '10px', overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', alignItems: 'center', padding: '14px 16px' }}>
-                  <div>
-                    <p style={{ margin: 0, fontWeight: '700', fontSize: '14px', color: '#1f2937' }}>{cliente.nombre}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#9ca3af' }}>{cliente.grupo_whatsapp || '—'} · {cliente.sede_nombre}</p>
-                  </div>
-                  <button onClick={async () => {
-                    if (expandido) { setClienteExpandido(null); return }
-                    setClienteExpandido(cliente.id)
-                    if (!planesCliente[cliente.id]) await cargarPlanes(cliente.id)
-                    if (!talleresCliente[cliente.id]) await cargarTalleresCliente(cliente.id)
-                  }}
-                    style={{ padding: '6px 14px', background: TEAL_LIGHT, color: TEAL_DARK, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', whiteSpace: 'nowrap' }}>
-                    {expandido ? '▲ Cerrar' : '▼ Ver'}
-                  </button>
+                {/* Nombre clickeable sin botón */}
+                <div style={{ padding: '14px 16px', cursor: 'pointer' }} onClick={async () => {
+                  if (expandido) { setClienteExpandido(null); return }
+                  setClienteExpandido(cliente.id)
+                  if (!planesCliente[cliente.id]) await cargarPlanes(cliente.id)
+                  if (!talleresCliente[cliente.id]) await cargarTalleresCliente(cliente.id)
+                }}>
+                  <p style={{ margin: 0, fontWeight: '700', fontSize: '14px', color: expandido ? TEAL : '#1f2937', textDecoration: expandido ? 'underline' : 'none' }}>{cliente.nombre}</p>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#9ca3af' }}>{cliente.grupo_whatsapp || '—'} · {cliente.sede_nombre}</p>
                 </div>
 
                 {expandido && (
                   <div style={{ borderTop: `1px solid ${TEAL_LIGHT}`, background: '#f8fafc' }}>
+                    {/* Botón crear plan */}
+                    <div style={{ padding: '10px 16px' }}>
+                      <button onClick={() => {
+                        setCreandoPlan(cliente.id)
+                        setNuevoPlanInstrumentoId('')
+                        setNuevoPlanProfesorId('')
+                        setNuevoPlanSedeId('')
+                        setNuevoPlanTotalClases('4')
+                        setNuevoPlanDuracion('60')
+                        setNuevoPlanValor('')
+                        setNuevoPlanFechaInicio(new Date().toISOString().split('T')[0])
+                        setNuevoPlanError('')
+                      }}
+                        style={{ padding: '7px 14px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
+                        + Nuevo plan
+                      </button>
+                    </div>
+
                     {planes.length === 0 && talleres.length === 0 && (
                       <p style={{ padding: '16px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Sin planes ni talleres registrados</p>
                     )}
@@ -730,7 +866,7 @@ export default function AdminApp() {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px', marginBottom: '10px' }}>
                               {[
                                 { l: 'Duración', v: `${plan.duracion_min} min` },
-                               { l: 'Plan', v: `${(plan as any)._conteo ?? Math.round(plan.clases_tomadas)}/${plan.total_clases}` },
+                                { l: 'Plan', v: `${(plan as any)._conteo ?? Math.round(plan.clases_tomadas)}/${plan.total_clases}` },
                                 { l: 'Pagado', v: `$${plan.total_pagado.toLocaleString('es-CO')}` },
                                 { l: 'Valor', v: plan.valor_plan ? `$${plan.valor_plan.toLocaleString('es-CO')}` : '—' },
                               ].map(d => (
@@ -752,6 +888,21 @@ export default function AdminApp() {
 
                           {planExp && (
                             <div style={{ background: 'white', borderTop: `1px solid ${TEAL_LIGHT}` }}>
+                              {/* Botón agregar clase dada */}
+                              <div style={{ padding: '8px 16px', borderBottom: `1px solid ${TEAL_LIGHT}` }}>
+                                <button onClick={() => {
+                                  setCreandoClase({ planId: plan.id, clienteId: cliente.id })
+                                  setNuevaClaseFecha(new Date().toISOString().split('T')[0])
+                                  setNuevaClaseHora('09:00')
+                                  setNuevaClaseProfesorId(plan.profesor_id || '')
+                                  setNuevaClaseHonorario('')
+                                  setNuevaClaseDuracion(String(plan.duracion_min))
+                                  setNuevaClaseError('')
+                                }}
+                                  style={{ padding: '6px 12px', background: '#fefce8', color: '#854d0e', border: '1px solid #fde68a', borderRadius: '8px', cursor: 'pointer', fontSize: '11px', fontWeight: '700' }}>
+                                  + Agregar clase dada
+                                </button>
+                              </div>
                               {clases.length === 0 && <p style={{ padding: '16px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Sin clases registradas</p>}
                               {clases.map((clase, ci) => {
                                 const col = colorEstado(clase)
@@ -760,7 +911,7 @@ export default function AdminApp() {
                                     <span style={{ fontSize: '11px', color: '#9ca3af', whiteSpace: 'nowrap' }}>{clase.fecha}<br />{clase.hora}</span>
                                     <div>
                                       <p style={{ margin: 0, fontSize: '11px', color: '#6b7280' }}>{clase.profesor_nombre}</p>
-                                     {clase.numero_calculado !== null && (
+                                      {clase.numero_calculado !== null && (
                                         <p style={{ margin: 0, fontSize: '11px', fontWeight: '700', color: TEAL }}>{clase.numero_calculado}/{clase.total_clases}</p>
                                       )}
                                       {clase.numero_calculado === null && clase.numero_proyectado !== null && clase.estado === 'confirmada' && (
@@ -861,12 +1012,138 @@ export default function AdminApp() {
         </div>
       )}
 
-      {/* Modal editar plan */}
-      {editandoPlan && (
+      {/* Modal crear plan */}
+      {creandoPlan && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 200 }}>
+          <div style={{ background: 'white', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '480px', padding: '24px 20px 36px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ width: '44px', height: '5px', background: '#e5e7eb', borderRadius: '3px', margin: '0 auto 20px' }} />
+            <p style={{ margin: '0 0 20px', fontSize: '17px', fontWeight: '800', color: '#111' }}>Nuevo plan</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Instrumento *</label>
+                <select value={nuevoPlanInstrumentoId} onChange={e => setNuevoPlanInstrumentoId(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }}>
+                  <option value="">— Seleccionar —</option>
+                  {instrumentos.map(i => <option key={i.id} value={i.id}>{i.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Profesor *</label>
+                <select value={nuevoPlanProfesorId} onChange={e => setNuevoPlanProfesorId(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }}>
+                  <option value="">— Seleccionar —</option>
+                  {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Sede *</label>
+                <select value={nuevoPlanSedeId} onChange={e => setNuevoPlanSedeId(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }}>
+                  <option value="">— Seleccionar —</option>
+                  {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Número de clases</label>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {['4','8','16','20','40','80'].map(n => (
+                    <button key={n} onClick={() => setNuevoPlanTotalClases(n)}
+                      style={{ padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700', border: `2px solid ${nuevoPlanTotalClases === n ? TEAL : '#e5e7eb'}`, background: nuevoPlanTotalClases === n ? TEAL_LIGHT : 'white', color: nuevoPlanTotalClases === n ? TEAL_DARK : '#666' }}>
+                      {n}
+                    </button>
+                  ))}
+                  <input type="number" placeholder="Otro" value={!['4','8','16','20','40','80'].includes(nuevoPlanTotalClases) ? nuevoPlanTotalClases : ''} onChange={e => setNuevoPlanTotalClases(e.target.value)}
+                    style={{ width: '70px', padding: '8px 10px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px' }} />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Duración por clase</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {[30, 45, 60, 90, 120].map(d => (
+                    <button key={d} onClick={() => setNuevoPlanDuracion(String(d))}
+                      style={{ flex: 1, padding: '9px 4px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', border: `2px solid ${nuevoPlanDuracion === String(d) ? TEAL : '#e5e7eb'}`, background: nuevoPlanDuracion === String(d) ? TEAL_LIGHT : 'white', color: nuevoPlanDuracion === String(d) ? TEAL_DARK : '#666' }}>
+                      {d}m
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Valor del plan ($)</label>
+                  <input type="number" value={nuevoPlanValor} onChange={e => setNuevoPlanValor(e.target.value)} placeholder="Opcional" style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Fecha de inicio</label>
+                  <input type="date" value={nuevoPlanFechaInicio} onChange={e => setNuevoPlanFechaInicio(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+                </div>
+              </div>
+              {nuevoPlanError && <p style={{ color: '#dc2626', fontSize: '13px', margin: 0 }}>{nuevoPlanError}</p>}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
+              <button onClick={crearPlan} disabled={guardando} style={{ flex: 1, padding: '14px', background: TEAL, color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '15px', fontWeight: '800' }}>
+                {guardando ? 'Creando...' : 'Crear plan'}
+              </button>
+              <button onClick={() => setCreandoPlan(null)} style={{ padding: '14px 20px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '14px' }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal crear clase dada */}
+      {creandoClase && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 200 }}>
           <div style={{ background: 'white', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '480px', padding: '24px 20px 36px', maxHeight: '85vh', overflowY: 'auto' }}>
             <div style={{ width: '44px', height: '5px', background: '#e5e7eb', borderRadius: '3px', margin: '0 auto 20px' }} />
-            <p style={{ margin: '0 0 20px', fontSize: '17px', fontWeight: '800', color: '#111' }}>Editar plan — {editandoPlan.instrumento_nombre}</p>
+            <p style={{ margin: '0 0 4px', fontSize: '17px', fontWeight: '800', color: '#854d0e' }}>+ Agregar clase dada</p>
+            <p style={{ margin: '0 0 20px', fontSize: '12px', color: '#9ca3af' }}>Para clases que no se migraron o se dieron fuera del horario</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Fecha</label>
+                  <input type="date" value={nuevaClaseFecha} onChange={e => setNuevaClaseFecha(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Hora</label>
+                  <input type="time" value={nuevaClaseHora} onChange={e => setNuevaClaseHora(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Profesor *</label>
+                <select value={nuevaClaseProfesorId} onChange={e => setNuevaClaseProfesorId(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }}>
+                  <option value="">— Seleccionar —</option>
+                  {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Duración</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {[30, 45, 60, 90, 120].map(d => (
+                    <button key={d} onClick={() => setNuevaClaseDuracion(String(d))}
+                      style={{ flex: 1, padding: '9px 4px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', border: `2px solid ${nuevaClaseDuracion === String(d) ? TEAL : '#e5e7eb'}`, background: nuevaClaseDuracion === String(d) ? TEAL_LIGHT : 'white', color: nuevaClaseDuracion === String(d) ? TEAL_DARK : '#666' }}>
+                      {d}m
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Honorario ($)</label>
+                <input type="number" value={nuevaClaseHonorario} onChange={e => setNuevaClaseHonorario(e.target.value)} placeholder="Sin honorario" style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+              </div>
+              {nuevaClaseError && <p style={{ color: '#dc2626', fontSize: '13px', margin: 0 }}>{nuevaClaseError}</p>}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
+              <button onClick={crearClaseDada} disabled={guardando} style={{ flex: 1, padding: '14px', background: '#854d0e', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '15px', fontWeight: '800' }}>
+                {guardando ? 'Agregando...' : 'Agregar clase'}
+              </button>
+              <button onClick={() => setCreandoClase(null)} style={{ padding: '14px 20px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '14px' }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal editar plan */}
+      {editandoPlan && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 200 }}>
+          <div style={{ background: 'white', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: '480px', padding: '24px 20px 36px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ width: '44px', height: '5px', background: '#e5e7eb', borderRadius: '3px', margin: '0 auto 20px' }} />
+            <p style={{ margin: '0 0 20px', fontSize: '17px', fontWeight: '800', color: '#111' }}>Editar plan</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Estado del plan</label>
@@ -880,8 +1157,35 @@ export default function AdminApp() {
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Fecha de finalización</label>
-                <input type="date" value={editPlanFechaFin} onChange={e => setEditPlanFechaFin(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Instrumento</label>
+                <select value={editPlanInstrumentoId} onChange={e => setEditPlanInstrumentoId(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }}>
+                  <option value="">— Sin instrumento —</option>
+                  {instrumentos.map(i => <option key={i.id} value={i.id}>{i.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Profesor</label>
+                <select value={editPlanProfesorId} onChange={e => setEditPlanProfesorId(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }}>
+                  <option value="">— Sin profesor —</option>
+                  {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Sede</label>
+                <select value={editPlanSedeId} onChange={e => setEditPlanSedeId(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }}>
+                  <option value="">— Sin sede —</option>
+                  {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Fecha inicio</label>
+                  <input type="date" value={editPlanFechaInicio} onChange={e => setEditPlanFechaInicio(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Fecha fin</label>
+                  <input type="date" value={editPlanFechaFin} onChange={e => setEditPlanFechaFin(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+                </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
@@ -895,16 +1199,25 @@ export default function AdminApp() {
                   <input type="number" value={editPlanTotalClases} onChange={e => setEditPlanTotalClases(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
                 </div>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Valor pagado ($)</label>
-                <input type="number" value={editPlanValorPagado} onChange={e => setEditPlanValorPagado(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
-                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#9ca3af' }}>Si aumenta el valor, se registra un abono por la diferencia</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Valor del plan ($)</label>
+                  <input type="number" value={editPlanValorPlan} onChange={e => setEditPlanValorPlan(e.target.value)} placeholder="Sin valor" style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Valor pagado ($)</label>
+                  <input type="number" value={editPlanValorPagado} onChange={e => setEditPlanValorPagado(e.target.value)} style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
+                </div>
               </div>
+              <p style={{ margin: 0, fontSize: '11px', color: '#9ca3af' }}>Si aumenta el valor pagado, se registra un abono por la diferencia</p>
             </div>
             <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
               <button onClick={guardarPlan} style={{ flex: 1, padding: '14px', background: TEAL, color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '15px', fontWeight: '800' }}>Guardar cambios</button>
               <button onClick={() => setEditandoPlan(null)} style={{ padding: '14px 20px', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: '12px', cursor: 'pointer', fontSize: '14px' }}>Cancelar</button>
             </div>
+            <button onClick={() => borrarPlanVacio(editandoPlan)} style={{ width: '100%', marginTop: '10px', padding: '11px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '12px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
+              🗑 Borrar plan (solo si está vacío)
+            </button>
           </div>
         </div>
       )}
@@ -934,16 +1247,12 @@ export default function AdminApp() {
                   {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
               </div>
-              {/* CAMBIO 4: Selector de duración */}
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Duración</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   {[30, 45, 60, 90, 120].map(d => (
                     <button key={d} onClick={() => setEditDuracion(String(d))}
-                      style={{ flex: 1, padding: '9px 4px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700',
-                        border: `2px solid ${editDuracion === String(d) ? TEAL : '#e5e7eb'}`,
-                        background: editDuracion === String(d) ? TEAL_LIGHT : 'white',
-                        color: editDuracion === String(d) ? TEAL_DARK : '#666' }}>
+                      style={{ flex: 1, padding: '9px 4px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700', border: `2px solid ${editDuracion === String(d) ? TEAL : '#e5e7eb'}`, background: editDuracion === String(d) ? TEAL_LIGHT : 'white', color: editDuracion === String(d) ? TEAL_DARK : '#666' }}>
                       {d}m
                     </button>
                   ))}
