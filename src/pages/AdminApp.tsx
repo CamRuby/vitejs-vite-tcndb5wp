@@ -141,7 +141,6 @@ export default function AdminApp() {
   const [planExpandido, setPlanExpandido] = useState<string | null>(null)
   const [clasesPlan, setClasesPlan] = useState<Record<string, Clase[]>>({})
 
-  // Talleres por cliente
   const [talleresCliente, setTalleresCliente] = useState<Record<string, Taller[]>>({})
   const [tallerExpandido, setTallerExpandido] = useState<string | null>(null)
   const [sesionesTaller, setSesionesTaller] = useState<Record<string, SesionTaller[]>>({})
@@ -158,8 +157,8 @@ export default function AdminApp() {
   const [editProfesorId, setEditProfesorId] = useState('')
   const [editEstado, setEditEstado] = useState('')
   const [editHonorario, setEditHonorario] = useState('')
+  const [editDuracion, setEditDuracion] = useState('')  // CAMBIO 1
 
-  // Edición sesión taller
   const [editSesionFecha, setEditSesionFecha] = useState('')
   const [editSesionHora, setEditSesionHora] = useState('')
   const [editSesionProfesorId, setEditSesionProfesorId] = useState('')
@@ -277,7 +276,6 @@ export default function AdminApp() {
   }
 
   async function cargarSesionesTaller(inscripcionId: string, tallerId: string) {
-    // Obtener sesiones dadas del taller en el período de la inscripción
     const inscripcion = Object.values(talleresCliente).flat().find(t => t.inscripcion_id === inscripcionId)
     const { data: sesiones } = await supabase.from('taller_sesiones')
       .select(`id, fecha, estado, honorario_valor,
@@ -333,8 +331,6 @@ export default function AdminApp() {
       const numeracion = calcularNumeracion(clases, planData?.duracion_min || 60)
         clases.forEach(c => { c.numero_calculado = numeracion.get(c.id) ?? null })
         const maxNumeracion = numeracion.size > 0 ? Math.max(...numeracion.values()) : 0
-        
-        // Calcular numeración proyectada para clases confirmadas
         const durPlan = planData?.duracion_min || 60
         const clasesOrdenadas = [...clases].sort((a, b) =>
           (a.fecha + a.hora).localeCompare(b.fecha + b.hora)
@@ -357,7 +353,6 @@ export default function AdminApp() {
 })
   }
 
-  // ─── FILTROS ─────────────────────────────────────────────────────────────
   const clientesFiltrados = clientes
     .filter(c => {
       if (busqueda && !c.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
@@ -378,7 +373,6 @@ export default function AdminApp() {
       return clientesConProfesor.has(c.id)
     })
 
-  // ─── ACCIONES PLAN ───────────────────────────────────────────────────────
   function abrirEditarPlan(plan: Plan) {
     setEditandoPlan(plan)
     setEditPlanEstado(plan.estado)
@@ -412,7 +406,6 @@ export default function AdminApp() {
     })
   }
 
-  // ─── ACCIONES CLASE ──────────────────────────────────────────────────────
   function abrirEditarClase(clase: Clase) {
     setEditandoClase(clase)
     setEditFecha(clase.fecha)
@@ -425,6 +418,7 @@ export default function AdminApp() {
       clase.estado
     setEditEstado(estadoEdicion)
     setEditHonorario(clase.honorario_valor !== null ? String(clase.honorario_valor) : '')
+    setEditDuracion(String(clase.duracion_min || 60))  // CAMBIO 2
   }
 
   async function guardarClase() {
@@ -445,7 +439,8 @@ export default function AdminApp() {
     setConfirmarCambio({
       mensaje: `¿Está seguro de modificar ${cambios.join(', ')} de la clase de ${clienteNombre} del ${editandoClase.fecha}?`,
       accion: async () => {
-        const payload: any = { fecha: editFecha, hora: editHora + ':00', profesor_id: editProfesorId, honorario_valor: editHonorario !== '' ? Number(editHonorario) : null }
+        // CAMBIO 3: incluir duracion_min en el payload
+        const payload: any = { fecha: editFecha, hora: editHora + ':00', profesor_id: editProfesorId, honorario_valor: editHonorario !== '' ? Number(editHonorario) : null, duracion_min: parseInt(editDuracion) }
         if (editEstado === 'inasistencia') {
           payload.estado = 'cancelada'; payload.cancelado_por_academia = false; payload.cancelado_tarde = true; payload.es_cortesia = false; payload.inasistencia_perdonada = false
         } else if (editEstado === 'inasistencia_perdonada') {
@@ -465,7 +460,6 @@ export default function AdminApp() {
     })
   }
 
-  // ─── ACCIONES SESIÓN TALLER ──────────────────────────────────────────────
   function abrirEditarSesion(sesion: SesionTaller) {
     setEditandoSesion(sesion)
     setEditSesionFecha(sesion.fecha)
@@ -486,12 +480,10 @@ export default function AdminApp() {
     setConfirmarCambio({
       mensaje: `¿Está seguro de modificar ${cambios.join(', ')} de la sesión del taller ${editandoSesion.taller_nombre} del ${editandoSesion.fecha}?`,
       accion: async () => {
-        // Actualizar sesión — fecha y honorario se guardan en taller_sesiones
         await supabase.from('taller_sesiones').update({
           fecha: editSesionFecha,
           honorario_valor: editSesionValor !== '' ? Number(editSesionValor) : null,
         }).eq('id', editandoSesion.id)
-        // Actualizar profesor en el taller si cambió
         if (editSesionProfesorId !== editandoSesion.profesor_id) {
           await supabase.from('taller_sesiones').update({ profesor_id: editSesionProfesorId }).eq('id', editandoSesion.id)
         }
@@ -521,7 +513,6 @@ export default function AdminApp() {
     setConfirmarCambio({
       mensaje: `¿Está seguro de BORRAR la inscripción al taller ${taller.nombre}? Se perderán los registros de sesiones y pagos.`,
       accion: async () => {
-        // Borrar asistencias, confirmaciones y sesiones relacionadas
         const { data: sesiones } = await supabase.from('taller_sesiones').select('id').eq('taller_id', taller.taller_id)
         if (sesiones?.length) {
           const ids = sesiones.map((s: any) => s.id)
@@ -577,7 +568,6 @@ export default function AdminApp() {
     })
   }
 
-  // ─── LOGIN ────────────────────────────────────────────────────────────────
   if (rolVerificado === 'cargando') return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: TEAL }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -612,12 +602,10 @@ export default function AdminApp() {
     </div>
   )
 
-  // ─── APP PRINCIPAL ────────────────────────────────────────────────────────
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#f8fafc', fontFamily: 'system-ui, sans-serif', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
       <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}} *{box-sizing:border-box}`}</style>
 
-      {/* Header */}
       <div style={{ background: TEAL_DARK, position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -642,7 +630,6 @@ export default function AdminApp() {
         </div>
       )}
 
-      {/* Reportes */}
       {vistaActual === 'reportes' && (
         <div style={{ padding: '32px 16px', textAlign: 'center' }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
@@ -651,10 +638,8 @@ export default function AdminApp() {
         </div>
       )}
 
-      {/* Clientes */}
       {vistaActual === 'clientes' && (
         <div style={{ padding: '16px', paddingBottom: '48px' }}>
-          {/* Filtros */}
           <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <input type="text" placeholder="🔍 Buscar cliente..." value={busqueda} onChange={e => setBusqueda(e.target.value)}
               style={{ width: '100%', padding: '11px 14px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px' }} />
@@ -694,7 +679,6 @@ export default function AdminApp() {
 
           {cargando && <p style={{ textAlign: 'center', color: '#9ca3af', padding: '40px 0' }}>Cargando...</p>}
 
-          {/* Lista clientes */}
           {clientesFiltrados.map(cliente => {
             const expandido = clienteExpandido === cliente.id
             const planes = planesCliente[cliente.id] || []
@@ -724,7 +708,6 @@ export default function AdminApp() {
                       <p style={{ padding: '16px', textAlign: 'center', color: '#9ca3af', fontSize: '13px' }}>Sin planes ni talleres registrados</p>
                     )}
 
-                    {/* ── PLANES ── */}
                     {planes.map(plan => {
                       const planExp = planExpandido === plan.id
                       const clases = clasesPlan[plan.id] || []
@@ -803,7 +786,6 @@ export default function AdminApp() {
                       )
                     })}
 
-                    {/* ── TALLERES ── */}
                     {talleres.map(taller => {
                       const tallerExp = tallerExpandido === taller.inscripcion_id
                       const sesiones = sesionesTaller[taller.inscripcion_id] || []
@@ -951,6 +933,21 @@ export default function AdminApp() {
                   <option value="">— Sin profesor —</option>
                   {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
+              </div>
+              {/* CAMBIO 4: Selector de duración */}
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Duración</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {[30, 45, 60, 90, 120].map(d => (
+                    <button key={d} onClick={() => setEditDuracion(String(d))}
+                      style={{ flex: 1, padding: '9px 4px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '700',
+                        border: `2px solid ${editDuracion === String(d) ? TEAL : '#e5e7eb'}`,
+                        background: editDuracion === String(d) ? TEAL_LIGHT : 'white',
+                        color: editDuracion === String(d) ? TEAL_DARK : '#666' }}>
+                      {d}m
+                    </button>
+                  ))}
+                </div>
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#6b7280', marginBottom: '6px' }}>Estado</label>
