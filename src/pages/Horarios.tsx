@@ -1230,7 +1230,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                         const col2 = getColorEstado(mainClass.es_cortesia ? 'dada' : mainClass.estado, mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && mainClass.cancelado_tarde)
                         // número calculado en tiempo real desde la view de Supabase
                        const esProyectado = mainClass.estado === 'confirmada' && mainClass.numero_proyectado
-                        const numPlan = mainClass.contratos?.total_clases && mainClass.numero_calculado
+                       const numPlan = mainClass.contratos?.total_clases && mainClass.numero_calculado && mainClass.estado !== 'programada'
                           ? `${esProyectado ? '~' : ''}${mainClass.numero_calculado}/${mainClass.contratos.total_clases}`
                           : ''
                         const colorNum = esProyectado ? '#b45309' : undefined
