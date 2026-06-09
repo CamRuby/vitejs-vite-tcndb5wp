@@ -8,7 +8,7 @@ pdfMake.vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
-const METODOS_PAGO = ['Efectivo', 'Transferencia', 'Nequi', 'Daviplata', 'Tarjeta BOLD']
+const METODOS_PAGO = ['Ideal Chicó', 'Ideal Rosales', 'Bancolombia Ruby', 'Davivienda Ruby', 'Wompi', 'Tarjeta Redeban', 'Efectivo']
 
 const estiloInput = {
   width: '100%', padding: '10px 12px',
