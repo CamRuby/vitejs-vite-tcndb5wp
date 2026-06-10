@@ -468,7 +468,7 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
   const [sedesDisponibles, setSedesDisponibles] = useState<Sede2[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filtro, setFiltro] = useState<'todos' | 'al_dia' | 'pendiente'>('todos')
+  const [filtro, setFiltro] = useState<'todos' | 'al_dia' | 'pendiente' | 'con_wa'>('todos')
   const [sedeFiltro, setSedeFiltro] = useState('todas')
   const [busqueda, setBusqueda] = useState('')
   const [modoEdicion, setModoEdicion] = useState(false)
@@ -515,6 +515,7 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
   })
   if (filtro === 'al_dia') filtrados = filtrados.filter(d => d.diferencia === 0)
   else if (filtro === 'pendiente') filtrados = filtrados.filter(d => d.diferencia > 0).sort((a, b) => a.diferencia - b.diferencia)
+  else if (filtro === 'con_wa') filtrados = filtrados.filter(d => d.conteo_whatsapp !== null)
 
   function getNum(plan: PlanActivo, campo: CampoNumero): number | string {
     const ed = editados[plan.id]
@@ -580,7 +581,7 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
         ))}
       </div>
       <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-        {([{ key: 'todos', label: '📋 Todos' }, { key: 'al_dia', label: '✅ Al día' }, { key: 'pendiente', label: '⏳ Pendiente' }] as const).map(f => (
+        {([{ key: 'todos', label: '📋 Todos' }, { key: 'al_dia', label: '✅ Al día' }, { key: 'pendiente', label: '⏳ Pendiente' }, { key: 'con_wa', label: '💬 Con conteo WA' }] as const).map(f => (
           <button key={f.key} onClick={() => setFiltro(f.key)} style={{ padding: '7px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', background: filtro === f.key ? TEAL : '#fff', color: filtro === f.key ? '#fff' : TEAL_DARK, border: `1.5px solid ${filtro === f.key ? TEAL : TEAL_MID}` }}>{f.label}</button>
         ))}
         <select value={sedeFiltro} onChange={e => setSedeFiltro(e.target.value)} style={{ padding: '7px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${sedeFiltro !== 'todas' ? TEAL : TEAL_MID}`, background: sedeFiltro !== 'todas' ? TEAL_LIGHT : '#fff', color: sedeFiltro !== 'todas' ? TEAL_DARK : '#475569', cursor: 'pointer', outline: 'none' }}>
