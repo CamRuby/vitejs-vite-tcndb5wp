@@ -84,6 +84,8 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
   const [guardandoPago, setGuardandoPago] = useState(false)
   const [errorPago, setErrorPago] = useState('')
   const [mensajeOk, setMensajeOk] = useState('')
+  const [confirmarBorrarAbono, setConfirmarBorrarAbono] = useState<{ abonoId: string; planId: string } | null>(null)
+  const [borrandoAbono, setBorrandoAbono] = useState(false)
 
   useEffect(() => { cargarSedes() }, [])
   useEffect(() => { cargarDatos() }, [mes])
@@ -142,6 +144,15 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
     return 'parcial'
   }
 
+  async function borrarAbono(abonoId: string) {
+    setBorrandoAbono(true)
+    await supabase.from('pagos').delete().eq('id', abonoId)
+    setConfirmarBorrarAbono(null)
+    setBorrandoAbono(false)
+    setMensajeOk('Pago eliminado')
+    setTimeout(() => setMensajeOk(''), 3000)
+    await cargarDatos()
+  }
   async function registrarPago() {
     if (!pagoModal) return
     if (!nuevoMonto || Number(nuevoMonto) <= 0) { setErrorPago('Ingresa un monto válido'); return }
@@ -340,10 +351,23 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
                         ? <p style={{ margin: 0, fontSize: '12px', color: '#d1d5db', fontStyle: 'italic' }}>Sin abonos</p>
                         : <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                             {plan.abonos.map(a => (
-                              <div key={a.id} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                              <div key={a.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                 <span style={{ fontSize: '12px', color: '#6b7280', whiteSpace: 'nowrap', minWidth: '52px' }}>{a.fecha.substring(5)}</span>
                                 <span style={{ fontSize: '12px', color: '#374151', flex: 1 }}>{a.metodo}</span>
                                 <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>${a.monto.toLocaleString('es-CO')}</span>
+                                {modoEdicion && (
+                                  confirmarBorrarAbono?.abonoId === a.id
+                                    ? <div style={{ display: 'flex', gap: '4px' }}>
+                                        <button onClick={() => borrarAbono(a.id)} disabled={borrandoAbono}
+                                          style={{ padding: '2px 8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '11px', fontWeight: 700 }}>
+                                          {borrandoAbono ? '...' : '✓'}
+                                        </button>
+                                        <button onClick={() => setConfirmarBorrarAbono(null)}
+                                          style={{ padding: '2px 8px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '11px' }}>✕</button>
+                                      </div>
+                                    : <button onClick={() => setConfirmarBorrarAbono({ abonoId: a.id, planId: plan.id })}
+                                        style={{ padding: '2px 6px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '5px', cursor: 'pointer', fontSize: '11px' }}>🗑</button>
+                                )}
                               </div>
                             ))}
                           </div>
