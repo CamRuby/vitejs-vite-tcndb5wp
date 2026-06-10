@@ -55,16 +55,6 @@ export default function Reportes({ rol }: { rol?: string }) {
   )
 }
 
-function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void }) {
-  return (
-    <div style={{ padding: '32px', maxWidth: '900px', margin: '0 auto' }}>
-      <button onClick={onVolver} style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600, marginBottom: '24px' }}>← Reportes</button>
-      <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: '0 0 8px' }}>📋 Clases tomadas por plan</h2>
-      <p style={{ color: '#888', fontSize: '14px' }}>Este reporte está disponible — próximamente se integrará aquí.</p>
-    </div>
-  )
-}
-
 function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
   const [datos, setDatos] = useState<PlanControl[]>([])
   const [sedes, setSedes] = useState<Sede[]>([])
