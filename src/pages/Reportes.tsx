@@ -443,3 +443,198 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
     </div>
   )
 }
+
+// ─── REPORTE: CLASES TOMADAS POR PLAN ────────────────────────────────────────
+interface PlanActivo {
+  id: string; cliente_id: string; cliente_nombre: string; grupo_whatsapp: string | null
+  sede_id: string | null; sede_nombre: string; instrumento_id: string | null
+  instrumento_nombre: string; total_clases: number; duracion_min: number
+  clases_tomadas: number; conteo_whatsapp: number | null; diferencia: number
+}
+interface Instrumento2 { id: string; nombre: string }
+interface Sede2 { id: string; nombre: string }
+type CampoTexto = 'grupo_whatsapp'
+type CampoNumero = 'total_clases' | 'duracion_min' | 'conteo_whatsapp'
+interface Edicion {
+  instrumento_id?: string; sede_id?: string; grupo_whatsapp?: string
+  total_clases?: number; duracion_min?: number; conteo_whatsapp?: number | null
+}
+
+function calcularEstadoPago2(valorPlan: number | null, pagos: any[]) {
+  const totalPagado = (pagos || []).reduce((s: number, p: any) => s + Number(p.monto), 0)
+  const saldo = valorPlan !== null ? valorPlan - totalPagado : null
+  let estado = 'Sin valor'
+  if (valorPlan !== null) {
+    if (totalPagado === 0) estado = 'Sin pagar'
+    else if (totalPagado >= valorPlan) estado = 'Pagado'
+    else estado = 'Parcial'
+  }
+  return { totalPagado, saldo, estado }
+}
+
+function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void }) {
+  const [datos, setDatos] = useState<PlanActivo[]>([])
+  const [instrumentos, setInstrumentos] = useState<Instrumento2[]>([])
+  const [sedesDisponibles, setSedesDisponibles] = useState<Sede2[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [filtro, setFiltro] = useState<'todos' | 'al_dia' | 'pendiente'>('todos')
+  const [sedeFiltro, setSedeFiltro] = useState('todas')
+  const [busqueda, setBusqueda] = useState('')
+  const [modoEdicion, setModoEdicion] = useState(false)
+  const [editados, setEditados] = useState<Record<string, Edicion>>({})
+  const [guardando, setGuardando] = useState(false)
+  const [mensajeGuardado, setMensajeGuardado] = useState<string | null>(null)
+
+  useEffect(() => { cargarDatos() }, [])
+
+  async function cargarDatos() {
+    setCargando(true); setError(null)
+    try {
+      const [{ data, error: err }, { data: instr }, { data: sedesData }] = await Promise.all([
+        supabase.from('contratos').select(`id, cliente_id, sede_id, instrumento_id, total_clases, duracion_min, clases_tomadas, conteo_whatsapp, clientes(nombres, apellidos, grupo_whatsapp), sedes(nombre), instrumentos(id, nombre)`).eq('estado', 'activo'),
+        supabase.from('instrumentos').select('id, nombre').order('nombre'),
+        supabase.from('sedes').select('id, nombre').order('nombre')
+      ])
+      if (err) throw err
+      setInstrumentos(instr || []); setSedesDisponibles(sedesData || [])
+      const filas: PlanActivo[] = (data || []).map((row: any) => {
+        const tomadas = Number(row.clases_tomadas ?? 0)
+        const whatsapp = row.conteo_whatsapp !== null ? Number(row.conteo_whatsapp) : null
+        const nombre = row.clientes?.nombre || `${row.clientes?.nombres ?? ''} ${row.clientes?.apellidos ?? ''}`.trim()
+        return {
+          id: row.id, cliente_id: row.cliente_id, cliente_nombre: nombre,
+          grupo_whatsapp: row.clientes?.grupo_whatsapp ?? null, sede_id: row.sede_id ?? null,
+          sede_nombre: row.sedes?.nombre ?? '—', instrumento_id: row.instrumento_id ?? null,
+          instrumento_nombre: row.instrumentos?.nombre ?? '—',
+          total_clases: Number(row.total_clases ?? 0), duracion_min: Number(row.duracion_min ?? 0),
+          clases_tomadas: tomadas, conteo_whatsapp: whatsapp,
+          diferencia: whatsapp !== null ? tomadas - whatsapp : tomadas,
+        }
+      }).sort((a, b) => a.sede_nombre.localeCompare(b.sede_nombre))
+      setDatos(filas)
+    } catch { setError('No se pudieron cargar los datos.') } finally { setCargando(false) }
+  }
+
+  const sedes = ['todas', ...Array.from(new Set(datos.map(d => d.sede_nombre))).sort()]
+  let filtrados = datos.filter(d => {
+    const q = busqueda.toLowerCase()
+    if (busqueda && !d.cliente_nombre.toLowerCase().includes(q) && !d.sede_nombre.toLowerCase().includes(q) && !d.instrumento_nombre.toLowerCase().includes(q) && !(d.grupo_whatsapp ?? '').toLowerCase().includes(q)) return false
+    if (sedeFiltro !== 'todas' && d.sede_nombre !== sedeFiltro) return false
+    return true
+  })
+  if (filtro === 'al_dia') filtrados = filtrados.filter(d => d.diferencia === 0)
+  else if (filtro === 'pendiente') filtrados = filtrados.filter(d => d.diferencia > 0).sort((a, b) => a.diferencia - b.diferencia)
+
+  function getNum(plan: PlanActivo, campo: CampoNumero): number | string {
+    const ed = editados[plan.id]
+    if (ed && campo in ed) { const v = ed[campo as keyof Edicion]; return v === null || v === undefined ? '' : v as number }
+    if (campo === 'conteo_whatsapp') return plan.conteo_whatsapp !== null ? plan.conteo_whatsapp : ''
+    return campo === 'total_clases' ? plan.total_clases : plan.duracion_min
+  }
+  function getTxt(plan: PlanActivo, campo: CampoTexto): string { const ed = editados[plan.id]; return ed && campo in ed ? ed[campo] ?? '' : plan.grupo_whatsapp ?? '' }
+  function getInstrumentoId(plan: PlanActivo): string { const ed = editados[plan.id]; return ed && 'instrumento_id' in ed ? ed.instrumento_id ?? '' : plan.instrumento_id ?? '' }
+  function getSedeId(plan: PlanActivo): string { const ed = editados[plan.id]; return ed && 'sede_id' in ed ? ed.sede_id ?? '' : plan.sede_id ?? '' }
+  function editarNum(id: string, campo: CampoNumero, valor: string) { setEditados(prev => ({ ...prev, [id]: { ...prev[id], [campo]: valor === '' ? null : Number(valor) } })) }
+  function editarTxt(id: string, campo: CampoTexto, valor: string) { setEditados(prev => ({ ...prev, [id]: { ...prev[id], [campo]: valor } })) }
+  function editarSede(id: string, valor: string) { setEditados(prev => ({ ...prev, [id]: { ...prev[id], sede_id: valor } })) }
+  function editarInstrumento(id: string, valor: string) { setEditados(prev => ({ ...prev, [id]: { ...prev[id], instrumento_id: valor } })) }
+
+  async function guardarCambios() {
+    setGuardando(true); setMensajeGuardado(null); let errores = 0
+    for (const [id, cambios] of Object.entries(editados)) {
+      const plan = datos.find(d => d.id === id); if (!plan) continue
+      const updateContrato: any = {}
+      if ('total_clases' in cambios && cambios.total_clases !== null) updateContrato.total_clases = cambios.total_clases
+      if ('duracion_min' in cambios && cambios.duracion_min !== null) updateContrato.duracion_min = cambios.duracion_min
+      if ('conteo_whatsapp' in cambios) updateContrato.conteo_whatsapp = cambios.conteo_whatsapp
+      if ('instrumento_id' in cambios && cambios.instrumento_id) updateContrato.instrumento_id = cambios.instrumento_id
+      if ('sede_id' in cambios && cambios.sede_id) updateContrato.sede_id = cambios.sede_id
+      if (Object.keys(updateContrato).length > 0) { const { error: err } = await supabase.from('contratos').update(updateContrato).eq('id', id); if (err) errores++ }
+      if ('grupo_whatsapp' in cambios) { const { error: err } = await supabase.from('clientes').update({ grupo_whatsapp: cambios.grupo_whatsapp }).eq('id', plan.cliente_id); if (err) errores++ }
+    }
+    setGuardando(false); setEditados({}); setModoEdicion(false)
+    setMensajeGuardado(errores === 0 ? '✅ Cambios guardados.' : `⚠️ ${errores} error(es).`)
+    await cargarDatos(); setTimeout(() => setMensajeGuardado(null), 4000)
+  }
+
+  const hayCambios = Object.keys(editados).length > 0
+  const estiloInput = (editado: boolean) => ({ padding: '5px 8px', borderRadius: '6px', textAlign: 'center' as const, border: `1.5px solid ${editado ? TEAL : TEAL_MID}`, fontSize: '13px', outline: 'none', background: '#fff' })
+  const estiloInputTxt = (editado: boolean) => ({ padding: '5px 8px', borderRadius: '6px', border: `1.5px solid ${editado ? TEAL : TEAL_MID}`, fontSize: '13px', outline: 'none', background: '#fff', width: '100%', minWidth: '120px' })
+  const estiloSelect = (editado: boolean) => ({ padding: '5px 8px', borderRadius: '6px', border: `1.5px solid ${editado ? TEAL : TEAL_MID}`, fontSize: '13px', outline: 'none', background: '#fff', width: '100%', minWidth: '130px', cursor: 'pointer' })
+  const columnas = ['#', 'Cliente', 'Grupo WA', 'Sede', 'Instrumento', 'Plan', 'Duración', 'Clases tomadas', 'Conteo WA', 'Diferencia']
+  const editables = ['Grupo WA', 'Sede', 'Instrumento', 'Plan', 'Duración', 'Conteo WA']
+
+  return (
+    <div style={{ padding: '28px 32px', maxWidth: '1400px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        <button onClick={onVolver} style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>← Reportes</button>
+        <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: 0, flex: 1 }}>📋 Clases tomadas por plan</h2>
+        {!modoEdicion
+          ? <button onClick={() => setModoEdicion(true)} style={{ background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>✏️ Modo edición</button>
+          : <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={() => { setEditados({}); setModoEdicion(false) }} style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Cancelar</button>
+              <button onClick={guardarCambios} disabled={!hayCambios || guardando} style={{ background: hayCambios ? TEAL : '#a0c8c8', border: 'none', borderRadius: '8px', padding: '7px 18px', cursor: hayCambios ? 'pointer' : 'not-allowed', fontSize: '13px', color: '#fff', fontWeight: 700 }}>
+                {guardando ? 'Guardando…' : `💾 Guardar${hayCambios ? ` (${Object.keys(editados).length})` : ''}`}
+              </button>
+            </div>
+        }
+      </div>
+      {mensajeGuardado && <div style={{ background: mensajeGuardado.startsWith('✅') ? '#f0fdf4' : '#fffbeb', border: `1px solid ${mensajeGuardado.startsWith('✅') ? '#bbf7d0' : '#fde68a'}`, borderRadius: '8px', padding: '10px 16px', marginBottom: '16px', fontSize: '14px', color: mensajeGuardado.startsWith('✅') ? '#166534' : '#92400e' }}>{mensajeGuardado}</div>}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        {[{ label: 'Total planes activos', valor: datos.length, color: TEAL }, { label: 'Al día', valor: datos.filter(d => d.diferencia === 0).length, color: '#16a34a' }, { label: 'Pendiente', valor: datos.filter(d => d.diferencia > 0).length, color: '#d97706' }].map(t => (
+          <div key={t.label} style={{ background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', padding: '14px 20px', minWidth: '140px', flex: '1' }}>
+            <div style={{ fontSize: '24px', fontWeight: 800, color: t.color }}>{cargando ? '…' : t.valor}</div>
+            <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>{t.label}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+        {([{ key: 'todos', label: '📋 Todos' }, { key: 'al_dia', label: '✅ Al día' }, { key: 'pendiente', label: '⏳ Pendiente' }] as const).map(f => (
+          <button key={f.key} onClick={() => setFiltro(f.key)} style={{ padding: '7px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', background: filtro === f.key ? TEAL : '#fff', color: filtro === f.key ? '#fff' : TEAL_DARK, border: `1.5px solid ${filtro === f.key ? TEAL : TEAL_MID}` }}>{f.label}</button>
+        ))}
+        <select value={sedeFiltro} onChange={e => setSedeFiltro(e.target.value)} style={{ padding: '7px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${sedeFiltro !== 'todas' ? TEAL : TEAL_MID}`, background: sedeFiltro !== 'todas' ? TEAL_LIGHT : '#fff', color: sedeFiltro !== 'todas' ? TEAL_DARK : '#475569', cursor: 'pointer', outline: 'none' }}>
+          {sedes.map(s => <option key={s} value={s}>{s === 'todas' ? '🏢 Todas las sedes' : `🏢 ${s}`}</option>)}
+        </select>
+        <input type="text" placeholder="Buscar cliente, instrumento, grupo…" value={busqueda} onChange={e => setBusqueda(e.target.value)} style={{ marginLeft: 'auto', padding: '7px 14px', borderRadius: '20px', border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', outline: 'none', width: '240px', color: '#333' }} />
+      </div>
+      {cargando && <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>Cargando datos…</div>}
+      {error && <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '16px', color: '#b91c1c', fontSize: '14px' }}>{error}</div>}
+      {!cargando && !error && (
+        <div style={{ overflowX: 'auto', borderRadius: '12px', border: `1.5px solid ${TEAL_MID}`, background: '#fff' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead><tr style={{ background: TEAL, color: '#fff' }}>
+              {columnas.map((h, i) => <th key={i} style={{ padding: '11px 14px', fontWeight: 700, textAlign: i === 0 || i >= 5 ? 'center' : 'left', whiteSpace: 'nowrap', fontSize: '12px' }}>{h}{modoEdicion && editables.includes(h) ? ' ✏️' : ''}</th>)}
+            </tr></thead>
+            <tbody>
+              {filtrados.length === 0
+                ? <tr><td colSpan={columnas.length} style={{ padding: '40px', textAlign: 'center', color: '#999' }}>No hay planes.</td></tr>
+                : filtrados.map((plan, idx) => {
+                  const ed = editados[plan.id] ?? {}
+                  const waActual = 'conteo_whatsapp' in ed ? ed.conteo_whatsapp : plan.conteo_whatsapp
+                  const diff = waActual !== null && waActual !== undefined ? plan.clases_tomadas - (waActual as number) : plan.clases_tomadas
+                  const diffColor = diff === 0 ? '#16a34a' : diff <= 2 ? '#d97706' : '#dc2626'
+                  const diffBg = diff === 0 ? '#f0fdf4' : diff <= 2 ? '#fffbeb' : '#fef2f2'
+                  return (
+                    <tr key={plan.id} style={{ borderTop: `1px solid ${TEAL_LIGHT}`, background: Object.keys(ed).length > 0 ? '#fffde7' : idx % 2 === 0 ? '#fff' : '#fafefe' }}>
+                      <td style={{ padding: '10px 14px', textAlign: 'center', color: '#999', fontWeight: 600 }}>{idx + 1}</td>
+                      <td style={{ padding: '10px 14px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>{plan.cliente_nombre}</td>
+                      <td style={{ padding: '6px 14px', minWidth: '130px' }}>{modoEdicion ? <input type="text" value={getTxt(plan, 'grupo_whatsapp')} onChange={e => editarTxt(plan.id, 'grupo_whatsapp', e.target.value)} placeholder="Sin grupo" style={estiloInputTxt('grupo_whatsapp' in ed)} /> : <span style={{ color: plan.grupo_whatsapp ? '#334155' : '#ccc' }}>{plan.grupo_whatsapp || '—'}</span>}</td>
+                      <td style={{ padding: '6px 14px', minWidth: '130px' }}>{modoEdicion ? <select value={getSedeId(plan)} onChange={e => editarSede(plan.id, e.target.value)} style={estiloSelect('sede_id' in ed)}><option value="">— Sin sede —</option>{sedesDisponibles.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}</select> : <span style={{ color: '#475569' }}>{plan.sede_nombre}</span>}</td>
+                      <td style={{ padding: '6px 14px', minWidth: '140px' }}>{modoEdicion ? <select value={getInstrumentoId(plan)} onChange={e => editarInstrumento(plan.id, e.target.value)} style={estiloSelect('instrumento_id' in ed)}><option value="">— Sin instrumento —</option>{instrumentos.map(i => <option key={i.id} value={i.id}>{i.nombre}</option>)}</select> : <span style={{ color: '#475569' }}>{plan.instrumento_nombre}</span>}</td>
+                      <td style={{ padding: '6px 14px', textAlign: 'center' }}>{modoEdicion ? <input type="number" value={getNum(plan, 'total_clases')} onChange={e => editarNum(plan.id, 'total_clases', e.target.value)} style={{ ...estiloInput('total_clases' in ed), width: '64px' }} /> : <span style={{ color: '#334155', fontWeight: 600 }}>{plan.total_clases}</span>}</td>
+                      <td style={{ padding: '6px 14px', textAlign: 'center' }}>{modoEdicion ? <input type="number" value={getNum(plan, 'duracion_min')} onChange={e => editarNum(plan.id, 'duracion_min', e.target.value)} style={{ ...estiloInput('duracion_min' in ed), width: '64px' }} /> : <span style={{ color: '#334155' }}>{plan.duracion_min} min</span>}</td>
+                      <td style={{ padding: '10px 14px', textAlign: 'center', color: '#334155', fontWeight: 600 }}>{plan.clases_tomadas}</td>
+                      <td style={{ padding: '6px 14px', textAlign: 'center' }}>{modoEdicion ? <input type="number" value={getNum(plan, 'conteo_whatsapp')} onChange={e => editarNum(plan.id, 'conteo_whatsapp', e.target.value)} placeholder="—" style={{ ...estiloInput('conteo_whatsapp' in ed), width: '64px' }} /> : plan.conteo_whatsapp !== null ? <span style={{ color: '#334155' }}>{plan.conteo_whatsapp}</span> : <span style={{ color: '#ccc' }}>—</span>}</td>
+                      <td style={{ padding: '10px 14px', textAlign: 'center' }}><span style={{ background: diffBg, color: diffColor, borderRadius: '20px', padding: '3px 12px', fontWeight: 700, fontSize: '13px', display: 'inline-block' }}>{diff === 0 ? '✓ 0' : `+${diff}`}</span></td>
+                    </tr>
+                  )
+                })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {!cargando && !error && filtrados.length > 0 && <div style={{ marginTop: '12px', fontSize: '12px', color: '#999', textAlign: 'right' }}>Mostrando {filtrados.length} de {datos.length} planes</div>}
+    </div>
+  )
+}
