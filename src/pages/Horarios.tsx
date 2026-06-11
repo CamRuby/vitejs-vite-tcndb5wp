@@ -137,9 +137,6 @@ export default function Horarios() {
   const [modalVerTaller, setModalVerTaller] = useState(false)
   const [tallerViendo, setTallerViendo] = useState<any>(null)
   const [sesionesEstadoMap, setSesionesEstadoMap] = useState<Record<string, string>>({})
-  const [sesionesHoraMap, setSesionesHoraMap] = useState<Record<string, string>>({})
-  const [sesionFechaOverride, setSesionFechaOverride] = useState('')
-  const [sesionHoraOverride, setSesionHoraOverride] = useState('')
   const [inscritosDelTaller, setInscritosDelTaller] = useState<any[]>([])
   const [sesionActual, setSesionActual] = useState<any>(null)
   const [asistenciasSesion, setAsistenciasSesion] = useState<Record<string, boolean | null>>({})
@@ -354,20 +351,15 @@ setCargando(false)
       const [{ data: ins }, { data: sesiones }] = await Promise.all([
         supabase.from('taller_inscripciones').select('taller_id')
           .in('taller_id', data.map((t: any) => t.id)).eq('estado', 'activo').gte('mes', mes),
-        supabase.from('taller_sesiones').select('taller_id, fecha, estado, hora')
+        supabase.from('taller_sesiones').select('taller_id, fecha, estado')
           .in('taller_id', data.map((t: any) => t.id))
       ])
       const conteo: Record<string, number> = {}
       ;(ins || []).forEach((i: any) => { conteo[i.taller_id] = (conteo[i.taller_id] || 0) + 1 })
       setInscritosPorTaller(conteo)
       const sMap: Record<string, string> = {}
-      const horaMap: Record<string, string> = {}
-      ;(sesiones || []).forEach((s: any) => {
-        sMap[`${s.taller_id}-${s.fecha}`] = s.estado
-        if (s.hora) horaMap[`${s.taller_id}-${s.fecha}`] = s.hora.substring(0,5)
-      })
+      ;(sesiones || []).forEach((s: any) => { sMap[`${s.taller_id}-${s.fecha}`] = s.estado })
       setSesionesEstadoMap(sMap)
-      setSesionesHoraMap(horaMap)
     }
   }
 async function verificarConflictosEnMemoria(
@@ -606,8 +598,6 @@ async function verificarConflictosEnMemoria(
       }
     }
     setInscritosDelTaller(inscData)
-    setSesionFechaOverride(fechaCol)
-    setSesionHoraOverride(sesion?.hora?.substring(0,5) || taller.hora?.substring(0,5) || '')
     setModalVerTaller(true)
   }
 
@@ -1038,19 +1028,9 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
 
   function getTallerSlot(salonId: string, hora: string, fecha: string) {
     const diaSemana = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
-    // Caso normal: taller cuyo dia_semana coincide con esta fecha
-    const normal = talleres.find(t =>
+    return talleres.find(t =>
       t.salon_id === salonId && t.dia_semana === diaSemana && t.hora?.substring(0, 5) === hora
-    )
-    if (normal) return normal
-    // Caso excepción: sesión movida a esta fecha con hora específica
-    return talleres.find(t => {
-      if (t.salon_id !== salonId) return false
-      if (t.dia_semana === diaSemana) return false // ya cubierto arriba
-      const horaOverride = sesionesHoraMap[`${t.id}-${fecha}`]
-      if (!horaOverride) return false
-      return horaOverride === hora && !!sesionesEstadoMap[`${t.id}-${fecha}`]
-    }) || null
+    ) || null
   }
 
   const hayEdicionReal = claseEditando && (
@@ -1639,57 +1619,6 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                       </div>
                     )}
                   </div>
-                  {/* Mover sesión a otra fecha/hora */}
-                  <div style={{ background: '#fafbfc', border: '1px solid #e5e7eb', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
-                    <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: '700', color: '#374151' }}>📅 Mover esta sesión</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: '#6b7280', marginBottom: '4px' }}>Fecha</label>
-                        <input type="date" value={sesionFechaOverride} onChange={e => setSesionFechaOverride(e.target.value)}
-                          style={{ width: '100%', padding: '8px 10px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px', boxSizing: 'border-box' as const }} />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: '#6b7280', marginBottom: '4px' }}>Hora</label>
-                        <select value={sesionHoraOverride} onChange={e => setSesionHoraOverride(e.target.value)}
-                          style={{ width: '100%', padding: '8px 10px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px' }}>
-                          {HORAS.map(h => <option key={h} value={h}>{h}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    {(sesionFechaOverride !== fechaSesionViendo || sesionHoraOverride !== (tallerViendo?.hora?.substring(0,5) || '')) ? (
-                      <button onClick={async () => {
-                        let sesId = sesionActual?.id
-                        if (!sesId) {
-                          const { data: newSes } = await supabase.from('taller_sesiones')
-                            .insert({ taller_id: tallerViendo.id, fecha: sesionFechaOverride, estado: 'programada', hora: sesionHoraOverride + ':00' })
-                            .select().single()
-                          if (newSes) { setSesionActual(newSes); sesId = newSes.id }
-                        } else {
-                          await supabase.from('taller_sesiones').update({ fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00' }).eq('id', sesId)
-                          setSesionActual((prev: any) => ({ ...prev, fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00' }))
-                        }
-                        setSesionesEstadoMap(prev => {
-                          const n = { ...prev }
-                          delete n[`${tallerViendo.id}-${fechaSesionViendo}`]
-                          n[`${tallerViendo.id}-${sesionFechaOverride}`] = sesionActual?.estado || 'programada'
-                          return n
-                        })
-                        setSesionesHoraMap(prev => {
-                          const n = { ...prev }
-                          delete n[`${tallerViendo.id}-${fechaSesionViendo}`]
-                          n[`${tallerViendo.id}-${sesionFechaOverride}`] = sesionHoraOverride
-                          return n
-                        })
-                        setModalVerTaller(false)
-                        await cargarTalleres()
-                      }}
-                        style={{ width: '100%', padding: '8px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '700' }}>
-                        Mover esta sesión →
-                      </button>
-                    ) : (
-                      <p style={{ margin: 0, fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>Cambia la fecha u hora para mover solo esta sesión</p>
-                    )}
-                  </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <p style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#333' }}>
                       Inscritos esta sesión <span style={{ color: TALLER_COLOR }}>({inscritosDelTaller.length})</span>
@@ -1801,7 +1730,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                     </div>
                     <div>
                    <label style={labelStyle}>Hora de inicio</label>
-                        <select value={teHora} onChange={e => setTeHora(e.target.value)} style={fieldStyle}>
+                        <select value={editHora} onChange={e => setEditHora(e.target.value)} style={fieldStyle}>
                          {HORAS.map(h => <option key={h} value={h}>{h}</option>)}
                         </select>
                     </div>
