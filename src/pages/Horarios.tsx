@@ -1207,7 +1207,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                   const mainClass = cs[0]
                   const rowSpan = taller
                     ? Math.max(1, Math.round((taller.duracion_min || 60) / 15))
-                    : mainClass ? Math.max(1, Math.round((mainClass.duracion_min || 60) / 15)) : 1
+                    : mainClass && mainClass.estado !== 'cancelada' ? Math.max(1, Math.round((mainClass.duracion_min || 60) / 15)) : 1
                   const esCeldaPasada = esPasado(col.fecha)
                   return (
                     <td key={cellKey}
