@@ -592,10 +592,16 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
       {cargando && <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>Cargando datos…</div>}
       {error && <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '16px', color: '#b91c1c', fontSize: '14px' }}>{error}</div>}
       {!cargando && !error && (
-        <div style={{ overflowX: 'auto', borderRadius: '12px', border: `1.5px solid ${TEAL_MID}`, background: '#fff' }}>
+        <div style={{ overflowX: 'auto', borderRadius: '12px', border: `1.5px solid ${TEAL_MID}`, background: '#fff', position: 'relative' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead><tr style={{ background: TEAL, color: '#fff' }}>
-              {columnas.map((h, i) => <th key={i} style={{ padding: '11px 14px', fontWeight: 700, textAlign: i === 0 || i >= 5 ? 'center' : 'left', whiteSpace: 'nowrap', fontSize: '12px' }}>{h}{modoEdicion && editables.includes(h) ? ' ✏️' : ''}</th>)}
+              {columnas.map((h, i) => <th key={i} style={{
+                  padding: '11px 14px', fontWeight: 700,
+                  textAlign: i === 0 || i >= 5 ? 'center' : 'left',
+                  whiteSpace: 'nowrap', fontSize: '12px',
+                  ...(i === 0 ? { position: 'sticky', left: 0, zIndex: 3, background: TEAL } : {}),
+                  ...(i === 1 ? { position: 'sticky', left: '44px', zIndex: 3, background: TEAL, boxShadow: '2px 0 4px rgba(0,0,0,0.12)' } : {}),
+                }}>{h}{modoEdicion && editables.includes(h) ? ' ✏️' : ''}</th>)}
             </tr></thead>
             <tbody>
               {filtrados.length === 0
@@ -608,8 +614,8 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
                   const diffBg = diff === 0 ? '#f0fdf4' : diff <= 2 ? '#fffbeb' : '#fef2f2'
                   return (
                     <tr key={plan.id} style={{ borderTop: `1px solid ${TEAL_LIGHT}`, background: Object.keys(ed).length > 0 ? '#fffde7' : idx % 2 === 0 ? '#fff' : '#fafefe' }}>
-                      <td style={{ padding: '10px 14px', textAlign: 'center', color: '#999', fontWeight: 600 }}>{idx + 1}</td>
-                      <td style={{ padding: '10px 14px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>{plan.cliente_nombre}</td>
+                      <td style={{ padding: '10px 14px', textAlign: 'center', color: '#999', fontWeight: 600, position: 'sticky', left: 0, zIndex: 1, background: Object.keys(ed).length > 0 ? '#fffde7' : idx % 2 === 0 ? '#fff' : '#fafefe' }}>{idx + 1}</td>
+                      <td style={{ padding: '10px 14px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', position: 'sticky', left: '44px', zIndex: 1, background: Object.keys(ed).length > 0 ? '#fffde7' : idx % 2 === 0 ? '#fff' : '#fafefe', boxShadow: '2px 0 4px rgba(0,0,0,0.08)' }}>{plan.cliente_nombre}</td>
                       <td style={{ padding: '6px 14px', minWidth: '130px' }}>{modoEdicion ? <input type="text" value={getTxt(plan, 'grupo_whatsapp')} onChange={e => editarTxt(plan.id, 'grupo_whatsapp', e.target.value)} placeholder="Sin grupo" style={estiloInputTxt('grupo_whatsapp' in ed)} /> : <span style={{ color: plan.grupo_whatsapp ? '#334155' : '#ccc' }}>{plan.grupo_whatsapp || '—'}</span>}</td>
                       <td style={{ padding: '6px 14px', minWidth: '130px' }}>{modoEdicion ? <select value={getSedeId(plan)} onChange={e => editarSede(plan.id, e.target.value)} style={estiloSelect('sede_id' in ed)}><option value="">— Sin sede —</option>{sedesDisponibles.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}</select> : <span style={{ color: '#475569' }}>{plan.sede_nombre}</span>}</td>
                       <td style={{ padding: '6px 14px', minWidth: '140px' }}>{modoEdicion ? <select value={getInstrumentoId(plan)} onChange={e => editarInstrumento(plan.id, e.target.value)} style={estiloSelect('instrumento_id' in ed)}><option value="">— Sin instrumento —</option>{instrumentos.map(i => <option key={i.id} value={i.id}>{i.nombre}</option>)}</select> : <span style={{ color: '#475569' }}>{plan.instrumento_nombre}</span>}</td>
