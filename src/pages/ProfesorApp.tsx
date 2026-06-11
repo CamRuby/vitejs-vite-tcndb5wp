@@ -1549,7 +1549,7 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
 )}
 {!mostrarFecha && !c.esTaller && !c.es_cortesia && c.numero_proyectado && c.contratos?.total_clases && (
   <span style={{ fontSize:'12px', fontWeight:'800', color:'#b45309', background:'#fffbeb', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
-    ~clase {c.numero_proyectado}/{c.contratos.total_clases}
+   ~clase {c.contratos?.conteo_whatsapp !== null && c.contratos?.conteo_whatsapp !== undefined ? c.contratos.conteo_whatsapp : c.numero_proyectado}/{c.contratos.total_clases}
   </span>
 )}
 {!c.esTaller && c.es_cortesia && (
