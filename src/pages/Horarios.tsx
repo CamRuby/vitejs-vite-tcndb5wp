@@ -1038,16 +1038,18 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
 
   function getTallerSlot(salonId: string, hora: string, fecha: string) {
     const diaSemana = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
+    // Caso normal: taller cuyo dia_semana coincide con esta fecha
+    const normal = talleres.find(t =>
+      t.salon_id === salonId && t.dia_semana === diaSemana && t.hora?.substring(0, 5) === hora
+    )
+    if (normal) return normal
+    // Caso excepción: sesión movida a esta fecha con hora específica
     return talleres.find(t => {
       if (t.salon_id !== salonId) return false
-      // Si hay sesión movida a esta fecha con hora diferente
+      if (t.dia_semana === diaSemana) return false // ya cubierto arriba
       const horaOverride = sesionesHoraMap[`${t.id}-${fecha}`]
-      const horaEfectiva = horaOverride || t.hora?.substring(0, 5)
-      if (horaEfectiva !== hora) return false
-      // Mostrar si el día coincide con el taller normalmente
-      if (t.dia_semana === diaSemana) return true
-      // O si hay una sesión excepción registrada en esta fecha
-      return !!sesionesEstadoMap[`${t.id}-${fecha}`]
+      if (!horaOverride) return false
+      return horaOverride === hora && !!sesionesEstadoMap[`${t.id}-${fecha}`]
     }) || null
   }
 
