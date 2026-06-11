@@ -140,6 +140,7 @@ export default function Horarios() {
   const [sesionesHoraMap, setSesionesHoraMap] = useState<Record<string, string>>({})
   const [sesionFechaOverride, setSesionFechaOverride] = useState('')
   const [sesionHoraOverride, setSesionHoraOverride] = useState('')
+  const [sesionSalonOverride, setSesionSalonOverride] = useState('')
   const [inscritosDelTaller, setInscritosDelTaller] = useState<any[]>([])
   const [sesionActual, setSesionActual] = useState<any>(null)
   const [asistenciasSesion, setAsistenciasSesion] = useState<Record<string, boolean | null>>({})
@@ -608,6 +609,7 @@ async function verificarConflictosEnMemoria(
     setInscritosDelTaller(inscData)
     setSesionFechaOverride(fechaCol)
     setSesionHoraOverride(sesion?.hora?.substring(0,5) || taller.hora?.substring(0,5) || '')
+    setSesionSalonOverride(taller.salon_id || '')
     setModalVerTaller(true)
   }
 
@@ -1656,39 +1658,29 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                         </select>
                       </div>
                     </div>
-                    {(sesionFechaOverride !== fechaSesionViendo || sesionHoraOverride !== (tallerViendo?.hora?.substring(0,5) || '')) ? (
-                      <button onClick={async () => {
-                        let sesId = sesionActual?.id
-                        if (!sesId) {
-                          // Buscar si ya existe una sesión para esta fecha en BD
-                          const { data: existing } = await supabase.from('taller_sesiones')
-                            .select('id, estado').eq('taller_id', tallerViendo.id).eq('fecha', fechaSesionViendo).maybeSingle()
-                          if (existing) {
-                            sesId = existing.id
-                            await supabase.from('taller_sesiones').update({ fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00' }).eq('id', sesId)
-                            setSesionActual({ ...existing, fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00' })
-                          } else {
-                            const { data: newSes } = await supabase.from('taller_sesiones')
-                              .insert({ taller_id: tallerViendo.id, fecha: sesionFechaOverride, estado: 'programada', hora: sesionHoraOverride + ':00' })
-                              .select().single()
-                            if (newSes) { setSesionActual(newSes); sesId = newSes.id }
-                          }
+                    <div style={{ marginBottom: '10px' }}>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: '#6b7280', marginBottom: '4px' }}>Salón</label>
+                      <select value={sesionSalonOverride} onChange={e => setSesionSalonOverride(e.target.value)}
+                        style={{ width: '100%', padding: '8px 10px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px' }}>
+                        {todosSalones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                      </select>
+                    </div>
+                    {(sesionFechaOverride !== fechaSesionViendo || sesionHoraOverride !== (tallerViendo?.hora?.substring(0,5) || '') || sesionSalonOverride !== (tallerViendo?.salon_id || '')) ? (
+                      <button onClick={async (e) => {
+                        e.stopPropagation()
+                        // Buscar sesión existente en BD (fuente de verdad)
+                        const { data: sesionBD } = await supabase.from('taller_sesiones')
+                          .select('id, estado').eq('taller_id', tallerViendo.id).eq('fecha', fechaSesionViendo).maybeSingle()
+                        if (sesionBD?.id) {
+                          // Actualizar fecha y hora
+                          await supabase.from('taller_sesiones')
+                            .update({ fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00', salon_id: sesionSalonOverride || tallerViendo.salon_id })
+                            .eq('id', sesionBD.id)
                         } else {
-                          await supabase.from('taller_sesiones').update({ fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00' }).eq('id', sesId)
-                          setSesionActual((prev: any) => ({ ...prev, fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00' }))
+                          // Crear nueva sesión en la nueva fecha/hora
+                          await supabase.from('taller_sesiones')
+                            .insert({ taller_id: tallerViendo.id, fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00', estado: 'programada', salon_id: sesionSalonOverride || tallerViendo.salon_id })
                         }
-                        setSesionesEstadoMap(prev => {
-                          const n = { ...prev }
-                          delete n[`${tallerViendo.id}-${fechaSesionViendo}`]
-                          n[`${tallerViendo.id}-${sesionFechaOverride}`] = sesionActual?.estado || 'programada'
-                          return n
-                        })
-                        setSesionesHoraMap(prev => {
-                          const n = { ...prev }
-                          delete n[`${tallerViendo.id}-${fechaSesionViendo}`]
-                          n[`${tallerViendo.id}-${sesionFechaOverride}`] = sesionHoraOverride
-                          return n
-                        })
                         setModalVerTaller(false)
                         await cargarTalleres()
                       }}
@@ -1696,7 +1688,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                         Mover esta sesión →
                       </button>
                     ) : (
-                      <p style={{ margin: 0, fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>Cambia la fecha u hora para mover solo esta sesión</p>
+                      <p style={{ margin: 0, fontSize: '11px', color: '#9ca3af', fontStyle: 'italic' }}>Cambia la fecha, hora o salón para mover solo esta sesión</p>
                     )}
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
