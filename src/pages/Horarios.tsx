@@ -1662,7 +1662,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                       <label style={{ display: 'block', fontSize: '11px', fontWeight: '600', color: '#6b7280', marginBottom: '4px' }}>Salón</label>
                       <select value={sesionSalonOverride} onChange={e => setSesionSalonOverride(e.target.value)}
                         style={{ width: '100%', padding: '8px 10px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px' }}>
-                        {todosSalones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                        {todosSalones.filter((s: any) => s.sede_id === tallerViendo?.salones?.sede_id).map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                       </select>
                     </div>
                     {(sesionFechaOverride !== fechaSesionViendo || sesionHoraOverride !== (tallerViendo?.hora?.substring(0,5) || '') || sesionSalonOverride !== (tallerViendo?.salon_id || '')) ? (
