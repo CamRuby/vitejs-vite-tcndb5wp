@@ -1668,18 +1668,16 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                     {(sesionFechaOverride !== fechaSesionViendo || sesionHoraOverride !== (tallerViendo?.hora?.substring(0,5) || '') || sesionSalonOverride !== (tallerViendo?.salon_id || '')) ? (
                       <button onClick={async (e) => {
                         e.stopPropagation()
-                        // Buscar sesión existente en BD (fuente de verdad)
-                        const { data: sesionBD } = await supabase.from('taller_sesiones')
-                          .select('id, estado').eq('taller_id', tallerViendo.id).eq('fecha', fechaSesionViendo).maybeSingle()
-                        if (sesionBD?.id) {
-                          // Actualizar fecha y hora
+                        if (sesionActual?.id) {
+                          // Sesión existe — actualizar por id
                           await supabase.from('taller_sesiones')
                             .update({ fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00', salon_id: sesionSalonOverride || tallerViendo.salon_id })
-                            .eq('id', sesionBD.id)
+                            .eq('id', sesionActual.id)
                         } else {
-                          // Crear nueva sesión en la nueva fecha/hora
+                          // No existe — crear con upsert para evitar 409
                           await supabase.from('taller_sesiones')
-                            .insert({ taller_id: tallerViendo.id, fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00', estado: 'programada', salon_id: sesionSalonOverride || tallerViendo.salon_id })
+                            .upsert({ taller_id: tallerViendo.id, fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00', estado: 'programada', salon_id: sesionSalonOverride || tallerViendo.salon_id },
+                              { onConflict: 'taller_id,fecha' })
                         }
                         setModalVerTaller(false)
                         await cargarTalleres()
