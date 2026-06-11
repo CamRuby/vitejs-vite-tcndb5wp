@@ -593,7 +593,7 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
       {error && <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '16px', color: '#b91c1c', fontSize: '14px' }}>{error}</div>}
       {!cargando && !error && (
         <div style={{ overflowX: 'auto', borderRadius: '12px', border: `1.5px solid ${TEAL_MID}`, background: '#fff', position: 'relative' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '13px' }}>
             <thead><tr style={{ background: TEAL, color: '#fff' }}>
               {columnas.map((h, i) => <th key={i} style={{
                   padding: '11px 14px', fontWeight: 700,
