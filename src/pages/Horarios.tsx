@@ -1660,10 +1660,19 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                       <button onClick={async () => {
                         let sesId = sesionActual?.id
                         if (!sesId) {
-                          const { data: newSes } = await supabase.from('taller_sesiones')
-                            .insert({ taller_id: tallerViendo.id, fecha: sesionFechaOverride, estado: 'programada', hora: sesionHoraOverride + ':00' })
-                            .select().single()
-                          if (newSes) { setSesionActual(newSes); sesId = newSes.id }
+                          // Buscar si ya existe una sesión para esta fecha en BD
+                          const { data: existing } = await supabase.from('taller_sesiones')
+                            .select('id, estado').eq('taller_id', tallerViendo.id).eq('fecha', fechaSesionViendo).maybeSingle()
+                          if (existing) {
+                            sesId = existing.id
+                            await supabase.from('taller_sesiones').update({ fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00' }).eq('id', sesId)
+                            setSesionActual({ ...existing, fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00' })
+                          } else {
+                            const { data: newSes } = await supabase.from('taller_sesiones')
+                              .insert({ taller_id: tallerViendo.id, fecha: sesionFechaOverride, estado: 'programada', hora: sesionHoraOverride + ':00' })
+                              .select().single()
+                            if (newSes) { setSesionActual(newSes); sesId = newSes.id }
+                          }
                         } else {
                           await supabase.from('taller_sesiones').update({ fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00' }).eq('id', sesId)
                           setSesionActual((prev: any) => ({ ...prev, fecha: sesionFechaOverride, hora: sesionHoraOverride + ':00' }))
