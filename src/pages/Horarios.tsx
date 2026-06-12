@@ -138,6 +138,7 @@ export default function Horarios() {
   const [tallerViendo, setTallerViendo] = useState<any>(null)
   const [sesionesEstadoMap, setSesionesEstadoMap] = useState<Record<string, string>>({})
   const [sesionesHoraMap, setSesionesHoraMap] = useState<Record<string, string>>({})
+  const [sesionesSalonMap, setSesionesSalonMap] = useState<Record<string, string>>({})
   const [sesionFechaOverride, setSesionFechaOverride] = useState('')
   const [sesionHoraOverride, setSesionHoraOverride] = useState('')
   const [sesionSalonOverride, setSesionSalonOverride] = useState('')
@@ -214,22 +215,34 @@ export default function Horarios() {
       }
     })
     talleres.forEach((t: any) => {
-      if (!t.salon_id || !t.hora) return
-      const tInicio = horaAMinutos(t.hora.substring(0, 5))
+      if (!t.hora) return
       const numSlots = Math.max(1, Math.round((t.duracion_min || 60) / 15))
       columns.forEach(col => {
-        if (col.salon.id !== t.salon_id) return
-        if (parseFechaLocal(col.fecha).getDay() !== DIA_NUM[t.dia_semana]) return
+        const tieneExcepcion = sesionesEstadoMap[`${t.id}-${col.fecha}`] !== undefined &&
+          (sesionesHoraMap[`${t.id}-${col.fecha}`] || sesionesSalonMap[`${t.id}-${col.fecha}`])
+        const horaEfectiva = (tieneExcepcion && sesionesHoraMap[`${t.id}-${col.fecha}`]) || t.hora.substring(0, 5)
+        const salonEfectivo = (tieneExcepcion && sesionesSalonMap[`${t.id}-${col.fecha}`]) || t.salon_id
+        if (!salonEfectivo || col.salon.id !== salonEfectivo) return
+        // Para taller normal: solo si el día coincide y no hay excepción que lo mueva a otro día
+        const esNormalEsteDia = parseFechaLocal(col.fecha).getDay() === DIA_NUM[t.dia_semana]
+        if (!esNormalEsteDia && !tieneExcepcion) return
+        if (esNormalEsteDia && tieneExcepcion) {
+          // Excepción mueve el taller a otro día — no generar skip para el día normal
+          const horaExc = sesionesHoraMap[`${t.id}-${col.fecha}`] || t.hora.substring(0,5)
+          const salonExc = sesionesSalonMap[`${t.id}-${col.fecha}`] || t.salon_id
+          if (horaExc !== t.hora.substring(0,5) || salonExc !== t.salon_id) return
+        }
+        const tInicio = horaAMinutos(horaEfectiva)
         for (let i = 1; i < numSlots; i++) {
           const min = tInicio + i * 15
           const hh = Math.floor(min / 60)
           const mm = min % 60
-          skip.add(`${t.salon_id}-${col.fecha}-${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`)
+          skip.add(`${salonEfectivo}-${col.fecha}-${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`)
         }
       })
     })
     return skip
-  }, [clases, talleres, columns])
+  }, [clases, talleres, columns, sesionesEstadoMap, sesionesHoraMap, sesionesSalonMap])
 
   useEffect(() => { cargarSedes(); cargarProfesores(); cargarTodosSalones() }, [])
   useEffect(() => { if (sedeSeleccionada) { setTalleres([]); setInscritosPorTaller({}); cargarSalones(); cargarClases() } }, [sedeSeleccionada, fechaBase, diaSeleccionado, vista])
@@ -355,7 +368,7 @@ setCargando(false)
       const [{ data: ins }, { data: sesiones }] = await Promise.all([
         supabase.from('taller_inscripciones').select('taller_id')
           .in('taller_id', data.map((t: any) => t.id)).eq('estado', 'activo').gte('mes', mes),
-        supabase.from('taller_sesiones').select('taller_id, fecha, estado, hora')
+        supabase.from('taller_sesiones').select('taller_id, fecha, estado, hora, salon_id')
           .in('taller_id', data.map((t: any) => t.id))
       ])
       const conteo: Record<string, number> = {}
@@ -363,12 +376,15 @@ setCargando(false)
       setInscritosPorTaller(conteo)
       const sMap: Record<string, string> = {}
       const horaMap: Record<string, string> = {}
+      const salonMap: Record<string, string> = {}
       ;(sesiones || []).forEach((s: any) => {
         sMap[`${s.taller_id}-${s.fecha}`] = s.estado
         if (s.hora) horaMap[`${s.taller_id}-${s.fecha}`] = s.hora.substring(0,5)
+        if (s.salon_id) salonMap[`${s.taller_id}-${s.fecha}`] = s.salon_id
       })
       setSesionesEstadoMap(sMap)
       setSesionesHoraMap(horaMap)
+      setSesionesSalonMap(salonMap)
     }
   }
 async function verificarConflictosEnMemoria(
@@ -579,7 +595,7 @@ async function verificarConflictosEnMemoria(
     } catch { inscData = [] }
     const { data: sesion } = await supabase
       .from('taller_sesiones')
-      .select('id, fecha, estado, profesor_id')
+      .select('id, fecha, estado, profesor_id, hora, salon_id')
       .eq('taller_id', taller.id)
       .eq('fecha', fechaCol)
       .maybeSingle()
@@ -609,7 +625,7 @@ async function verificarConflictosEnMemoria(
     setInscritosDelTaller(inscData)
     setSesionFechaOverride(fechaCol)
     setSesionHoraOverride(sesion?.hora?.substring(0,5) || taller.hora?.substring(0,5) || '')
-    setSesionSalonOverride(taller.salon_id || '')
+    setSesionSalonOverride(sesion?.salon_id || taller.salon_id || '')
     setModalVerTaller(true)
   }
 
@@ -1040,18 +1056,27 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
 
   function getTallerSlot(salonId: string, hora: string, fecha: string) {
     const diaSemana = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
-    // Caso normal: taller recurrente cuyo día coincide
-    const normal = talleres.find(t =>
-      t.salon_id === salonId && t.dia_semana === diaSemana && t.hora?.substring(0, 5) === hora
-    )
+    // Caso normal: taller recurrente cuyo día coincide (y sin excepción que lo mueva)
+    const normal = talleres.find(t => {
+      if (t.salon_id !== salonId || t.dia_semana !== diaSemana || t.hora?.substring(0, 5) !== hora) return false
+      // Si esta fecha tiene una sesión excepción que movió el taller a otro día/hora/salón, no mostrar aquí
+      const tieneExcepcion = sesionesEstadoMap[`${t.id}-${fecha}`] !== undefined &&
+        (sesionesHoraMap[`${t.id}-${fecha}`] || sesionesSalonMap[`${t.id}-${fecha}`])
+      if (tieneExcepcion) {
+        const horaExc = sesionesHoraMap[`${t.id}-${fecha}`] || t.hora?.substring(0, 5)
+        const salonExc = sesionesSalonMap[`${t.id}-${fecha}`] || t.salon_id
+        if (horaExc !== hora || salonExc !== salonId) return false
+      }
+      return true
+    })
     if (normal) return normal
-    // Caso excepción: sesión movida a un día diferente
+    // Caso excepción: sesión movida a un día diferente (salón y hora propios de la sesión)
     return talleres.find(t => {
-      if (t.salon_id !== salonId) return false
       if (t.dia_semana === diaSemana) return false
       const horaOverride = sesionesHoraMap[`${t.id}-${fecha}`]
+      const salonOverride = sesionesSalonMap[`${t.id}-${fecha}`] || t.salon_id
       if (!horaOverride) return false
-      return horaOverride === hora && !!sesionesEstadoMap[`${t.id}-${fecha}`]
+      return horaOverride === hora && salonOverride === salonId && !!sesionesEstadoMap[`${t.id}-${fecha}`]
     }) || null
   }
 
