@@ -716,6 +716,7 @@ function getHonorarioPDF(c: any, tarifasProfesor: any[]): number | 'pendiente' {
 
 function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
   const [profesoresData, setProfesoresData] = useState<ProfesorHonorario[]>([])
+  const [totalesPorSede, setTotalesPorSede] = useState<Record<string, { sede_nombre: string; honorario: number; clases: number; estudiantes: number }>>({})
   const [tarifas, setTarifas] = useState<any[]>([])
   const [sedes, setSedes] = useState<Sede[]>([])
   const [cargando, setCargando] = useState(true)
@@ -752,7 +753,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
         supabase.from('profesores').select('id, nombre, cc, ciudad, ciudad_cc, banco, tipo_cuenta, numero_cuenta'),
         supabase.from('profesor_tarifas').select('profesor_id, modalidad, duracion_min, taller_grupal, valor').eq('taller_grupal', false),
         supabase.from('clases_con_numero')
-          .select('id, fecha, hora, duracion_min, estado, modalidad, cancelado_por_academia, es_cortesia, observaciones, contrato_id, honorario_valor, profesor_id, contratos(clientes(nombre, nombres, apellidos), total_clases), salones(sede_id, sedes(nombre))')
+          .select('id, fecha, hora, duracion_min, estado, modalidad, cancelado_por_academia, es_cortesia, observaciones, contrato_id, honorario_valor, profesor_id, contratos(cliente_id, clientes(nombre, nombres, apellidos), total_clases), salones(sede_id, sedes(nombre))')
           .gte('fecha', fechaInicio).lte('fecha', fechaFin)
           .in('estado', ['dada', 'cancelada'])
           .or('estado.eq.dada,cancelado_por_academia.eq.false'),
@@ -815,6 +816,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       ;(estados || []).forEach((e: any) => { estadoMap[e.profesor_id] = { aprobado: !!e.aprobado, pagado: !!e.pagado } })
 
       const mapa: Record<string, ProfesorHonorario> = {}
+      const sedeTotales: Record<string, { sede_nombre: string; honorario: number; clases: number; estudiantesSet: Set<string> }> = {}
       function ensure(profId: string): ProfesorHonorario {
         if (!mapa[profId]) {
           const p = (profesores || []).find((x: any) => x.id === profId)
@@ -853,10 +855,22 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
         g.totalClases += 1
         g.totalMinutos += Number(c.duracion_min || 0)
         g.totalHonorario += honorarioNum
+
+        // Totales por sede: independientes del profesor y del filtro de la tabla.
+        if (!sedeTotales[key]) sedeTotales[key] = { sede_nombre: sedeNombre, honorario: 0, clases: 0, estudiantesSet: new Set() }
+        sedeTotales[key].honorario += honorarioNum
+        sedeTotales[key].clases += 1
+        const clienteId = c.contratos?.cliente_id
+        if (clienteId) sedeTotales[key].estudiantesSet.add(clienteId)
       })
 
       setTarifas(tarifasL)
       setProfesoresData(Object.values(mapa).sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      const totalesSede: Record<string, { sede_nombre: string; honorario: number; clases: number; estudiantes: number }> = {}
+      Object.entries(sedeTotales).forEach(([key, v]) => {
+        totalesSede[key] = { sede_nombre: v.sede_nombre, honorario: v.honorario, clases: v.clases, estudiantes: v.estudiantesSet.size }
+      })
+      setTotalesPorSede(totalesSede)
     } catch { setError('No se pudieron cargar los datos.') }
     finally { setCargando(false) }
   }
@@ -986,21 +1000,15 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
   const filtrados = filtroSede ? profesoresData.filter(g => g.porSede[filtroSede]) : profesoresData
   const [anioSel, mesSel] = mes.split('-')
   const labelMes = `${MESES[parseInt(mesSel) - 1]} ${anioSel}`
-  const totalClases = filtrados.reduce((s, g) => s + (filtroSede ? g.porSede[filtroSede].clases : g.totalClases), 0)
-  const totalMinutos = filtrados.reduce((s, g) => s + (filtroSede ? g.porSede[filtroSede].minutos : g.totalMinutos), 0)
-  const totalHonorario = filtrados.reduce((s, g) => s + (filtroSede ? g.porSede[filtroSede].honorario : g.totalHonorario), 0)
+  const totalClases = filtrados.reduce((s, g) => s + g.totalClases, 0)
+  const totalMinutos = filtrados.reduce((s, g) => s + g.totalMinutos, 0)
+  const totalHonorario = filtrados.reduce((s, g) => s + g.totalHonorario, 0)
 
   const thS: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL_DARK, fontWeight: 700, whiteSpace: 'nowrap' }
   const tdS: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#1e293b', borderTop: '1px solid #f1f5f9' }
 
   return (
     <div style={{ padding: '24px 28px', maxWidth: '1200px', margin: '0 auto' }}>
-      <style>{`
-        .rhp-tarjeta { display: grid; grid-template-columns: 1fr 90px 110px 130px; gap: 16px; align-items: center; }
-        @media (max-width: 700px) {
-          .rhp-tarjeta { display: flex !important; flex-direction: column !important; align-items: flex-start !important; gap: 6px !important; }
-        }
-      `}</style>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1038,6 +1046,32 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
         </div>
       )}
 
+      {/* Totales por sede: siempre los totales reales de cada sede, sin importar el filtro */}
+      {!cargando && sedes.length > 0 && (
+        <div style={{ marginBottom: '20px' }}>
+          <p style={{ fontSize: '12px', fontWeight: 700, color: '#888', margin: '0 0 8px', letterSpacing: '0.3px' }}>TOTALES POR SEDE</p>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${sedes.length}, 1fr)`, gap: '10px' }}>
+            {sedes.map(s => {
+              const t = totalesPorSede[s.id] || { honorario: 0, clases: 0, estudiantes: 0 }
+              return (
+                <div key={s.id} style={{ background: 'white', border: `1px solid ${TEAL_MID}`, borderRadius: '10px', padding: '12px 16px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: TEAL_DARK, marginBottom: '8px' }}>{s.nombre}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
+                    <span>Honorarios</span><span style={{ fontWeight: 700, color: '#16a34a' }}>${t.honorario.toLocaleString('es-CO')}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
+                    <span>Clases dadas</span><span style={{ fontWeight: 700, color: '#7c3aed' }}>{t.clases}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
+                    <span>Estudiantes activos</span><span style={{ fontWeight: 700, color: '#0ea5e9' }}>{t.estudiantes}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {cargando && <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>Cargando...</div>}
       {error && <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '16px', color: '#b91c1c', fontSize: '14px' }}>{error}</div>}
       {!cargando && !error && filtrados.length === 0 && (
@@ -1046,8 +1080,9 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
         </div>
       )}
 
-      {/* Vista: todas las sedes → tabla con una columna por sede */}
-      {!cargando && !error && filtrados.length > 0 && !filtroSede && (
+      {/* Tabla con una columna por sede. El filtro de sede solo oculta filas de profesores
+          que no dieron clase en esa sede; no cambia la vista ni oculta las demás columnas. */}
+      {!cargando && !error && filtrados.length > 0 && (
         <div style={{ overflowX: 'auto', background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
             <thead>
@@ -1059,6 +1094,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                 <th style={{ ...thS, textAlign: 'right' }}>Total</th>
                 <th style={{ ...thS, textAlign: 'center' }}>Aprobado</th>
                 <th style={{ ...thS, textAlign: 'center' }}>Pagado</th>
+
                 <th style={{ ...thS, textAlign: 'center' }}>Cuenta de cobro</th>
               </tr>
             </thead>
@@ -1089,51 +1125,6 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-
-      {/* Vista: filtrada por una sede → tarjetas (igual que antes) */}
-      {!cargando && !error && filtrados.length > 0 && filtroSede && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {filtrados.map(g => {
-            const d = g.porSede[filtroSede]
-            return (
-              <div key={g.profesor_id} style={{ background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '14px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-                <div className="rhp-tarjeta">
-                  <div>
-                    <p style={{ margin: '0 0 2px', fontWeight: 700, fontSize: '15px', color: '#1e293b' }}>{g.nombre}</p>
-                    <p style={{ margin: 0, fontSize: '12px', color: '#9ca3af' }}>{d.sede_nombre}</p>
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#7c3aed' }}>{d.clases}</div>
-                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>clases</div>
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#0ea5e9' }}>{formatTiempo(d.minutos)}</div>
-                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>tiempo</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#16a34a' }}>${d.honorario.toLocaleString('es-CO')}</div>
-                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>honorario en esta sede</div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#475569', cursor: 'pointer', fontWeight: 600 }}>
-                    <input type="checkbox" checked={g.aprobado} onChange={e => actualizarEstado(g.profesor_id, 'aprobado', e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: TEAL }} />
-                    Aprobado (mes completo)
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#475569', cursor: 'pointer', fontWeight: 600 }}>
-                    <input type="checkbox" checked={g.pagado} onChange={e => actualizarEstado(g.profesor_id, 'pagado', e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#16a34a' }} />
-                    Pagado (mes completo)
-                  </label>
-                  <button onClick={() => generarPdfProfesor(g)} disabled={generandoPdf === g.profesor_id}
-                    style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: '8px', border: `1px solid ${TEAL_MID}`, background: 'white', color: TEAL_DARK, cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}>
-                    {generandoPdf === g.profesor_id ? 'Generando...' : '📄 Cuenta de cobro (mes completo)'}
-                  </button>
-                </div>
-              </div>
-            )
-          })}
         </div>
       )}
     </div>
