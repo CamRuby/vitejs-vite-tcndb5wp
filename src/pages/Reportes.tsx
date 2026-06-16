@@ -885,10 +885,19 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
   async function actualizarEstado(profesorId: string, campo: 'aprobado' | 'pagado', valor: boolean) {
     const g = profesoresData.find(p => p.profesor_id === profesorId)
     if (!g) return
+    const aprobadoAnterior = g.aprobado
+    const pagadoAnterior = g.pagado
     const aprobado = campo === 'aprobado' ? valor : g.aprobado
     const pagado = campo === 'pagado' ? valor : g.pagado
     setProfesoresData(prev => prev.map(p => p.profesor_id === profesorId ? { ...p, aprobado, pagado } : p))
-    await supabase.from('honorarios_estado').upsert({ profesor_id: profesorId, mes, aprobado, pagado }, { onConflict: 'profesor_id,mes' })
+    const { error: errGuardar } = await supabase
+      .from('honorarios_estado')
+      .upsert({ profesor_id: profesorId, mes, aprobado, pagado }, { onConflict: 'profesor_id,mes' })
+    if (errGuardar) {
+      console.error('Error al guardar aprobado/pagado:', errGuardar)
+      setProfesoresData(prev => prev.map(p => p.profesor_id === profesorId ? { ...p, aprobado: aprobadoAnterior, pagado: pagadoAnterior } : p))
+      setError(`No se pudo guardar el estado de ${g.nombre}. Detalle: ${errGuardar.message}`)
+    }
   }
 
   function generarPdfProfesor(g: ProfesorHonorario) {
