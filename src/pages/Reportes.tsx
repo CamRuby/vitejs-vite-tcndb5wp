@@ -27,6 +27,7 @@ function mesActual() {
 const REPORTES = [
   { id: 'control_pagos', icono: '💳', titulo: 'Control de pagos', descripcion: 'Seguimiento mensual de pagos, abonos y saldos por plan' },
   { id: 'clases_tomadas', icono: '📋', titulo: 'Clases tomadas por plan', descripcion: 'Planes activos con conteo de clases y verificación WhatsApp por sede' },
+  { id: 'honorarios_profesores', icono: '👩‍🏫', titulo: 'Honorarios mensuales profesores', descripcion: 'Clases, tiempo y honorarios por profesor y sede, con totales mensuales' },
 ]
 
 export default function Reportes({ rol }: { rol?: string }) {
@@ -34,6 +35,7 @@ export default function Reportes({ rol }: { rol?: string }) {
 
   if (reporteActivo === 'control_pagos') return <ReporteControlPagos onVolver={() => setReporteActivo(null)} />
   if (reporteActivo === 'clases_tomadas') return <ReporteClasesTomadasPlaceholder onVolver={() => setReporteActivo(null)} />
+  if (reporteActivo === 'honorarios_profesores') return <ReporteHonorariosProfesores onVolver={() => setReporteActivo(null)} />
 
   return (
     <div style={{ padding: '32px', maxWidth: '900px', margin: '0 auto' }}>
@@ -632,6 +634,209 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
         </div>
       )}
       {!cargando && !error && filtrados.length > 0 && <div style={{ marginTop: '12px', fontSize: '12px', color: '#999', textAlign: 'right' }}>Mostrando {filtrados.length} de {datos.length} planes</div>}
+    </div>
+  )
+}
+
+// ─── REPORTE: HONORARIOS MENSUALES PROFESORES ────────────────────────────────
+interface Tarifa3 { profesor_id: string; modalidad: string; duracion_min: number; taller_grupal: boolean; valor: number }
+interface GrupoHonorario {
+  profesor_id: string; profesor_nombre: string
+  sede_id: string | null; sede_nombre: string
+  clases: number; minutos: number; honorario: number
+}
+
+function formatTiempo(min: number) {
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  if (h === 0) return `${m}min`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}min`
+}
+
+function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
+  const [datos, setDatos] = useState<GrupoHonorario[]>([])
+  const [sedes, setSedes] = useState<Sede[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [mes, setMes] = useState(mesActual())
+  const [filtroSede, setFiltroSede] = useState('')
+
+  useEffect(() => { cargarSedes() }, [])
+  useEffect(() => { cargarDatos() }, [mes])
+
+  async function cargarSedes() {
+    const { data } = await supabase.from('sedes').select('id, nombre').order('nombre')
+    setSedes(data || [])
+  }
+
+  async function cargarDatos() {
+    setCargando(true); setError(null)
+    try {
+      const fechaInicio = `${mes}-01`
+      const [anio, mesNum] = mes.split('-')
+      const ultimoDia = new Date(parseInt(anio), parseInt(mesNum), 0).getDate()
+      const fechaFin = `${mes}-${String(ultimoDia).padStart(2, '0')}`
+
+      const [{ data: profesores, error: errP }, { data: tarifas, error: errT }, { data: clases, error: errC }, { data: talleres, error: errTa }] = await Promise.all([
+        supabase.from('profesores').select('id, nombre'),
+        supabase.from('profesor_tarifas').select('profesor_id, modalidad, duracion_min, taller_grupal, valor'),
+        supabase.from('clases_con_numero')
+          .select('profesor_id, duracion_min, estado, modalidad, honorario_valor, cancelado_tarde, cancelado_por_academia, salones(sede_id, sedes(nombre))')
+          .gte('fecha', fechaInicio).lte('fecha', fechaFin),
+        supabase.from('talleres').select('id, profesor_id, duracion_min, salones(sede_id, sedes(nombre))'),
+      ])
+      if (errP || errT || errC || errTa) throw (errP || errT || errC || errTa)
+
+      const tallerIds = (talleres || []).map((t: any) => t.id)
+      let sesiones: any[] = []
+      if (tallerIds.length > 0) {
+        const { data: s } = await supabase.from('taller_sesiones')
+          .select('taller_id, estado, honorario_valor')
+          .in('taller_id', tallerIds)
+          .gte('fecha', fechaInicio).lte('fecha', fechaFin)
+        sesiones = s || []
+      }
+      const tallerMap: Record<string, any> = {}
+      ;(talleres || []).forEach((t: any) => { tallerMap[t.id] = t })
+
+      const profesoresL = profesores || []
+      const tarifasL: Tarifa3[] = tarifas || []
+
+      function getHonClase(c: any) {
+        if (c.honorario_valor !== null && c.honorario_valor !== undefined) return Number(c.honorario_valor)
+        const modalidad = (c.modalidad || 'presencial').toLowerCase()
+        const exacta = tarifasL.find(x => x.profesor_id === c.profesor_id && !x.taller_grupal && x.duracion_min === c.duracion_min && x.modalidad === modalidad)
+        if (exacta) return Number(exacta.valor) || 0
+        const cualquiera = tarifasL.find(x => x.profesor_id === c.profesor_id && !x.taller_grupal && x.duracion_min === c.duracion_min)
+        return cualquiera ? Number(cualquiera.valor) || 0 : 0
+      }
+
+      const grupos: Record<string, GrupoHonorario> = {}
+      function addAGrupo(profesorId: string, sedeId: string | null, sedeNombre: string, minutos: number, honorario: number) {
+        const key = `${profesorId}__${sedeId || 'sin_sede'}`
+        if (!grupos[key]) {
+          const prof = profesoresL.find((p: any) => p.id === profesorId)
+          grupos[key] = { profesor_id: profesorId, profesor_nombre: prof?.nombre || '—', sede_id: sedeId, sede_nombre: sedeNombre, clases: 0, minutos: 0, honorario: 0 }
+        }
+        grupos[key].clases += 1
+        grupos[key].minutos += minutos
+        grupos[key].honorario += honorario
+      }
+
+      ;(clases || []).forEach((c: any) => {
+        if (!c.profesor_id) return
+        const pagable = c.estado === 'dada' || (c.estado === 'cancelada' && (c.cancelado_tarde || (!c.cancelado_por_academia && c.honorario_valor !== null && c.honorario_valor !== undefined)))
+        if (!pagable) return
+        const sedeId = c.salones?.sede_id || null
+        const sedeNombre = c.salones?.sedes?.nombre || '—'
+        addAGrupo(c.profesor_id, sedeId, sedeNombre, Number(c.duracion_min || 0), getHonClase(c))
+      })
+
+      sesiones.forEach((s: any) => {
+        if (s.estado !== 'dada') return
+        const t = tallerMap[s.taller_id]
+        if (!t || !t.profesor_id) return
+        const sedeId = t.salones?.sede_id || null
+        const sedeNombre = t.salones?.sedes?.nombre || '—'
+        addAGrupo(t.profesor_id, sedeId, sedeNombre, Number(t.duracion_min || 0), Number(s.honorario_valor || 0))
+      })
+
+      setDatos(Object.values(grupos).sort((a, b) => a.profesor_nombre.localeCompare(b.profesor_nombre) || a.sede_nombre.localeCompare(b.sede_nombre)))
+    } catch { setError('No se pudieron cargar los datos.') }
+    finally { setCargando(false) }
+  }
+
+  const filtrados = datos.filter(d => !filtroSede || d.sede_id === filtroSede)
+  const [anioSel, mesSel] = mes.split('-')
+  const labelMes = `${MESES[parseInt(mesSel) - 1]} ${anioSel}`
+  const totalClases = filtrados.reduce((s, d) => s + d.clases, 0)
+  const totalMinutos = filtrados.reduce((s, d) => s + d.minutos, 0)
+  const totalHonorario = filtrados.reduce((s, d) => s + d.honorario, 0)
+  const profesoresActivos = new Set(filtrados.map(d => d.profesor_id)).size
+
+  return (
+    <div style={{ padding: '24px 28px', maxWidth: '1200px', margin: '0 auto' }}>
+      <style>{`
+        .rhp-tarjeta { display: grid; grid-template-columns: 1fr 90px 110px 130px; gap: 16px; align-items: center; }
+        @media (max-width: 700px) {
+          .rhp-tarjeta { display: flex !important; flex-direction: column !important; align-items: flex-start !important; gap: 6px !important; }
+        }
+      `}</style>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button onClick={onVolver} style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>← Reportes</button>
+          <div>
+            <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: '0 0 2px' }}>👩‍🏫 Honorarios mensuales profesores</h2>
+            <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>Clases dadas en {labelMes}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <input type="month" value={mes} onChange={e => setMes(e.target.value)}
+          style={{ padding: '7px 12px', borderRadius: '10px', border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', fontWeight: 600, color: TEAL_DARK, outline: 'none', background: TEAL_LIGHT }} />
+        <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)}
+          style={{ padding: '7px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${filtroSede ? TEAL : TEAL_MID}`, background: filtroSede ? TEAL_LIGHT : 'white', color: filtroSede ? TEAL_DARK : '#475569', outline: 'none', cursor: 'pointer' }}>
+          <option value="">🏢 Todas las sedes</option>
+          {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+        </select>
+      </div>
+
+      {/* Totales */}
+      {!cargando && filtrados.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
+          {[
+            { label: 'Profesores',      valor: String(profesoresActivos),                       color: TEAL },
+            { label: 'Clases dadas',    valor: String(totalClases),                             color: '#7c3aed' },
+            { label: 'Tiempo total',    valor: formatTiempo(totalMinutos),                       color: '#0ea5e9' },
+            { label: 'Honorarios total',valor: `$${totalHonorario.toLocaleString('es-CO')}`,     color: '#16a34a' },
+          ].map(t => (
+            <div key={t.label} style={{ background: 'white', border: `1px solid ${TEAL_MID}`, borderRadius: '10px', padding: '12px 16px' }}>
+              <div style={{ fontSize: '18px', fontWeight: 800, color: t.color }}>{t.valor}</div>
+              <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{t.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {cargando && <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>Cargando...</div>}
+      {error && <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '16px', color: '#b91c1c', fontSize: '14px' }}>{error}</div>}
+      {!cargando && !error && filtrados.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
+          No hay clases dadas con los filtros seleccionados en {labelMes}.
+        </div>
+      )}
+
+      {!cargando && !error && filtrados.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {filtrados.map(g => (
+            <div key={`${g.profesor_id}__${g.sede_id || 'x'}`} style={{ background: 'white', borderRadius: '12px', border: `1px solid #e5e7eb`, padding: '14px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              <div className="rhp-tarjeta">
+                <div>
+                  <p style={{ margin: '0 0 2px', fontWeight: 700, fontSize: '15px', color: '#1e293b' }}>{g.profesor_nombre}</p>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#9ca3af' }}>{g.sede_nombre}</p>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '15px', fontWeight: 700, color: '#7c3aed' }}>{g.clases}</div>
+                  <div style={{ fontSize: '11px', color: '#9ca3af' }}>clases</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '15px', fontWeight: 700, color: '#0ea5e9' }}>{formatTiempo(g.minutos)}</div>
+                  <div style={{ fontSize: '11px', color: '#9ca3af' }}>tiempo</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '16px', fontWeight: 800, color: '#16a34a' }}>${g.honorario.toLocaleString('es-CO')}</div>
+                  <div style={{ fontSize: '11px', color: '#9ca3af' }}>honorario</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
