@@ -717,6 +717,7 @@ function getHonorarioPDF(c: any, tarifasProfesor: any[]): number | 'pendiente' {
 function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
   const [profesoresData, setProfesoresData] = useState<ProfesorHonorario[]>([])
   const [totalesPorSede, setTotalesPorSede] = useState<Record<string, { sede_nombre: string; honorario: number; clases: number; estudiantes: number }>>({})
+  const [totalEstudiantesActivos, setTotalEstudiantesActivos] = useState(0)
   const [tarifas, setTarifas] = useState<any[]>([])
   const [sedes, setSedes] = useState<Sede[]>([])
   const [cargando, setCargando] = useState(true)
@@ -821,6 +822,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
 
       const mapa: Record<string, ProfesorHonorario> = {}
       const sedeTotales: Record<string, { sede_nombre: string; honorario: number; clases: number; estudiantesSet: Set<string> }> = {}
+      const estudiantesGlobalSet = new Set<string>()
       function ensure(profId: string): ProfesorHonorario {
         if (!mapa[profId]) {
           const p = (profesores || []).find((x: any) => x.id === profId)
@@ -865,7 +867,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
         sedeTotales[key].honorario += honorarioNum
         sedeTotales[key].clases += 1
         const clienteId = c.contratos?.cliente_id
-        if (clienteId) sedeTotales[key].estudiantesSet.add(clienteId)
+        if (clienteId) { sedeTotales[key].estudiantesSet.add(clienteId); estudiantesGlobalSet.add(clienteId) }
       })
 
       setTarifas(tarifasL)
@@ -875,6 +877,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
         totalesSede[key] = { sede_nombre: v.sede_nombre, honorario: v.honorario, clases: v.clases, estudiantes: v.estudiantesSet.size }
       })
       setTotalesPorSede(totalesSede)
+      setTotalEstudiantesActivos(estudiantesGlobalSet.size)
     } catch { setError('No se pudieron cargar los datos.') }
     finally { setCargando(false) }
   }
@@ -1007,10 +1010,10 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
   const [anioSel, mesSel] = mes.split('-')
   const labelMes = `${MESES[parseInt(mesSel) - 1]} ${anioSel}`
   // Fijos: siempre se calculan sobre TODOS los profesores, sin importar el filtro de sede.
-  const totalProfesores = profesoresData.length
   const totalClases = profesoresData.reduce((s, g) => s + g.totalClases, 0)
-  const totalMinutos = profesoresData.reduce((s, g) => s + g.totalMinutos, 0)
   const totalHonorario = profesoresData.reduce((s, g) => s + g.totalHonorario, 0)
+  const totalPagado = profesoresData.reduce((s, g) => s + (g.pagado ? g.totalHonorario : 0), 0)
+  const totalSaldo = totalHonorario - totalPagado
 
   const thS: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL_DARK, fontWeight: 700, whiteSpace: 'nowrap' }
   const tdS: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#1e293b', borderTop: '1px solid #f1f5f9' }
@@ -1019,10 +1022,18 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
     border: `1.5px solid ${activo ? TEAL : '#e5e7eb'}`, background: activo ? TEAL : 'white', color: activo ? 'white' : '#475569'
   })
 
+  // Mismo cálculo de Pagado/Saldo para cada sede, basado en el estado del profesor
+  // (aprobado/pagado es por profesor, no por sede).
+  function statsSede(sedeId: string) {
+    const base = totalesPorSede[sedeId] || { honorario: 0, clases: 0, estudiantes: 0 }
+    const pagado = profesoresData.reduce((s, g) => s + (g.pagado ? (g.porSede[sedeId]?.honorario || 0) : 0), 0)
+    return { ...base, pagado, saldo: base.honorario - pagado }
+  }
+
   return (
     <div style={{ padding: '24px 28px', maxWidth: '1200px', margin: '0 auto' }}>
 
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button onClick={onVolver} style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>← Reportes</button>
           <div>
@@ -1030,36 +1041,17 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
             <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>Clases dadas en {labelMes}</p>
           </div>
         </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
         <input type="month" value={mes} onChange={e => setMes(e.target.value)}
           style={{ padding: '7px 12px', borderRadius: '10px', border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', fontWeight: 600, color: TEAL_DARK, outline: 'none', background: TEAL_LIGHT }} />
       </div>
 
-      {!cargando && profesoresData.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
-          {[
-            { label: 'Profesores', valor: String(totalProfesores), color: TEAL },
-            { label: 'Clases dadas', valor: String(totalClases), color: '#7c3aed' },
-            { label: 'Tiempo total', valor: formatTiempo(totalMinutos), color: '#0ea5e9' },
-            { label: 'Honorarios total', valor: `$${totalHonorario.toLocaleString('es-CO')}`, color: '#16a34a' },
-          ].map(t => (
-            <div key={t.label} style={{ background: 'white', border: `1px solid ${TEAL_MID}`, borderRadius: '10px', padding: '12px 16px' }}>
-              <div style={{ fontSize: '18px', fontWeight: 800, color: t.color }}>{t.valor}</div>
-              <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{t.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Totales por sede: siempre los totales reales de cada sede, sin importar el filtro */}
+      {/* Totales por sede + Todas las sedes: siempre los totales reales, sin importar el filtro */}
       {!cargando && sedes.length > 0 && (
         <div style={{ marginBottom: '20px' }}>
           <p style={{ fontSize: '12px', fontWeight: 700, color: '#888', margin: '0 0 8px', letterSpacing: '0.3px' }}>TOTALES POR SEDE</p>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${sedes.length}, 1fr)`, gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${sedes.length + 1}, 1fr)`, gap: '10px' }}>
             {sedes.map(s => {
-              const t = totalesPorSede[s.id] || { honorario: 0, clases: 0, estudiantes: 0 }
+              const t = statsSede(s.id)
               return (
                 <div key={s.id} style={{ background: 'white', border: `1px solid ${TEAL_MID}`, borderRadius: '10px', padding: '12px 16px' }}>
                   <div style={{ fontSize: '13px', fontWeight: 700, color: TEAL_DARK, marginBottom: '8px' }}>{s.nombre}</div>
@@ -1069,12 +1061,36 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
                     <span>Clases dadas</span><span style={{ fontWeight: 700, color: '#7c3aed' }}>{t.clases}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
                     <span>Estudiantes activos</span><span style={{ fontWeight: 700, color: '#0ea5e9' }}>{t.estudiantes}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
+                    <span>Pagado</span><span style={{ fontWeight: 700, color: '#16a34a' }}>${t.pagado.toLocaleString('es-CO')}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
+                    <span>Saldo</span><span style={{ fontWeight: 700, color: t.saldo > 0 ? '#dc2626' : '#16a34a' }}>${t.saldo.toLocaleString('es-CO')}</span>
                   </div>
                 </div>
               )
             })}
+            <div style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL}`, borderRadius: '10px', padding: '12px 16px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: TEAL_DARK, marginBottom: '8px' }}>Todas las sedes</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
+                <span>Honorarios</span><span style={{ fontWeight: 700, color: '#16a34a' }}>${totalHonorario.toLocaleString('es-CO')}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
+                <span>Clases dadas</span><span style={{ fontWeight: 700, color: '#7c3aed' }}>{totalClases}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
+                <span>Estudiantes activos</span><span style={{ fontWeight: 700, color: '#0ea5e9' }}>{totalEstudiantesActivos}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
+                <span>Pagado</span><span style={{ fontWeight: 700, color: '#16a34a' }}>${totalPagado.toLocaleString('es-CO')}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
+                <span>Saldo</span><span style={{ fontWeight: 700, color: totalSaldo > 0 ? '#dc2626' : '#16a34a' }}>${totalSaldo.toLocaleString('es-CO')}</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1083,9 +1099,6 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
           los indicadores de arriba ni los totales por sede, que son siempre fijos. */}
       {!cargando && sedes.length > 0 && (
         <div style={{ marginBottom: '16px' }}>
-          <p style={{ fontSize: '12px', fontWeight: 700, color: '#888', margin: '0 0 8px', letterSpacing: '0.3px' }}>
-            FILTRAR TABLA POR SEDE <span style={{ fontWeight: 400, color: '#aaa' }}>(no afecta los indicadores de arriba)</span>
-          </p>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             <button onClick={() => setSedesSeleccionadas([])} style={pillS(sedesSeleccionadas.length === 0)}>Todas las sedes</button>
             {sedes.map(s => (
