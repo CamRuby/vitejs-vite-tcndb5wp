@@ -722,8 +722,12 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mes, setMes] = useState(mesActual())
-  const [filtroSede, setFiltroSede] = useState('')
+  const [sedesSeleccionadas, setSedesSeleccionadas] = useState<string[]>([])
   const [generandoPdf, setGenerandoPdf] = useState<string | null>(null)
+
+  function toggleSede(id: string) {
+    setSedesSeleccionadas(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
 
   useEffect(() => { cargarSedes() }, [])
   useEffect(() => { cargarDatos() }, [mes])
@@ -997,15 +1001,23 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
     } catch { setError('No se pudo generar el PDF.'); setGenerandoPdf(null) }
   }
 
-  const filtrados = filtroSede ? profesoresData.filter(g => g.porSede[filtroSede]) : profesoresData
+  const filtrados = sedesSeleccionadas.length === 0
+    ? profesoresData
+    : profesoresData.filter(g => sedesSeleccionadas.some(id => g.porSede[id]))
   const [anioSel, mesSel] = mes.split('-')
   const labelMes = `${MESES[parseInt(mesSel) - 1]} ${anioSel}`
-  const totalClases = filtrados.reduce((s, g) => s + g.totalClases, 0)
-  const totalMinutos = filtrados.reduce((s, g) => s + g.totalMinutos, 0)
-  const totalHonorario = filtrados.reduce((s, g) => s + g.totalHonorario, 0)
+  // Fijos: siempre se calculan sobre TODOS los profesores, sin importar el filtro de sede.
+  const totalProfesores = profesoresData.length
+  const totalClases = profesoresData.reduce((s, g) => s + g.totalClases, 0)
+  const totalMinutos = profesoresData.reduce((s, g) => s + g.totalMinutos, 0)
+  const totalHonorario = profesoresData.reduce((s, g) => s + g.totalHonorario, 0)
 
   const thS: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL_DARK, fontWeight: 700, whiteSpace: 'nowrap' }
   const tdS: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#1e293b', borderTop: '1px solid #f1f5f9' }
+  const pillS = (activo: boolean): React.CSSProperties => ({
+    padding: '7px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 700, cursor: 'pointer',
+    border: `1.5px solid ${activo ? TEAL : '#e5e7eb'}`, background: activo ? TEAL : 'white', color: activo ? 'white' : '#475569'
+  })
 
   return (
     <div style={{ padding: '24px 28px', maxWidth: '1200px', margin: '0 auto' }}>
@@ -1023,17 +1035,12 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
         <input type="month" value={mes} onChange={e => setMes(e.target.value)}
           style={{ padding: '7px 12px', borderRadius: '10px', border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', fontWeight: 600, color: TEAL_DARK, outline: 'none', background: TEAL_LIGHT }} />
-        <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)}
-          style={{ padding: '7px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${filtroSede ? TEAL : TEAL_MID}`, background: filtroSede ? TEAL_LIGHT : 'white', color: filtroSede ? TEAL_DARK : '#475569', outline: 'none', cursor: 'pointer' }}>
-          <option value="">🏢 Todas las sedes</option>
-          {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-        </select>
       </div>
 
-      {!cargando && filtrados.length > 0 && (
+      {!cargando && profesoresData.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
           {[
-            { label: 'Profesores', valor: String(filtrados.length), color: TEAL },
+            { label: 'Profesores', valor: String(totalProfesores), color: TEAL },
             { label: 'Clases dadas', valor: String(totalClases), color: '#7c3aed' },
             { label: 'Tiempo total', valor: formatTiempo(totalMinutos), color: '#0ea5e9' },
             { label: 'Honorarios total', valor: `$${totalHonorario.toLocaleString('es-CO')}`, color: '#16a34a' },
@@ -1068,6 +1075,22 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Filtro de sede: solo decide qué filas de la tabla se muestran. No afecta
+          los indicadores de arriba ni los totales por sede, que son siempre fijos. */}
+      {!cargando && sedes.length > 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          <p style={{ fontSize: '12px', fontWeight: 700, color: '#888', margin: '0 0 8px', letterSpacing: '0.3px' }}>
+            FILTRAR TABLA POR SEDE <span style={{ fontWeight: 400, color: '#aaa' }}>(no afecta los indicadores de arriba)</span>
+          </p>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <button onClick={() => setSedesSeleccionadas([])} style={pillS(sedesSeleccionadas.length === 0)}>Todas las sedes</button>
+            {sedes.map(s => (
+              <button key={s.id} onClick={() => toggleSede(s.id)} style={pillS(sedesSeleccionadas.includes(s.id))}>{s.nombre}</button>
+            ))}
           </div>
         </div>
       )}
