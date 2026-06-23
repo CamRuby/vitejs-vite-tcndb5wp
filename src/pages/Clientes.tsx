@@ -1083,7 +1083,7 @@ await cargarDatosCliente(cliente)
       }
     }
     const valorBase = taller?.valor_mensual || 0
-    const valorPlan = Math.round((valorBase / 4) * numSesiones)
+    const valorPlan = esVacacional ? valorBase : Math.round((valorBase / 4) * numSesiones)
     const valorPagadoNum = tallerValorPagado !== '' ? Number(tallerValorPagado) : 0
     const mes = fechaInicio.substring(0, 7) + '-01'
     const { data: yaInscrito } = await supabase
@@ -1929,7 +1929,7 @@ await cargarDatosCliente(cliente)
           : tallerModoFecha && tallerFechaHasta ? tallerFechaHasta
           : fi ? calcularFechaFin(fi, tSel?.dia_semana, sesionesCalc) : ''
         const valorBase = tSel?.valor_mensual || 0
-        const valorPlan = tSel ? Math.round((valorBase / 4) * sesionesCalc) : 0
+        const valorPlan = tSel ? (esVac ? valorBase : Math.round((valorBase / 4) * sesionesCalc)) : 0
         const valorPagadoNum = tallerValorPagado !== '' ? Number(tallerValorPagado) : 0
         const saldo = valorPlan - valorPagadoNum
         return (
