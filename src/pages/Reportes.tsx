@@ -651,7 +651,7 @@ interface ProfesorHonorario {
   porSede: Record<string, SedeResumen>
   totalClases: number; totalMinutos: number; totalHonorario: number
   detalle: any[]
-  aprobado: boolean; pagado: boolean
+  aprobado: boolean; pagado: boolean; apoyoConcierto: number
 }
 
 function formatTiempo(min: number) {
@@ -763,7 +763,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
           .in('estado', ['dada', 'cancelada'])
           .or('estado.eq.dada,cancelado_por_academia.eq.false'),
         supabase.from('talleres').select('id, nombre, hora, duracion_min, profesor_id, salones(sede_id, sedes(nombre))'),
-        supabase.from('honorarios_estado').select('profesor_id, aprobado, pagado').eq('mes', mes),
+        supabase.from('honorarios_estado').select('profesor_id, aprobado, pagado, apoyo_concierto').eq('mes', mes),
       ])
       if (errP || errT || errC || errTa || errE) throw (errP || errT || errC || errTa || errE)
 
@@ -817,8 +817,8 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       const clasesConNumero = (clases || []).map((c: any) => ({ ...c, numero_calculado: numeracionMap.get(c.id) ?? null }))
       const todasClases = [...clasesConNumero, ...tallerRows]
       const tarifasL = tarifasData || []
-      const estadoMap: Record<string, { aprobado: boolean; pagado: boolean }> = {}
-      ;(estados || []).forEach((e: any) => { estadoMap[e.profesor_id] = { aprobado: !!e.aprobado, pagado: !!e.pagado } })
+      const estadoMap: Record<string, { aprobado: boolean; pagado: boolean; apoyo_concierto: number }> = {}
+      ;(estados || []).forEach((e: any) => { estadoMap[e.profesor_id] = { aprobado: !!e.aprobado, pagado: !!e.pagado, apoyo_concierto: e.apoyo_concierto || 0 } })
 
       const mapa: Record<string, ProfesorHonorario> = {}
       const sedeTotales: Record<string, { sede_nombre: string; honorario: number; clases: number; estudiantesSet: Set<string> }> = {}
@@ -832,6 +832,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
             banco: p?.banco || null, tipo_cuenta: p?.tipo_cuenta || null, numero_cuenta: p?.numero_cuenta || null,
             porSede: {}, totalClases: 0, totalMinutos: 0, totalHonorario: 0, detalle: [],
             aprobado: estadoMap[profId]?.aprobado || false, pagado: estadoMap[profId]?.pagado || false,
+            apoyoConcierto: estadoMap[profId]?.apoyo_concierto || 0,
           }
         }
         return mapa[profId]
@@ -871,7 +872,11 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       })
 
       setTarifas(tarifasL)
-      setProfesoresData(Object.values(mapa).sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      const profesoresConApoyo = Object.values(mapa).map(g => ({
+        ...g,
+        totalHonorario: g.totalHonorario + g.apoyoConcierto
+      }))
+      setProfesoresData(profesoresConApoyo.sort((a, b) => a.nombre.localeCompare(b.nombre)))
       const totalesSede: Record<string, { sede_nombre: string; honorario: number; clases: number; estudiantes: number }> = {}
       Object.entries(sedeTotales).forEach(([key, v]) => {
         totalesSede[key] = { sede_nombre: v.sede_nombre, honorario: v.honorario, clases: v.clases, estudiantes: v.estudiantesSet.size }
@@ -913,7 +918,9 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       const fechaEmision = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
 
       const clasesDadas = g.detalle.filter((c: any) => (c.estado === 'dada' && !c.es_cortesia) || (c.estado === 'cancelada' && !c.cancelado_por_academia))
-      const totalHon = clasesDadas.reduce((s: number, c: any) => { const h = getHonorarioPDF(c, tarifasProf); return h === 'pendiente' ? s : s + h }, 0)
+      const totalHonClases = clasesDadas.reduce((s: number, c: any) => { const h = getHonorarioPDF(c, tarifasProf); return h === 'pendiente' ? s : s + h }, 0)
+      const apoyoVal = g.apoyoConcierto || 0
+      const totalHon = totalHonClases + apoyoVal
       const totalEnLetras = numerosALetrasH(totalHon)
 
       const porDuracion: Record<number, number> = {}
@@ -968,6 +975,17 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
           { text: 'Por concepto de:', fontSize: 10, alignment: 'center', margin: [0, 0, 0, 8] },
           { text: `Clases dictadas (${resumenClases}${tallerStr}) individual en modalidad presencial durante el periodo comprendido entre el `, fontSize: 10, alignment: 'center', margin: [0, 0, 0, 4] },
           { text: `${primerDia} al ${ultimoDiaLabel} del año ${anio}.`, fontSize: 10, bold: true, alignment: 'center', margin: [0, 0, 0, 16] },
+          ...(apoyoVal > 0 ? [{
+            table: {
+              widths: ['*', 80],
+              body: [[
+                { text: 'Apoyo a concierto', fontSize: 9, bold: true, color: '#7c3aed' },
+                { text: `$${apoyoVal.toLocaleString('es-CO')}`, fontSize: 9, bold: true, alignment: 'right', color: '#7c3aed' }
+              ]]
+            },
+            layout: { hLineWidth: () => 0.5, vLineWidth: () => 0, hLineColor: () => '#e0e0e0', paddingLeft: () => 5, paddingRight: () => 5, paddingTop: () => 6, paddingBottom: () => 6 },
+            margin: [0, 0, 0, 12]
+          }] : []),
           filaDetalle.length > 0 ? {
             table: {
               headerRows: 1,
@@ -1153,7 +1171,10 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                     const d = g.porSede[s.id]
                     return <td key={s.id} style={{ ...tdS, textAlign: 'right', color: d ? '#16a34a' : '#d1d5db', fontWeight: d ? 700 : 400 }}>{d ? `$${d.honorario.toLocaleString('es-CO')}` : '—'}</td>
                   })}
-                  <td style={{ ...tdS, textAlign: 'right', color: '#16a34a', fontWeight: 800 }}>${g.totalHonorario.toLocaleString('es-CO')}</td>
+                  <td style={{ ...tdS, textAlign: 'right' }}>
+                    <div style={{ color: '#16a34a', fontWeight: 800, fontSize: '13px' }}>${g.totalHonorario.toLocaleString('es-CO')}</div>
+                    {g.apoyoConcierto > 0 && <div style={{ color: '#7c3aed', fontSize: '10px', marginTop: '2px' }}>Incl. concierto ${g.apoyoConcierto.toLocaleString('es-CO')}</div>}
+                  </td>
                   <td style={{ ...tdS, textAlign: 'center' }}>
                     <input type="checkbox" checked={g.aprobado} onChange={e => actualizarEstado(g.profesor_id, 'aprobado', e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: TEAL }} />
                   </td>
