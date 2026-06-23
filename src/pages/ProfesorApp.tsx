@@ -1162,59 +1162,17 @@ clasesDadas.forEach(c => {
                     style={{ padding:'14px', background:'#7c3aed', color:'white', border:'none', borderRadius:'14px', fontSize:'15px', fontWeight:'800', cursor:'pointer', fontFamily:'inherit' }}>
                     ✓ Marcar dado
                   </button>
-                  {!eligiendoHonorarioTaller ? (
-                    <button className="ba" onClick={() => {
-                      const hay = Object.values(asistenciasTaller).some(v => v === true)
-                      if (hay) { alert('Hay asistentes seleccionados. Desmárcalos primero.'); return }
-                      setEligiendoHonorarioTaller(true)
-                    }} disabled={guardandoSesion}
-                      style={{ padding:'14px', background:'white', color:'#6b7280', border:'1px solid #e5e7eb', borderRadius:'14px', fontSize:'14px', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
-                      Ningún inscrito asistió
-                    </button>
-                  ) : (
-                    <div style={{ background:'#f3e8ff', borderRadius:'14px', padding:'14px', border:'1px solid #d8b4fe' }}>
-                      <p style={{ margin:'0 0 10px', fontSize:'13px', fontWeight:'700', color:'#7c3aed', textAlign:'center' }}>¿Qué honorario aplica?</p>
-                      <div style={{ display:'flex', gap:'8px' }}>
-                        {[50, 100].map(pct => {
-                          const tarR = tarifas.find((t: any) => t.modalidad === 'presencial' && t.duracion_min === tallerModal?.duracion_min)
-                            || tarifas.find((t: any) => !t.taller_grupal && t.duracion_min === tallerModal?.duracion_min)
-                          const base = tarR ? Number(tarR.valor) : 0
-                          const valor = Math.round(base * pct / 100)
-                          return (
-                            <button key={pct} className="ba" onClick={async () => {
-                              setEligiendoHonorarioTaller(false)
-                              await marcarSesionTaller('dada')
-                              if (sesionHoy?.id) await supabase.from('taller_sesiones').update({ honorario_valor: valor }).eq('id', sesionHoy.id)
-                            }} disabled={guardandoSesion}
-                              style={{ flex:1, padding:'12px 8px', background:'white', color:'#7c3aed', border:'2px solid #7c3aed', borderRadius:'10px', fontSize:'13px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
-                              {pct}% — ${valor.toLocaleString('es-CO')}
-                            </button>
-                          )
-                        })}
-                      </div>
-                      <button onClick={() => setEligiendoHonorarioTaller(false)}
-                        style={{ width:'100%', marginTop:'8px', padding:'8px', background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'12px' }}>
-                        Cancelar
-                      </button>
-                    </div>
-                  )}
+                  <button className="ba" onClick={() => {
+                    const hay = Object.values(asistenciasTaller).some(v => v === true)
+                    if (hay) { alert('Hay asistentes seleccionados. Desmárcalos primero.'); return }
+                    if (window.confirm('¿Confirmar que ningún inscrito asistió? La administración definirá el honorario.')) marcarSesionTaller('dada')
+                  }} disabled={guardandoSesion}
+                    style={{ padding:'14px', background:'white', color:'#6b7280', border:'1px solid #e5e7eb', borderRadius:'14px', fontSize:'14px', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>
+                    Ningún inscrito asistió
+                  </button>
                 </>)}
                 {sesionHoy?.estado === 'dada' && (
                   <div style={{ padding:'14px', background:'#fefce8', color:'#854d0e', border:'2px solid #fde68a', borderRadius:'14px', fontSize:'15px', fontWeight:'800', textAlign:'center' }}>✓ Dado</div>
-                )}
-                {sesionHoy?.estado === 'confirmada' && (
-                  <button className="ba" onClick={() => {
-                    const h2 = tallerModal?.hora || '00:00'
-                    const claseDate = new Date(tallerModal.fecha + 'T' + h2.substring(0,5) + ':00')
-                    const mins = Math.floor((claseDate.getTime() - Date.now()) / 60000)
-                    const msg = mins >= 0 && mins < 180
-                      ? '⚠️ Aviso tardío — quedan menos de 3 horas. Se notificará a la asistente para reasignar.'
-                      : 'Se notificará a la asistente para reasignar el taller a otro profesor.'
-                    if (window.confirm(msg)) marcarSesionTaller('cancelada')
-                  }} disabled={guardandoSesion}
-                    style={{ padding:'14px', background:'#fff7ed', color:'#c2410c', border:'2px solid #fed7aa', borderRadius:'14px', fontSize:'15px', fontWeight:'800', cursor:'pointer', fontFamily:'inherit' }}>
-                    No puedo asistir
-                  </button>
                 )}
                 {sesionHoy?.estado === 'cancelada' && (
                   <div style={{ padding:'14px', background:'#fee2e2', color:'#991b1b', border:'2px solid #fecaca', borderRadius:'14px', fontSize:'14px', fontWeight:'700', textAlign:'center' }}>
