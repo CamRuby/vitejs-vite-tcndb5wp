@@ -42,6 +42,8 @@ export default function App() {
   if (!sesion) return <Login />
   // /profesor: solo accesible con rol 'profesor'
   if (esProfesor) {
+    // Sin sesión: ProfesorApp maneja su propio login internamente
+    if (!sesion || !rol) return <ProfesorApp />
     if (rol === 'profesor' || rol === 'admin') return <ProfesorApp />
     if (rol === 'sin_rol' || rol === null) return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
