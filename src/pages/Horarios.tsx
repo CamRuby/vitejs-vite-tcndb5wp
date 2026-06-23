@@ -667,6 +667,12 @@ async function verificarConflictosEnMemoria(
         sesion_id: sesId, inscripcion_id: inscripcionId, confirmado: true
       }, { onConflict: 'sesion_id,inscripcion_id' })
       setConfirmacionesSesion(prev => new Set([...prev, inscripcionId]))
+      // Marcar la sesión como confirmada si todavía estaba programada
+      if (!sesionActual?.estado || sesionActual.estado === 'programada') {
+        await supabase.from('taller_sesiones').update({ estado: 'confirmada' }).eq('id', sesId)
+        setSesionActual((prev: any) => ({ ...prev, estado: 'confirmada' }))
+        setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'confirmada' }))
+      }
     }
     setGuardandoConfirmacion(false)
   }
