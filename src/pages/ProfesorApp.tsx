@@ -107,6 +107,7 @@ export default function ProfesorApp() {
   const [vista, setVista]                 = useState<'hoy' | 'historial'>('hoy')
   const [clases, setClases]               = useState<any[]>([])
   const [cargandoClases, setCargandoClases] = useState(false)
+  const [apoyoConcierto, setApoyoConcierto] = useState(0)
   const [tarifas, setTarifas]             = useState<any[]>([])
   const [mes, setMes]                     = useState(() => {
     const h = new Date()
@@ -372,6 +373,11 @@ export default function ProfesorApp() {
 
     clasesFinales.sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`))
     setClases(clasesFinales)
+    // Cargar apoyo a concierto del mes
+    const mesStr = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`
+    const { data: estadoMes } = await supabase.from('honorarios_estado')
+      .select('apoyo_concierto').eq('profesor_id', profesor.id).eq('mes', mesStr).single()
+    setApoyoConcierto(estadoMes?.apoyo_concierto || 0)
     setCargandoClases(false)
   }
 
@@ -650,7 +656,8 @@ async function cambiarContrasena() {
 
     const T = '#1a1a1a'
     const clasesDadas = clases.filter(c => (c.estado === 'dada' && !c.es_cortesia) || (c.estado === 'cancelada' && !c.cancelado_por_academia))
-    const totalHon = clasesDadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
+    const totalHonClases = clasesDadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
+    const totalHon = totalHonClases + apoyoConcierto
     const totalEnLetras = numerosALetras(totalHon)
 
     // Resumen de clases por duración
@@ -727,6 +734,14 @@ clasesDadas.forEach(c => {
           text: `${primerDia} al ${ultimoDiaLabel} del año ${anio}.`,
           fontSize: 10, bold: true, alignment: 'center', margin: [0,0,0,16]
         },
+        ...(apoyoConcierto > 0 ? [{
+          table: { widths: ['*', 80], body: [[
+            { text: 'Apoyo a concierto', fontSize: 9, bold: true, color: '#7c3aed' },
+            { text: `$${apoyoConcierto.toLocaleString('es-CO')}`, fontSize: 9, bold: true, alignment: 'right', color: '#7c3aed' }
+          ]] },
+          layout: { hLineWidth: () => 0.5, vLineWidth: () => 0, hLineColor: () => '#e0e0e0', paddingLeft: () => 5, paddingRight: () => 5, paddingTop: () => 6, paddingBottom: () => 6 },
+          margin: [0, 0, 0, 12]
+        }] : []),
         
   // Detalle de clases
   filaDetalle.length > 0 ? {
@@ -813,7 +828,8 @@ clasesDadas.forEach(c => {
     const T = '#1a8a8a'
     const TL = '#e8f5f5'
     const clasesDadas = clases.filter(c => (c.estado === 'dada' && !c.es_cortesia) || (c.estado === 'cancelada' && !c.cancelado_por_academia))
-    const totalHon = clasesDadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
+    const totalHonClases2 = clasesDadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
+    const totalHon = totalHonClases2 + apoyoConcierto
     const filasPdf: any[] = []
     clasesDadas.forEach(c => {
       const hon = getHonorario(c)
@@ -1066,8 +1082,9 @@ clasesDadas.forEach(c => {
                     <div>
                       <p style={{ margin:0, fontSize:'11px', fontWeight:'700', color:TEAL, letterSpacing:'0.5px' }}>HONORARIOS CONFIRMADOS</p>
                       {pendientesCobro > 0 && <p style={{ margin:'3px 0 0', fontSize:'11px', color:'#c2410c', fontWeight:'600' }}>+ {pendientesCobro} inasistencia(s)</p>}
+                      {apoyoConcierto > 0 && <p style={{ margin:'3px 0 0', fontSize:'11px', color:'#7c3aed', fontWeight:'600' }}>Incl. apoyo a concierto de ${apoyoConcierto.toLocaleString('es-CO')}</p>}
                     </div>
-                    <p style={{ margin:0, fontSize:'28px', fontWeight:'800', color:TEAL, letterSpacing:'-1px' }}>${totalHon.toLocaleString('es-CO')}</p>
+                    <p style={{ margin:0, fontSize:'28px', fontWeight:'800', color:TEAL, letterSpacing:'-1px' }}>${(totalHon + apoyoConcierto).toLocaleString('es-CO')}</p>
                   </div>
                 </div>
               )}
