@@ -276,7 +276,32 @@ export default function ProfesorApp() {
         talleresConfirmados = talleresConInscritos.map((t: any) => ({ ...t, _sesionMap: sesionMap }))
       }
     }
+    // Talleres atrasados: sesiones confirmadas de días anteriores que el profesor aún no ha marcado como dadas.
+    // Se muestran igual que las clases atrasadas, siempre al tope de la lista.
+    const talleresAtrasados: any[] = []
+    if (ids.length > 0) {
+      const { data: sesAtrasadas } = await supabase
+        .from('taller_sesiones')
+        .select('id, fecha, estado, taller_id')
+        .in('taller_id', ids)
+        .eq('estado', 'confirmada')
+        .lt('fecha', fi)
+        .order('fecha').order('taller_id')
+      ;(sesAtrasadas || []).forEach((s: any) => {
+        const t = (talleresData || []).find((x: any) => x.id === s.taller_id)
+        if (!t) return
+        talleresAtrasados.push({
+          id: `taller-${t.id}-${s.fecha}`,
+          fecha: s.fecha, hora: t.hora, duracion_min: t.duracion_min,
+          estado: 'confirmada', esTaller: true, sesionEstado: 'confirmada',
+          tallerRealId: t.id, nombreTaller: t.nombre,
+          salones: t.salones, contratos: null, observaciones: null,
+          honorario_valor: null, modalidad: null, esAtrasada: true,
+        })
+      })
+    }
     const clasesFinales = [
+      ...talleresAtrasados,
       ...(dataAtrasadas || []).map((c: any) => ({ ...c, esAtrasada: true })),
       ...(data || [])
     ]
