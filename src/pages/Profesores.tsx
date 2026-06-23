@@ -86,6 +86,7 @@ export default function Profesores() {
   const [apoyoGuardando, setApoyoGuardando] = useState(false)
   const [apoyoOk, setApoyoOk] = useState('')
   const [apoyoErr, setApoyoErr] = useState('')
+  const [apoyoConcierto, setApoyoConcierto] = useState(0)
 
   useEffect(() => { cargarProfesores() }, [])
   useEffect(() => { if (prof) cargarClases(prof) }, [mes])
@@ -280,6 +281,10 @@ export default function Profesores() {
       )
     }
     setClases(result)
+    // Cargar apoyo a concierto del mes
+    const { data: estadoApoyo } = await supabase.from('honorarios_estado')
+      .select('apoyo_concierto').eq('profesor_id', p.id).eq('mes', mes).maybeSingle()
+    setApoyoConcierto(estadoApoyo?.apoyo_concierto || 0)
   }
 
   async function guardar() {
@@ -407,7 +412,7 @@ export default function Profesores() {
     : clases.filter(c => c.estado === 'dada' || c.estado === 'cancelada')
 const dadas = clases.filter(c => c.estado === 'dada')
  const canceladasTarde = clases.filter(c => c.estado === 'cancelada' && (c.cancelado_tarde || (!c.cancelado_por_academia && c.honorario_valor !== null && c.honorario_valor !== undefined)))
-  const totalHon = [...dadas, ...canceladasTarde].reduce((s, c) => s + getHon(c), 0)
+  const totalHon = [...dadas, ...canceladasTarde].reduce((s, c) => s + getHon(c), 0) + apoyoConcierto
   const cnt = {
     programada: clases.filter(c => c.estado === 'programada').length,
     confirmada: clases.filter(c => c.estado === 'confirmada').length,
@@ -810,6 +815,7 @@ const dadas = clases.filter(c => c.estado === 'dada')
                   <p style={{ margin: '2px 0 0', fontSize: '12px', color: TEAL }}>
                     Honorarios ({dadas.length} dadas{canceladasTarde.length > 0 ? ` + ${canceladasTarde.length} tarde` : ''})
                   </p>
+                  {apoyoConcierto > 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#7c3aed', fontWeight: '600' }}>Incl. concierto ${apoyoConcierto.toLocaleString()}</p>}
                 </div>
               </div>
 
