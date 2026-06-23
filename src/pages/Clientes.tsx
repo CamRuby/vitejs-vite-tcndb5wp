@@ -1908,16 +1908,25 @@ await cargarDatosCliente(cliente)
       {/* Modal asignar a taller */}
       {modalTaller && (() => {
         const tSel = talleres.find((x: any) => x.id === tallerSeleccionado)
-        const fi = tSel ? proximaSesionTaller(tSel.dia_semana) : ''
-        let sesionesCalc = tallerNumSesiones
-        if (tallerModoFecha && tallerFechaHasta && tSel && fi) {
+        const esVac = tSel?.tipo === 'vacacional' && tSel?.fecha_unica && tSel?.fecha_fin_vacacional
+        // Calcular días del período vacacional
+        let diasVac = 0
+        if (esVac) {
+          let d = new Date(tSel.fecha_unica + 'T12:00:00')
+          const fin = new Date(tSel.fecha_fin_vacacional + 'T12:00:00')
+          while (d <= fin) { diasVac++; d.setDate(d.getDate() + 1) }
+        }
+        const fi = !esVac && tSel ? proximaSesionTaller(tSel.dia_semana) : (tSel?.fecha_unica || '')
+        let sesionesCalc = esVac ? diasVac : tallerNumSesiones
+        if (!esVac && tallerModoFecha && tallerFechaHasta && tSel && fi) {
           const dias2 = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
           const dt2 = dias2.indexOf(tSel.dia_semana.toLowerCase())
           let cnt2 = 0; let dd2 = new Date(fi + 'T12:00:00'); const finD2 = new Date(tallerFechaHasta + 'T12:00:00')
           while (dd2 <= finD2) { if (dd2.getDay() === dt2) cnt2++; dd2.setDate(dd2.getDate() + 1) }
           sesionesCalc = Math.max(cnt2, 1)
         }
-        const ff = tallerModoFecha && tallerFechaHasta ? tallerFechaHasta
+        const ff = esVac ? tSel.fecha_fin_vacacional
+          : tallerModoFecha && tallerFechaHasta ? tallerFechaHasta
           : fi ? calcularFechaFin(fi, tSel?.dia_semana, sesionesCalc) : ''
         const valorBase = tSel?.valor_mensual || 0
         const valorPlan = tSel ? Math.round((valorBase / 4) * sesionesCalc) : 0
@@ -1948,33 +1957,40 @@ await cargarDatosCliente(cliente)
                 </select>
               </div>
               {tallerSeleccionado && (<>
-                <div style={{ marginBottom: '14px' }}>
-                  <label style={labelStyle}>Duración de la inscripción</label>
-                  <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
-                    {[4, 8, 12].map(n => (
-                      <button key={n} onClick={() => { setTallerNumSesiones(n); setTallerModoFecha(false) }}
-                        style={{ padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
-                          border: !tallerModoFecha && tallerNumSesiones === n ? '2px solid #7c3aed' : '1px solid #e2e8f0',
-                          background: !tallerModoFecha && tallerNumSesiones === n ? '#f3e8ff' : 'white',
-                          color: !tallerModoFecha && tallerNumSesiones === n ? '#7c3aed' : '#555' }}>
-                        {n} sesiones
-                      </button>
-                    ))}
-                    <button onClick={() => setTallerModoFecha(true)}
-                      style={{ padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
-                        border: tallerModoFecha ? '2px solid #7c3aed' : '1px solid #e2e8f0',
-                        background: tallerModoFecha ? '#f3e8ff' : 'white',
-                        color: tallerModoFecha ? '#7c3aed' : '#555' }}>
-                      Hasta fecha →
-                    </button>
+                {esVac ? (
+                  <div style={{ background: '#fef9c3', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px', fontSize: '13px', color: '#854d0e', border: '1px solid #fde68a' }}>
+                    ☀️ <strong>Taller vacacional</strong> — la inscripción cubre todo el período del taller.
+                    <br />📅 <strong>{tSel.fecha_unica}</strong> → <strong>{tSel.fecha_fin_vacacional}</strong> · <strong>{diasVac}</strong> días
                   </div>
-                  {tallerModoFecha && (
-                    <input type="date" value={tallerFechaHasta} min={fi}
-                      onChange={e => setTallerFechaHasta(e.target.value)}
-                      style={{ ...estiloInput, marginTop: '8px' }} />
-                  )}
-                </div>
-                {fi && ff && (
+                ) : (
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={labelStyle}>Duración de la inscripción</label>
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+                      {[4, 8, 12].map(n => (
+                        <button key={n} onClick={() => { setTallerNumSesiones(n); setTallerModoFecha(false) }}
+                          style={{ padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
+                            border: !tallerModoFecha && tallerNumSesiones === n ? '2px solid #7c3aed' : '1px solid #e2e8f0',
+                            background: !tallerModoFecha && tallerNumSesiones === n ? '#f3e8ff' : 'white',
+                            color: !tallerModoFecha && tallerNumSesiones === n ? '#7c3aed' : '#555' }}>
+                          {n} sesiones
+                        </button>
+                      ))}
+                      <button onClick={() => setTallerModoFecha(true)}
+                        style={{ padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600',
+                          border: tallerModoFecha ? '2px solid #7c3aed' : '1px solid #e2e8f0',
+                          background: tallerModoFecha ? '#f3e8ff' : 'white',
+                          color: tallerModoFecha ? '#7c3aed' : '#555' }}>
+                        Hasta fecha →
+                      </button>
+                    </div>
+                    {tallerModoFecha && (
+                      <input type="date" value={tallerFechaHasta} min={fi}
+                        onChange={e => setTallerFechaHasta(e.target.value)}
+                        style={{ ...estiloInput, marginTop: '8px' }} />
+                    )}
+                  </div>
+                )}
+                {!esVac && fi && ff && (
                   <div style={{ background: '#f3e8ff', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', fontSize: '13px', color: '#7c3aed', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
                     <span>📅 <strong>{fi}</strong> → <strong>{ff}</strong></span>
                     <span>🎸 <strong>{sesionesCalc}</strong> sesiones · {tSel?.dia_semana}</span>
