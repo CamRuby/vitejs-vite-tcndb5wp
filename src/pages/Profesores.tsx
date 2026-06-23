@@ -77,6 +77,9 @@ export default function Profesores() {
   const [creandoAcceso, setCreandoAcceso] = useState(false)
   const [errAcceso, setErrAcceso] = useState('')
   const [okAcceso, setOkAcceso] = useState('')
+  const [reseteandoPassword, setReseteandoPassword] = useState(false)
+  const [revocandoAcceso, setRevocandoAcceso] = useState(false)
+  const [confirmarRevocar, setConfirmarRevocar] = useState(false)
 
   useEffect(() => { cargarProfesores() }, [])
   useEffect(() => { if (prof) cargarClases(prof) }, [mes])
@@ -116,6 +119,7 @@ export default function Profesores() {
     setNuevaPassword('')
     setErrAcceso('')
     setOkAcceso('')
+    setConfirmarRevocar(false)
     setEditando(false)
     setErrForm('')
     setMostrarCopiar(false)
@@ -138,25 +142,59 @@ export default function Profesores() {
     setCopiando(false)
   }
 
+  async function resetearPassword() {
+    if (!prof.email) { setErrAcceso('El profesor no tiene correo registrado'); return }
+    setReseteandoPassword(true); setErrAcceso(''); setOkAcceso('')
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(prof.email, {
+        redirectTo: `${window.location.origin}/profesor`
+      })
+      if (error) { setErrAcceso('Error: ' + error.message); return }
+      setOkAcceso(`✓ Correo de reseteo enviado a ${prof.email}`)
+    } catch (e: any) {
+      setErrAcceso('Error: ' + e.message)
+    } finally {
+      setReseteandoPassword(false)
+    }
+  }
+
+  async function revocarAcceso() {
+    if (!prof.email) return
+    setRevocandoAcceso(true); setErrAcceso(''); setOkAcceso('')
+    try {
+      const { error } = await supabase.from('roles').delete().eq('email', prof.email)
+      if (error) { setErrAcceso('Error: ' + error.message); return }
+      setTieneAcceso(false)
+      setConfirmarRevocar(false)
+      setOkAcceso('✓ Acceso revocado correctamente')
+    } catch (e: any) {
+      setErrAcceso('Error: ' + e.message)
+    } finally {
+      setRevocandoAcceso(false)
+    }
+  }
+
   async function crearAcceso() {
     if (!nuevoEmail.trim()) { setErrAcceso('El correo es obligatorio'); return }
-    if (nuevaPassword.length < 6) { setErrAcceso('La contraseña debe tener al menos 6 caracteres'); return }
     setCreandoAcceso(true); setErrAcceso(''); setOkAcceso('')
     try {
       const { data: { session } } = await supabase.auth.getSession()
+      // Contraseña temporal aleatoria — el profesor la reemplazará con su propia contraseña
+      const passTemp = Math.random().toString(36).slice(-10) + Math.random().toString(36).slice(-10)
       const res = await fetch(`${SUPABASE_URL}/functions/v1/crear-usuario`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ email: nuevoEmail.trim(), password: nuevaPassword, rol: 'profesor' })
+        body: JSON.stringify({ email: nuevoEmail.trim(), password: passTemp, rol: 'profesor' })
       })
       const json = await res.json()
       if (json.error && !json.error.toLowerCase().includes('already')) { setErrAcceso(json.error); return }
       await supabase.from('profesores').update({ email: nuevoEmail.trim() }).eq('id', prof.id)
       setForm((prev: any) => ({ ...prev, email: nuevoEmail.trim() }))
-      setTieneAcceso(true)
-      setOkAcceso(`✓ Acceso creado para ${nuevoEmail.trim()}`)
-      setNuevaPassword('')
       setProf((prev: any) => ({ ...prev, email: nuevoEmail.trim() }))
+      // Enviar correo para que el profesor defina su propia contraseña
+      await supabase.auth.resetPasswordForEmail(nuevoEmail.trim(), { redirectTo: `${window.location.origin}/profesor` })
+      setTieneAcceso(true)
+      setOkAcceso(`✓ Acceso creado. Se envió un correo a ${nuevoEmail.trim()} para que el profesor defina su contraseña.`)
     } catch (e: any) {
       setErrAcceso('Error al crear acceso: ' + e.message)
     } finally {
@@ -522,16 +560,37 @@ const dadas = clases.filter(c => c.estado === 'dada')
               </div>
               <div style={{ padding: '16px 18px' }}>
                 {tieneAcceso === true
-                  ? <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>Este profesor ya tiene acceso a la app con el correo <strong>{prof.email}</strong>.</p>
-                  : (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '12px', alignItems: 'end', maxWidth: '600px' }}>
-                      <div>
-                        <label style={lS}>Correo</label>
-                        <input type="email" value={nuevoEmail} onChange={e => setNuevoEmail(e.target.value)} style={fS} placeholder="correo@ejemplo.com" />
+                  ? (<div>
+                      <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#666' }}>Acceso activo con el correo <strong>{prof.email}</strong>.</p>
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        <button onClick={resetearPassword} disabled={reseteandoPassword}
+                          style={{ padding: '8px 16px', background: 'white', color: TEAL, border: `1.5px solid ${TEAL}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                          {reseteandoPassword ? 'Enviando...' : '🔑 Resetear contraseña'}
+                        </button>
+                        {!confirmarRevocar
+                          ? <button onClick={() => setConfirmarRevocar(true)}
+                              style={{ padding: '8px 16px', background: 'white', color: '#dc2626', border: '1.5px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                              🚫 Revocar acceso
+                            </button>
+                          : <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <span style={{ fontSize: '13px', color: '#dc2626', fontWeight: '600' }}>¿Confirmar?</span>
+                              <button onClick={revocarAcceso} disabled={revocandoAcceso}
+                                style={{ padding: '7px 14px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                                {revocandoAcceso ? 'Revocando...' : 'Sí, revocar'}
+                              </button>
+                              <button onClick={() => setConfirmarRevocar(false)}
+                                style={{ padding: '7px 14px', background: '#f1f5f9', color: '#333', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
+                                Cancelar
+                              </button>
+                            </div>
+                        }
                       </div>
+                    </div>)
+                  : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', alignItems: 'end', maxWidth: '420px' }}>
                       <div>
-                        <label style={lS}>Contraseña</label>
-                        <input type="password" value={nuevaPassword} onChange={e => setNuevaPassword(e.target.value)} style={fS} placeholder="Mínimo 6 caracteres" />
+                        <label style={lS}>Correo del profesor</label>
+                        <input type="email" value={nuevoEmail} onChange={e => setNuevoEmail(e.target.value)} style={fS} placeholder="correo@ejemplo.com" />
                       </div>
                       <button onClick={crearAcceso} disabled={creandoAcceso}
                         style={{ padding: '9px 18px', background: creandoAcceso ? '#cbd5e1' : TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: creandoAcceso ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>
