@@ -158,6 +158,8 @@ export default function Horarios() {
   const [teHora, setTeHora] = useState('')
   const [teDuracion, setTeDuracion] = useState('60')
   const [teValor, setTeValor] = useState('')
+  const [teFechaUnica, setTeFechaUnica] = useState('')
+  const [teFechaFin, setTeFechaFin] = useState('')
   const [teGuardando, setTeGuardando] = useState(false)
   const [teError, setTeError] = useState('')
   const [confirmarBorrarTaller, setConfirmarBorrarTaller] = useState(false)
@@ -575,6 +577,8 @@ async function verificarConflictosEnMemoria(
     setTeHora(taller.hora?.substring(0, 5) || '')
     setTeDuracion(String(taller.duracion_min || 60))
     setTeValor(taller.valor_mensual !== null && taller.valor_mensual !== undefined ? String(taller.valor_mensual) : '')
+    setTeFechaUnica((taller as any).fecha_unica || '')
+    setTeFechaFin((taller as any).fecha_fin_vacacional || '')
     setTeError('')
     // Inscritos cuyo período cubre la fecha de esta sesión
     // Try with fecha_inicio/fecha_fin first; fallback to mes if columns don't exist
@@ -770,11 +774,20 @@ async function verificarConflictosEnMemoria(
     if (!teProfesorId) { setTeError('Selecciona un profesor'); return }
     if (!teSalonId) { setTeError('Selecciona un salón'); return }
     setTeGuardando(true); setTeError('')
-    const { error } = await supabase.from('talleres').update({
+    const esVac = (tallerViendo as any).tipo === 'vacacional'
+    const updatePayload: any = {
       nombre: teNombre.trim(), profesor_id: teProfesorId, salon_id: teSalonId,
-      dia_semana: teDiaSemana, hora: teHora + ':00', duracion_min: parseInt(teDuracion),
+      hora: teHora + ':00', duracion_min: parseInt(teDuracion),
       valor_mensual: teValor !== '' ? Number(teValor) : null
-    }).eq('id', tallerViendo.id)
+    }
+    if (esVac) {
+      updatePayload.fecha_unica = teFechaUnica
+      updatePayload.fecha_fin_vacacional = teFechaFin
+      updatePayload.tipo = 'vacacional'
+    } else {
+      updatePayload.dia_semana = teDiaSemana
+    }
+    const { error } = await supabase.from('talleres').update(updatePayload).eq('id', tallerViendo.id)
     if (error) { setTeError('Error: ' + error.message); setTeGuardando(false); return }
     setModalVerTaller(false)
     await cargarTalleres()
@@ -1820,6 +1833,16 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                         {todosSalones.filter((s: any) => s.sede_id === tallerViendo?.salones?.sede_id).map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                       </select>
                     </div>
+                    {(tallerViendo as any).tipo === 'vacacional' ? (<>
+                      <div>
+                        <label style={labelStyle}>Fecha inicio</label>
+                        <input type="date" value={teFechaUnica} onChange={e => setTeFechaUnica(e.target.value)} style={fieldStyle} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>Fecha fin</label>
+                        <input type="date" value={teFechaFin} min={teFechaUnica} onChange={e => setTeFechaFin(e.target.value)} style={fieldStyle} />
+                      </div>
+                    </>) : (
                     <div>
                       <label style={labelStyle}>Día de la semana</label>
                       <select value={teDiaSemana} onChange={e => setTeDiaSemana(e.target.value)} style={fieldStyle}>
@@ -1828,6 +1851,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                         ))}
                       </select>
                     </div>
+                    )}
                     <div>
                    <label style={labelStyle}>Hora de inicio</label>
                         <select value={teHora} onChange={e => setTeHora(e.target.value)} style={fieldStyle}>
@@ -1848,7 +1872,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                       </div>
                     </div>
                     <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={labelStyle}>Valor mensual ($)</label>
+                      <label style={labelStyle}>{(tallerViendo as any).tipo === 'vacacional' ? 'Valor único ($)' : 'Valor mensual ($)'}</label>
                       <input type="number" min={0} value={teValor} onChange={e => setTeValor(e.target.value)} placeholder="Opcional" style={fieldStyle} />
                     </div>
                   </div>
