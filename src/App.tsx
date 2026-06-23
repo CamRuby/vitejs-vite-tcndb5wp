@@ -11,7 +11,6 @@ export default function App() {
   const [rol, setRol] = useState<string | null>(null)
   const [listo, setListo] = useState(false)
   useEffect(() => {
-    if (esProfesor) { setListo(true); return }
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSesion(session)
       if (session?.user?.email) {
@@ -35,14 +34,37 @@ export default function App() {
     })
     return () => subscription.unsubscribe()
   }, [])
-  if (esProfesor) return <ProfesorApp />
-  if (esAdmin) return <AdminApp />
   if (!listo) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p>Cargando...</p>
     </div>
   )
   if (!sesion) return <Login />
+  // /profesor: solo accesible con rol 'profesor'
+  if (esProfesor) {
+    if (rol === 'profesor' || rol === 'admin') return <ProfesorApp />
+    if (rol === 'sin_rol' || rol === null) return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
+        <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>Sin acceso.</p>
+        <p style={{ fontSize: '14px', color: '#9ca3af' }}>Tu usuario no tiene el rol de profesor.</p>
+        <button onClick={() => supabase.auth.signOut()}
+          style={{ padding: '10px 24px', background: '#1a8a8a', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
+          Cerrar sesión
+        </button>
+      </div>
+    )
+    // rol de admin intentando acceder a /profesor
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
+        <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>Esta sección es para profesores.</p>
+        <button onClick={() => supabase.auth.signOut()}
+          style={{ padding: '10px 24px', background: '#1a8a8a', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
+          Cerrar sesión
+        </button>
+      </div>
+    )
+  }
+  if (esAdmin) return <AdminApp />
   if (rol === 'profesor') return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
       <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>No tienes acceso a esta sección.</p>
