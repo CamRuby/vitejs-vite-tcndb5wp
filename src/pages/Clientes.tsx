@@ -1038,7 +1038,7 @@ await cargarDatosCliente(cliente)
   async function abrirModalTaller() {
     const { data } = await supabase
       .from('talleres')
-      .select('id, nombre, dia_semana, hora, duracion_min, valor_mensual, profesores(nombre), salones(nombre, sedes(nombre))')
+      .select('id, nombre, dia_semana, hora, duracion_min, valor_mensual, tipo, fecha_unica, fecha_fin_vacacional, profesores(nombre), salones(nombre, sedes(nombre))')
       .neq('estado', 'archivado')
       .order('nombre')
     setTalleres(data || [])
@@ -1055,20 +1055,32 @@ await cargarDatosCliente(cliente)
     if (!tallerSeleccionado) { setTallerError('Selecciona un taller'); return }
     setTallerGuardando(true); setTallerError('')
     const taller = talleres.find((t: any) => t.id === tallerSeleccionado)
-    const fechaInicio = proximaSesionTaller(taller?.dia_semana || 'lunes')
-    // Calcular sesiones y fecha_fin
+    const esVacacional = taller?.tipo === 'vacacional' && taller?.fecha_unica && taller?.fecha_fin_vacacional
+    // Calcular fechaInicio, fechaFin y numSesiones
+    let fechaInicio: string
     let numSesiones = tallerNumSesiones
     let fechaFin: string
-    if (tallerModoFecha && tallerFechaHasta) {
-      fechaFin = tallerFechaHasta
-      const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
-      const diaT = dias.indexOf((taller?.dia_semana || '').toLowerCase())
-      let cnt = 0; let d = new Date(fechaInicio + 'T12:00:00')
-      const finD = new Date(fechaFin + 'T12:00:00')
-      while (d <= finD) { if (d.getDay() === diaT) cnt++; d.setDate(d.getDate() + 1) }
+    if (esVacacional) {
+      fechaInicio = taller.fecha_unica
+      fechaFin = taller.fecha_fin_vacacional
+      // Contar días entre inicio y fin (incluidos)
+      let d = new Date(fechaInicio + 'T12:00:00')
+      const fin = new Date(fechaFin + 'T12:00:00')
+      let cnt = 0; while (d <= fin) { cnt++; d.setDate(d.getDate() + 1) }
       numSesiones = Math.max(cnt, 1)
     } else {
-      fechaFin = calcularFechaFin(fechaInicio, taller?.dia_semana, numSesiones)
+      fechaInicio = proximaSesionTaller(taller?.dia_semana || 'lunes')
+      if (tallerModoFecha && tallerFechaHasta) {
+        fechaFin = tallerFechaHasta
+        const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
+        const diaT = dias.indexOf((taller?.dia_semana || '').toLowerCase())
+        let cnt = 0; let d = new Date(fechaInicio + 'T12:00:00')
+        const finD = new Date(fechaFin + 'T12:00:00')
+        while (d <= finD) { if (d.getDay() === diaT) cnt++; d.setDate(d.getDate() + 1) }
+        numSesiones = Math.max(cnt, 1)
+      } else {
+        fechaFin = calcularFechaFin(fechaInicio, taller?.dia_semana, numSesiones)
+      }
     }
     const valorBase = taller?.valor_mensual || 0
     const valorPlan = Math.round((valorBase / 4) * numSesiones)
@@ -1926,7 +1938,13 @@ await cargarDatosCliente(cliente)
                 <label style={labelStyle}>Taller *</label>
                 <select value={tallerSeleccionado} onChange={e => { setTallerSeleccionado(e.target.value); setTallerValorPagado('') }} style={estiloInput}>
                   <option value="">— Seleccionar taller —</option>
-                  {talleres.map((t: any) => <option key={t.id} value={t.id}>{t.nombre} · {t.dia_semana} {t.hora?.substring(0,5)} · {t.salones?.sedes?.nombre}</option>)}
+                  {talleres.map((t: any) => (
+                    <option key={t.id} value={t.id}>
+                      {t.tipo === 'vacacional' && t.fecha_unica
+                        ? `☀️ ${t.nombre} · ${t.fecha_unica} al ${t.fecha_fin_vacacional} · ${t.salones?.sedes?.nombre}`
+                        : `${t.nombre} · ${t.dia_semana} ${t.hora?.substring(0,5)} · ${t.salones?.sedes?.nombre}`}
+                    </option>
+                  ))}
                 </select>
               </div>
               {tallerSeleccionado && (<>
