@@ -80,6 +80,12 @@ export default function Profesores() {
   const [reseteandoPassword, setReseteandoPassword] = useState(false)
   const [revocandoAcceso, setRevocandoAcceso] = useState(false)
   const [confirmarRevocar, setConfirmarRevocar] = useState(false)
+  // Apoyo a concierto
+  const [apoyoMes, setApoyoMes] = useState(() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}` })
+  const [apoyoValor, setApoyoValor] = useState('')
+  const [apoyoGuardando, setApoyoGuardando] = useState(false)
+  const [apoyoOk, setApoyoOk] = useState('')
+  const [apoyoErr, setApoyoErr] = useState('')
 
   useEffect(() => { cargarProfesores() }, [])
   useEffect(() => { if (prof) cargarClases(prof) }, [mes])
@@ -120,6 +126,8 @@ export default function Profesores() {
     setErrAcceso('')
     setOkAcceso('')
     setConfirmarRevocar(false)
+    setApoyoOk(''); setApoyoErr('')
+    if (prof?.id) cargarApoyo(prof.id, apoyoMes)
     setEditando(false)
     setErrForm('')
     setMostrarCopiar(false)
@@ -140,6 +148,23 @@ export default function Profesores() {
     setMostrarCopiar(false)
     setProfCopiar('')
     setCopiando(false)
+  }
+
+  async function cargarApoyo(profId: string, mes: string) {
+    const { data } = await supabase.from('honorarios_estado')
+      .select('apoyo_concierto').eq('profesor_id', profId).eq('mes', mes).single()
+    setApoyoValor(data?.apoyo_concierto ? String(data.apoyo_concierto) : '')
+  }
+
+  async function guardarApoyo() {
+    if (!prof?.id) return
+    setApoyoGuardando(true); setApoyoOk(''); setApoyoErr('')
+    const valor = apoyoValor !== '' ? parseInt(apoyoValor) : 0
+    const { error } = await supabase.from('honorarios_estado')
+      .upsert({ profesor_id: prof.id, mes: apoyoMes, apoyo_concierto: valor }, { onConflict: 'profesor_id,mes' })
+    if (error) setApoyoErr('Error al guardar: ' + error.message)
+    else setApoyoOk('✓ Guardado')
+    setApoyoGuardando(false)
   }
 
   async function resetearPassword() {
@@ -606,6 +631,85 @@ const dadas = clases.filter(c => c.estado === 'dada')
           )}
 
           {/* Disponibilidad y Tarifas */}
+          {editando && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+              {/* Acceso a la app — en modo edición */}
+              <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
+                <div style={{ background: TEAL_LIGHT, padding: '12px 18px', borderBottom: '1px solid #eef2f7', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <p style={{ margin: 0, fontWeight: '700', fontSize: '13px', color: TEAL }}>📱 Acceso a la app</p>
+                  {tieneAcceso === true && <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: '#dcfce7', color: '#166534' }}>✓ Activo</span>}
+                  {tieneAcceso === false && <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: '#fee2e2', color: '#991b1b' }}>Sin acceso</span>}
+                </div>
+                <div style={{ padding: '14px 18px' }}>
+                  {tieneAcceso === true ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>Correo: <strong>{prof.email}</strong></p>
+                      <button onClick={resetearPassword} disabled={reseteandoPassword}
+                        style={{ padding: '7px 12px', background: 'white', color: TEAL, border: `1.5px solid ${TEAL}`, borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                        {reseteandoPassword ? 'Enviando...' : '🔑 Resetear contraseña'}
+                      </button>
+                      {!confirmarRevocar
+                        ? <button onClick={() => setConfirmarRevocar(true)}
+                            style={{ padding: '7px 12px', background: 'white', color: '#dc2626', border: '1.5px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                            🚫 Revocar acceso
+                          </button>
+                        : <div style={{ display: 'flex', gap: '6px' }}>
+                            <button onClick={revocarAcceso} disabled={revocandoAcceso}
+                              style={{ flex: 1, padding: '7px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                              {revocandoAcceso ? '...' : 'Sí, revocar'}
+                            </button>
+                            <button onClick={() => setConfirmarRevocar(false)}
+                              style={{ flex: 1, padding: '7px', background: '#f1f5f9', color: '#333', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px' }}>
+                              Cancelar
+                            </button>
+                          </div>
+                      }
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div>
+                        <label style={lS}>Correo</label>
+                        <input type="email" value={nuevoEmail} onChange={e => setNuevoEmail(e.target.value)} style={fS} placeholder="correo@ejemplo.com" />
+                      </div>
+                      <button onClick={crearAcceso} disabled={creandoAcceso}
+                        style={{ padding: '8px', background: creandoAcceso ? '#cbd5e1' : TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                        {creandoAcceso ? 'Creando...' : '+ Crear acceso'}
+                      </button>
+                    </div>
+                  )}
+                  {errAcceso && <p style={{ margin: '8px 0 0', color: '#dc2626', fontSize: '12px' }}>⚠ {errAcceso}</p>}
+                  {okAcceso && <p style={{ margin: '8px 0 0', color: '#166534', fontSize: '12px', fontWeight: '600' }}>{okAcceso}</p>}
+                </div>
+              </div>
+
+              {/* Apoyo a concierto */}
+              <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
+                <div style={{ background: TEAL_LIGHT, padding: '12px 18px', borderBottom: '1px solid #eef2f7' }}>
+                  <p style={{ margin: 0, fontWeight: '700', fontSize: '13px', color: TEAL }}>🎵 Apoyo a concierto</p>
+                </div>
+                <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <label style={lS}>Mes</label>
+                    <input type="month" value={apoyoMes}
+                      onChange={e => { setApoyoMes(e.target.value); setApoyoOk(''); if (prof?.id) cargarApoyo(prof.id, e.target.value) }}
+                      style={fS} />
+                  </div>
+                  <div>
+                    <label style={lS}>Valor ($)</label>
+                    <input type="number" min={0} value={apoyoValor} onChange={e => { setApoyoValor(e.target.value); setApoyoOk('') }}
+                      placeholder="0" style={fS} />
+                  </div>
+                  <button onClick={guardarApoyo} disabled={apoyoGuardando}
+                    style={{ padding: '8px', background: apoyoGuardando ? '#cbd5e1' : TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                    {apoyoGuardando ? 'Guardando...' : 'Guardar apoyo'}
+                  </button>
+                  {apoyoOk && <p style={{ margin: 0, color: '#166534', fontSize: '12px', fontWeight: '600' }}>{apoyoOk}</p>}
+                  {apoyoErr && <p style={{ margin: 0, color: '#dc2626', fontSize: '12px' }}>{apoyoErr}</p>}
+                </div>
+              </div>
+            </div>
+          )}
+
           {editando && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
               {/* Disponibilidad */}
