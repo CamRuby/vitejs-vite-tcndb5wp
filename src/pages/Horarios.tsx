@@ -223,8 +223,10 @@ export default function Horarios() {
         const horaEfectiva = (tieneExcepcion && sesionesHoraMap[`${t.id}-${col.fecha}`]) || t.hora.substring(0, 5)
         const salonEfectivo = (tieneExcepcion && sesionesSalonMap[`${t.id}-${col.fecha}`]) || t.salon_id
         if (!salonEfectivo || col.salon.id !== salonEfectivo) return
-        // Para taller normal: solo si el día coincide y no hay excepción que lo mueva a otro día
-        const esNormalEsteDia = parseFechaLocal(col.fecha).getDay() === DIA_NUM[t.dia_semana]
+        // Para taller vacacional: muestra en todos los días del rango. Para regular: solo si el día coincide.
+        const esNormalEsteDia = (t as any).fecha_fin_vacacional
+          ? col.fecha >= (t as any).fecha_unica && col.fecha <= (t as any).fecha_fin_vacacional
+          : parseFechaLocal(col.fecha).getDay() === DIA_NUM[t.dia_semana]
         if (!esNormalEsteDia && !tieneExcepcion) return
         if (esNormalEsteDia && tieneExcepcion) {
           // Excepción mueve el taller a otro día — no generar skip para el día normal
@@ -359,7 +361,7 @@ setCargando(false)
     if (!ids.length) return
     const { data } = await supabase
       .from('talleres')
-      .select('id, nombre, profesor_id, salon_id, dia_semana, hora, duracion_min, valor_mensual, profesores(nombre), salones(id, nombre, sede_id)')
+      .select('id, nombre, profesor_id, salon_id, dia_semana, hora, duracion_min, valor_mensual, tipo, fecha_unica, fecha_fin_vacacional, profesores(nombre), salones(id, nombre, sede_id)')
       .in('salon_id', ids).neq('estado', 'archivado')
     setTalleres(data || [])
     if (data?.length) {
@@ -1054,9 +1056,14 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
 
   function getTallerSlot(salonId: string, hora: string, fecha: string) {
     const diaSemana = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
-    // Caso normal: taller recurrente cuyo día coincide (y sin excepción que lo mueva)
+    // Caso normal: taller recurrente (o vacacional en su rango) cuyo salón y hora coinciden
     const normal = talleres.find(t => {
-      if (t.salon_id !== salonId || t.dia_semana !== diaSemana || t.hora?.substring(0, 5) !== hora) return false
+      if (t.salon_id !== salonId || t.hora?.substring(0, 5) !== hora) return false
+      // Para vacacional: mostrar en todos los días del rango
+      const esEsteDia = (t as any).fecha_fin_vacacional
+        ? fecha >= (t as any).fecha_unica && fecha <= (t as any).fecha_fin_vacacional
+        : t.dia_semana === diaSemana
+      if (!esEsteDia) return false
       // Si esta fecha tiene una sesión excepción que movió el taller a otro día/hora/salón, no mostrar aquí
       const tieneExcepcion = sesionesEstadoMap[`${t.id}-${fecha}`] !== undefined &&
         (sesionesHoraMap[`${t.id}-${fecha}`] || sesionesSalonMap[`${t.id}-${fecha}`])
