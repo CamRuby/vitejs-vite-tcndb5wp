@@ -824,7 +824,7 @@ async function verificarConflictosEnMemoria(
           salon_id: slotSeleccionado.salon.id, dia_semana: diaCur,
           hora: slotSeleccionado.hora + ':00', duracion_min: parseInt(tallerDuracion),
           valor_mensual: tallerValor !== '' ? Number(tallerValor) : null,
-          tipo: 'vacacional'
+          tipo: 'vacacional', fecha_unica: fechaCur
         })
         if (error) errores++
         cur.setDate(cur.getDate() + 1)
