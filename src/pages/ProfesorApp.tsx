@@ -250,7 +250,7 @@ export default function ProfesorApp() {
       .order('fecha').order('hora')
     const mesT = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`
     const { data: talleresData } = await supabase.from('talleres')
-      .select('id, nombre, dia_semana, hora, duracion_min, salones(nombre, sedes(nombre))')
+      .select('id, nombre, dia_semana, hora, duracion_min, fecha_unica, salones(nombre, sedes(nombre))')
       .eq('profesor_id', profesor.id)
     const ids = (talleresData || []).map((t: any) => t.id)
     let talleresConfirmados: any[] = []
@@ -284,7 +284,7 @@ export default function ProfesorApp() {
       const dia = new Date(hoy); dia.setDate(hoy.getDate() + offset)
       const fechaStr = fechaLocal(dia)
       talleresConfirmados.forEach((t: any) => {
-        if (DIAS_SEMANA[t.dia_semana] === dia.getDay()) {
+        if (t.fecha_unica ? t.fecha_unica === fechaStr : DIAS_SEMANA[t.dia_semana] === dia.getDay()) {
           const sesionEstadoHoy = t._sesionMap?.[`${t.id}-${fechaStr}`] || null
           const estadoTaller = sesionEstadoHoy || 'programada'
           if (estadoTaller === 'dada') { /* skip */ } else
