@@ -813,23 +813,15 @@ async function verificarConflictosEnMemoria(
     const diasSem = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
     if (tallerVacacional) {
       const fechaIni = parseFechaLocal(slotSeleccionado.fecha)
-      const fechaFin2 = parseFechaLocal(tallerFechaFin)
-      let errores = 0
-      let cur = new Date(fechaIni)
-      while (cur <= fechaFin2) {
-        const diaCur = diasSem[cur.getDay()]
-        const fechaCur = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`
-        const { error } = await supabase.from('talleres').insert({
-          nombre: tallerNombre.trim(), profesor_id: tallerProfesorId,
-          salon_id: slotSeleccionado.salon.id, dia_semana: diaCur,
-          hora: slotSeleccionado.hora + ':00', duracion_min: parseInt(tallerDuracion),
-          valor_mensual: tallerValor !== '' ? Number(tallerValor) : null,
-          tipo: 'vacacional', fecha_unica: fechaCur
-        })
-        if (error) errores++
-        cur.setDate(cur.getDate() + 1)
-      }
-      if (errores > 0) { setTallerError(`${errores} día(s) no se pudieron crear`); setTallerGuardando(false); return }
+      const diaPrimero = diasSem[fechaIni.getDay()]
+      const { error } = await supabase.from('talleres').insert({
+        nombre: tallerNombre.trim(), profesor_id: tallerProfesorId,
+        salon_id: slotSeleccionado.salon.id, dia_semana: diaPrimero,
+        hora: slotSeleccionado.hora + ':00', duracion_min: parseInt(tallerDuracion),
+        valor_mensual: tallerValor !== '' ? Number(tallerValor) : null,
+        tipo: 'vacacional', fecha_unica: slotSeleccionado.fecha, fecha_fin_vacacional: tallerFechaFin
+      })
+      if (error) { setTallerError('Error: ' + error.message); setTallerGuardando(false); return }
       auditar('crear_taller_vacacional', 'talleres', undefined, { nombre: tallerNombre.trim(), desde: slotSeleccionado.fecha, hasta: tallerFechaFin })
     } else {
       const diaSemana = diasSem[parseFechaLocal(slotSeleccionado.fecha).getDay()]
