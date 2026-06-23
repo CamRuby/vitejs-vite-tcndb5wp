@@ -1549,7 +1549,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                     </div>
                   </div>
                   <div style={{ marginBottom: '20px' }}>
-                    <label style={labelStyle}>Valor mensual ($)</label>
+                    <label style={labelStyle}>{tallerVacacional ? 'Valor único ($)' : 'Valor mensual ($)'}</label>
                     <input type="number" min={0} value={tallerValor} onChange={e => setTallerValor(e.target.value)} placeholder="Opcional" style={fieldStyle} />
                   </div>
                   {tallerError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{tallerError}</p>}
