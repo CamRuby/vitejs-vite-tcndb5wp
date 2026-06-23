@@ -152,7 +152,7 @@ export default function Profesores() {
 
   async function cargarApoyo(profId: string, mes: string) {
     const { data } = await supabase.from('honorarios_estado')
-      .select('apoyo_concierto').eq('profesor_id', profId).eq('mes', mes).single()
+      .select('apoyo_concierto').eq('profesor_id', profId).eq('mes', mes).maybeSingle()
     setApoyoValor(data?.apoyo_concierto ? String(data.apoyo_concierto) : '')
   }
 
@@ -533,7 +533,7 @@ const dadas = clases.filter(c => c.estado === 'dada')
                 </div>
               </div>
               {!editando
-                ? <button onClick={() => setEditando(true)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px' }}>✏️ Editar</button>
+                ? <button onClick={() => { setEditando(true); setApoyoOk(''); setApoyoErr(''); if (prof?.id) cargarApoyo(prof.id, apoyoMes) }} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px' }}>✏️ Editar</button>
                 : <div style={{ display: 'flex', gap: '8px' }}>
                     <button type="button" onClick={guardar} disabled={guardando} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', color: TEAL, borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
                       {guardando ? '...' : '✓ Guardar'}
@@ -575,60 +575,7 @@ const dadas = clases.filter(c => c.estado === 'dada')
             )}
           </div>
 
-          {/* Acceso app */}
-          {!editando && (
-            <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden', marginBottom: '20px' }}>
-              <div style={{ background: TEAL_LIGHT, padding: '12px 18px', borderBottom: '1px solid #eef2f7', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <p style={{ margin: 0, fontWeight: '700', fontSize: '13px', color: TEAL }}>📱 Acceso a la app</p>
-                {tieneAcceso === true && <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: '#dcfce7', color: '#166534' }}>✓ Activo</span>}
-                {tieneAcceso === false && <span style={{ padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700', background: '#fee2e2', color: '#991b1b' }}>Sin acceso</span>}
-              </div>
-              <div style={{ padding: '16px 18px' }}>
-                {tieneAcceso === true
-                  ? (<div>
-                      <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#666' }}>Acceso activo con el correo <strong>{prof.email}</strong>.</p>
-                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                        <button onClick={resetearPassword} disabled={reseteandoPassword}
-                          style={{ padding: '8px 16px', background: 'white', color: TEAL, border: `1.5px solid ${TEAL}`, borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
-                          {reseteandoPassword ? 'Enviando...' : '🔑 Resetear contraseña'}
-                        </button>
-                        {!confirmarRevocar
-                          ? <button onClick={() => setConfirmarRevocar(true)}
-                              style={{ padding: '8px 16px', background: 'white', color: '#dc2626', border: '1.5px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
-                              🚫 Revocar acceso
-                            </button>
-                          : <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                              <span style={{ fontSize: '13px', color: '#dc2626', fontWeight: '600' }}>¿Confirmar?</span>
-                              <button onClick={revocarAcceso} disabled={revocandoAcceso}
-                                style={{ padding: '7px 14px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
-                                {revocandoAcceso ? 'Revocando...' : 'Sí, revocar'}
-                              </button>
-                              <button onClick={() => setConfirmarRevocar(false)}
-                                style={{ padding: '7px 14px', background: '#f1f5f9', color: '#333', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>
-                                Cancelar
-                              </button>
-                            </div>
-                        }
-                      </div>
-                    </div>)
-                  : (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', alignItems: 'end', maxWidth: '420px' }}>
-                      <div>
-                        <label style={lS}>Correo del profesor</label>
-                        <input type="email" value={nuevoEmail} onChange={e => setNuevoEmail(e.target.value)} style={fS} placeholder="correo@ejemplo.com" />
-                      </div>
-                      <button onClick={crearAcceso} disabled={creandoAcceso}
-                        style={{ padding: '9px 18px', background: creandoAcceso ? '#cbd5e1' : TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: creandoAcceso ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>
-                        {creandoAcceso ? 'Creando...' : '+ Crear acceso'}
-                      </button>
-                    </div>
-                  )
-                }
-                {errAcceso && <p style={{ margin: '10px 0 0', color: '#dc2626', fontSize: '13px' }}>⚠ {errAcceso}</p>}
-                {okAcceso && <p style={{ margin: '10px 0 0', color: '#166534', fontSize: '13px', fontWeight: '600' }}>{okAcceso}</p>}
-              </div>
-            </div>
-          )}
+          {/* Acceso app — solo visible en el header como indicador */}
 
           {/* Disponibilidad y Tarifas */}
           {editando && (
