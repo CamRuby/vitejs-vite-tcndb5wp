@@ -225,9 +225,9 @@ export default function Horarios() {
         const horaEfectiva = (tieneExcepcion && sesionesHoraMap[`${t.id}-${col.fecha}`]) || t.hora.substring(0, 5)
         const salonEfectivo = (tieneExcepcion && sesionesSalonMap[`${t.id}-${col.fecha}`]) || t.salon_id
         if (!salonEfectivo || col.salon.id !== salonEfectivo) return
-        // Para taller vacacional: muestra en todos los días del rango. Para regular: solo si el día coincide.
+        // Para taller vacacional: muestra en todos los días del rango excepto sábados. Para regular: solo si el día coincide.
         const esNormalEsteDia = (t as any).fecha_fin_vacacional
-          ? col.fecha >= (t as any).fecha_unica && col.fecha <= (t as any).fecha_fin_vacacional
+          ? col.fecha >= (t as any).fecha_unica && col.fecha <= (t as any).fecha_fin_vacacional && ![0,6].includes(new Date(col.fecha + 'T12:00:00').getDay())
           : parseFechaLocal(col.fecha).getDay() === DIA_NUM[t.dia_semana]
         if (!esNormalEsteDia && !tieneExcepcion) return
         if (esNormalEsteDia && tieneExcepcion) {
@@ -1074,7 +1074,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
       if (t.salon_id !== salonId || t.hora?.substring(0, 5) !== hora) return false
       // Para vacacional: mostrar en todos los días del rango
       const esEsteDia = (t as any).fecha_fin_vacacional
-        ? fecha >= (t as any).fecha_unica && fecha <= (t as any).fecha_fin_vacacional
+        ? fecha >= (t as any).fecha_unica && fecha <= (t as any).fecha_fin_vacacional && ![0,6].includes(new Date(fecha + 'T12:00:00').getDay())
         : t.dia_semana === diaSemana
       if (!esEsteDia) return false
       // Si esta fecha tiene una sesión excepción que movió el taller a otro día/hora/salón, no mostrar aquí
