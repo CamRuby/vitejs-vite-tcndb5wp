@@ -18,6 +18,12 @@ interface PlanControl {
   total_clases: number; duracion_min: number; clases_tomadas: number
   valor_plan: number | null; total_pagado: number; saldo: number; abonos: Abono[]
 }
+interface TallerInscripcion {
+  id: string; cliente_nombre: string; taller_id: string; taller_nombre: string
+  sede_nombre: string; sede_id: string | null; fecha_inicio: string | null; fecha_fin: string | null
+  num_sesiones: number; valor_plan: number | null; total_pagado: number; saldo: number
+  estado: string; abonos: Abono[]
+}
 
 const METODOS_PAGO = ['Ideal Chicó','Ideal Rosales','Bancolombia Ruby','Davivienda Ruby','Wompi','Tarjeta Redeban','Efectivo']
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -82,6 +88,12 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
   const [mensajeOk, setMensajeOk] = useState('')
   const [confirmarBorrarAbono, setConfirmarBorrarAbono] = useState<{ abonoId: string; planId: string } | null>(null)
   const [borrandoAbono, setBorrandoAbono] = useState(false)
+  // Pestaña de talleres
+  const [pestaña, setPestaña] = useState<'planes' | 'talleres'>('planes')
+  const [datosTalleres, setDatosTalleres] = useState<TallerInscripcion[]>([])
+  const [filtroTaller, setFiltroTaller] = useState('')
+  const [cargandoTalleres, setCargandoTalleres] = useState(false)
+  const [pagoTallerModal, setPagoTallerModal] = useState<TallerInscripcion | null>(null)
 
   useEffect(() => { cargarSedes() }, [])
   useEffect(() => { cargarDatos() }, [mes])
@@ -131,6 +143,82 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
       }))
     } catch { setError('No se pudieron cargar los datos.') }
     finally { setCargando(false) }
+  }
+
+  useEffect(() => { if (pestaña === 'talleres') cargarDatosTalleres() }, [mes, pestaña])
+
+  async function cargarDatosTalleres() {
+    setCargandoTalleres(true)
+    try {
+      const mesInicio = `${mes}-01`
+      const [anio, mesNum] = mes.split('-')
+      const ultimoDia = new Date(parseInt(anio), parseInt(mesNum), 0).getDate()
+      const mesFin = `${mes}-${String(ultimoDia).padStart(2,'0')}`
+      const { data: inscripciones } = await supabase.from('taller_inscripciones')
+        .select('id, taller_id, cliente_id, fecha_inicio, fecha_fin, num_sesiones, valor_plan, total_pagado, saldo, estado, clientes(nombre), talleres(nombre, salones(sede_id, sedes(nombre)))')
+        .gte('fecha_inicio', mesInicio).lte('fecha_inicio', mesFin)
+        .order('fecha_inicio', { ascending: true })
+      const ids = (inscripciones || []).map((i: any) => i.id)
+      let pagosMap: Record<string, Abono[]> = {}
+      if (ids.length > 0) {
+        const { data: pagos } = await supabase.from('pagos')
+          .select('id, inscripcion_id, fecha, monto, metodo').in('inscripcion_id', ids).order('fecha', { ascending: true })
+        ;(pagos || []).forEach((p: any) => {
+          if (!pagosMap[p.inscripcion_id]) pagosMap[p.inscripcion_id] = []
+          pagosMap[p.inscripcion_id].push({ id: p.id, fecha: p.fecha, monto: Number(p.monto), metodo: p.metodo || '—' })
+        })
+      }
+      setDatosTalleres((inscripciones || []).map((i: any) => ({
+        id: i.id, cliente_nombre: i.clientes?.nombre || '—',
+        taller_id: i.taller_id, taller_nombre: i.talleres?.nombre || '—',
+        sede_nombre: i.talleres?.salones?.sedes?.nombre || '—',
+        sede_id: i.talleres?.salones?.sede_id || null,
+        fecha_inicio: i.fecha_inicio, fecha_fin: i.fecha_fin,
+        num_sesiones: i.num_sesiones || 0, valor_plan: i.valor_plan ? Number(i.valor_plan) : null,
+        total_pagado: Number(i.total_pagado || 0), saldo: Number(i.saldo || 0),
+        estado: i.estado, abonos: pagosMap[i.id] || [],
+      })))
+    } finally { setCargandoTalleres(false) }
+  }
+
+  async function borrarAbonoTaller(abonoId: string, inscripcionId: string) {
+    setBorrandoAbono(true)
+    const ins = datosTalleres.find(t => t.id === inscripcionId)
+    if (ins) {
+      const nuevoTotal = ins.total_pagado - (ins.abonos.find(a => a.id === abonoId)?.monto || 0)
+      const nuevoSaldo = (ins.valor_plan || 0) - nuevoTotal
+      await supabase.from('pagos').delete().eq('id', abonoId)
+      await supabase.from('taller_inscripciones').update({ total_pagado: nuevoTotal, saldo: nuevoSaldo }).eq('id', inscripcionId)
+    }
+    setConfirmarBorrarAbono(null); setBorrandoAbono(false)
+    setMensajeOk('Pago eliminado'); setTimeout(() => setMensajeOk(''), 3000)
+    await cargarDatosTalleres()
+  }
+
+  async function registrarPagoTaller() {
+    if (!pagoTallerModal) return
+    if (!nuevoMonto || Number(nuevoMonto) <= 0) { setErrorPago('Ingresa un monto válido'); return }
+    if (!pagoTallerModal.valor_plan && !nuevoValorPlan) { setErrorPago('Ingresa el valor del plan antes de continuar.'); return }
+    setGuardandoPago(true); setErrorPago('')
+    if (nuevoValorPlan && Number(nuevoValorPlan) > 0)
+      await supabase.from('taller_inscripciones').update({ valor_plan: Number(nuevoValorPlan) }).eq('id', pagoTallerModal.id)
+    const nuevoTotal = pagoTallerModal.total_pagado + Number(nuevoMonto)
+    const valorPlan = nuevoValorPlan ? Number(nuevoValorPlan) : (pagoTallerModal.valor_plan || 0)
+    const nuevoSaldo = valorPlan - nuevoTotal
+    const { error } = await supabase.from('pagos').insert({ inscripcion_id: pagoTallerModal.id, monto: Number(nuevoMonto), metodo: nuevoMetodo, fecha: nuevoFecha })
+    if (error) { setErrorPago('Error: ' + error.message); setGuardandoPago(false); return }
+    await supabase.from('taller_inscripciones').update({ total_pagado: nuevoTotal, saldo: nuevoSaldo }).eq('id', pagoTallerModal.id)
+    setGuardandoPago(false); setPagoTallerModal(null); setNuevoMonto(''); setNuevoValorPlan('')
+    setNuevoMetodo(METODOS_PAGO[0]); setNuevoFecha(new Date().toISOString().split('T')[0])
+    setMensajeOk('Pago registrado'); setTimeout(() => setMensajeOk(''), 3000)
+    await cargarDatosTalleres()
+  }
+
+  function estadoPagoT(t: TallerInscripcion): FiltroPago {
+    if (!t.valor_plan) return 'sin_pago'
+    if (t.total_pagado === 0) return 'sin_pago'
+    if (t.saldo <= 0) return 'al_dia'
+    return 'parcial'
   }
 
   function estadoPago(p: PlanControl): FiltroPago {
@@ -206,7 +294,7 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
           <button onClick={onVolver} style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>← Reportes</button>
           <div>
             <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: '0 0 2px' }}>💳 Control de pagos</h2>
-            <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>Planes iniciados en {labelMes}</p>
+            <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>{pestaña === 'planes' ? `Planes iniciados en ${labelMes}` : `Talleres con inscripción en ${labelMes}`}</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -216,6 +304,16 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
             {modoEdicion ? '✓ Edición ON' : '✏️ Registrar pagos'}
           </button>
         </div>
+      </div>
+
+      {/* Pestañas */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '16px', borderBottom: `2px solid ${TEAL_MID}`, paddingBottom: '0' }}>
+        {(['planes', 'talleres'] as const).map(p => (
+          <button key={p} onClick={() => setPestaña(p)}
+            style={{ padding: '8px 20px', background: pestaña === p ? TEAL : 'white', color: pestaña === p ? 'white' : TEAL_DARK, border: `1.5px solid ${pestaña === p ? TEAL : TEAL_MID}`, borderBottom: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer', fontSize: '13px', fontWeight: 700 }}>
+            {p === 'planes' ? '📋 Planes' : '🎸 Talleres'}
+          </button>
+        ))}
       </div>
 
       {/* Filtros línea 1 */}
@@ -268,6 +366,7 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
         </div>
       )}
 
+      {pestaña === 'planes' && <>
       {cargando && <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>Cargando...</div>}
       {error && <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '16px', color: '#b91c1c', fontSize: '14px' }}>{error}</div>}
       {!cargando && !error && filtrados.length === 0 && (
@@ -381,6 +480,183 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
       {!cargando && !error && filtrados.length > 0 && (
         <div style={{ marginTop: '10px', fontSize: '12px', color: '#9ca3af', textAlign: 'right' }}>
           {filtrados.length} planes · {labelMes}
+        </div>
+      )}
+      </>}
+
+      {/* ── PESTAÑA TALLERES ── */}
+      {pestaña === 'talleres' && (() => {
+        const talleresUnicos = [...new Map(datosTalleres.map(t => [t.taller_id, { id: t.taller_id, nombre: t.taller_nombre }])).values()]
+        const filtradosTalleres = datosTalleres.filter(t => {
+          if (filtroSede && t.sede_id !== filtroSede) return false
+          if (filtroTaller && t.taller_id !== filtroTaller) return false
+          if (filtroMetodo && !t.abonos.some(a => a.metodo === filtroMetodo)) return false
+          if (filtroPago !== 'todos' && estadoPagoT(t) !== filtroPago) return false
+          if (busqueda && !t.cliente_nombre.toLowerCase().includes(busqueda.toLowerCase()) && !t.taller_nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
+          return true
+        })
+        const tvTotal = filtradosTalleres.reduce((s, t) => s + (t.valor_plan || 0), 0)
+        const tvPagado = filtradosTalleres.reduce((s, t) => s + t.total_pagado, 0)
+        const tvSaldo = filtradosTalleres.reduce((s, t) => s + t.saldo, 0)
+        return (<>
+          <div style={{ marginBottom: '10px' }}>
+            <select value={filtroTaller} onChange={e => setFiltroTaller(e.target.value)}
+              style={{ padding: '7px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${filtroTaller ? TEAL : TEAL_MID}`, background: filtroTaller ? TEAL_LIGHT : 'white', color: filtroTaller ? TEAL_DARK : '#475569', outline: 'none', cursor: 'pointer' }}>
+              <option value="">🎸 Todos los talleres</option>
+              {talleresUnicos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+            </select>
+          </div>
+          {!cargandoTalleres && filtradosTalleres.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
+              {[
+                { label: 'Inscripciones', valor: String(filtradosTalleres.length), color: TEAL },
+                { label: 'Valor total', valor: `$${tvTotal.toLocaleString('es-CO')}`, color: '#7c3aed' },
+                { label: 'Recaudado', valor: `$${tvPagado.toLocaleString('es-CO')}`, color: '#16a34a' },
+                { label: 'Saldo pendiente', valor: `$${tvSaldo.toLocaleString('es-CO')}`, color: tvSaldo > 0 ? '#dc2626' : '#16a34a' },
+              ].map(t => (
+                <div key={t.label} style={{ background: 'white', border: `1px solid ${TEAL_MID}`, borderRadius: '10px', padding: '12px 16px' }}>
+                  <div style={{ fontSize: '18px', fontWeight: 800, color: t.color }}>{t.valor}</div>
+                  <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{t.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {cargandoTalleres && <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>Cargando...</div>}
+          {!cargandoTalleres && filtradosTalleres.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
+              No hay inscripciones a talleres en {labelMes}.
+            </div>
+          )}
+          {!cargandoTalleres && filtradosTalleres.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {filtradosTalleres.map(ins => {
+                const saldoColor = ins.saldo > 0 ? '#dc2626' : ins.saldo < 0 ? '#7c3aed' : '#16a34a'
+                const saldoBg = ins.saldo > 0 ? '#fef2f2' : ins.saldo < 0 ? '#f3e8ff' : '#f0fdf4'
+                const ep = estadoPagoT(ins)
+                const borderColor = ep === 'sin_pago' ? '#fecaca' : ep === 'parcial' ? '#fde68a' : '#e5e7eb'
+                return (
+                  <div key={ins.id} style={{ background: 'white', borderRadius: '12px', border: `1px solid ${borderColor}`, padding: '16px 20px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                    <div className="rcp-tarjeta">
+                      <div>
+                        <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: '15px', color: '#1e293b' }}>{ins.cliente_nombre}</p>
+                        <p style={{ margin: '0 0 2px', fontSize: '12px', color: '#9ca3af' }}>{ins.taller_nombre}</p>
+                        <p style={{ margin: 0, fontSize: '12px', color: '#9ca3af' }}>{ins.sede_nombre}</p>
+                      </div>
+                      <div>
+                        <p style={{ margin: '0 0 4px', fontSize: '12px', color: '#6b7280' }}>{ins.fecha_inicio} → {ins.fecha_fin || '—'}</p>
+                        <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#374151' }}>{ins.num_sesiones} sesiones</p>
+                      </div>
+                      <div className="rcp-pagos">
+                        <div className="rcp-cifras" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div className="rcp-cifra" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '12px', color: '#9ca3af' }}>Valor</span>
+                            <span style={{ fontSize: '15px', fontWeight: 700, color: '#374151' }}>
+                              {ins.valor_plan ? `$${ins.valor_plan.toLocaleString('es-CO')}` : <span style={{ color: '#dc2626', fontSize: '12px' }}>Sin valor</span>}
+                            </span>
+                          </div>
+                          <div className="rcp-cifra" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '12px', color: '#9ca3af' }}>Pagado</span>
+                            <span style={{ fontSize: '15px', fontWeight: 700, color: '#16a34a' }}>${ins.total_pagado.toLocaleString('es-CO')}</span>
+                          </div>
+                          <div className="rcp-cifra" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: saldoBg, borderRadius: '8px', padding: '5px 8px', marginTop: '2px' }}>
+                            <span style={{ fontSize: '12px', color: saldoColor, fontWeight: 600 }}>Saldo</span>
+                            <span style={{ fontSize: '16px', fontWeight: 800, color: saldoColor }}>
+                              {ins.saldo === 0 ? '✓ $0' : ins.saldo > 0 ? `-$${ins.saldo.toLocaleString('es-CO')}` : `+$${Math.abs(ins.saldo).toLocaleString('es-CO')}`}
+                            </span>
+                          </div>
+                          {modoEdicion && (
+                            <button onClick={() => { setPagoTallerModal(ins); setNuevoMonto(''); setNuevoMetodo(METODOS_PAGO[0]); setNuevoFecha(new Date().toISOString().split('T')[0]); setNuevoValorPlan(''); setErrorPago('') }}
+                              style={{ marginTop: '6px', padding: '7px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}>
+                              + Registrar pago
+                            </button>
+                          )}
+                        </div>
+                        <div>
+                          {ins.abonos.length === 0
+                            ? <p style={{ margin: 0, fontSize: '12px', color: '#d1d5db', fontStyle: 'italic' }}>Sin abonos</p>
+                            : <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                {ins.abonos.map(a => (
+                                  <div key={a.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '12px', color: '#6b7280', whiteSpace: 'nowrap', minWidth: '52px' }}>{a.fecha.substring(5)}</span>
+                                    <span style={{ fontSize: '12px', color: '#374151', flex: 1 }}>{a.metodo}</span>
+                                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap' }}>${a.monto.toLocaleString('es-CO')}</span>
+                                    {modoEdicion && (
+                                      confirmarBorrarAbono?.abonoId === a.id
+                                        ? <div style={{ display: 'flex', gap: '4px' }}>
+                                            <button onClick={() => borrarAbonoTaller(a.id, ins.id)} disabled={borrandoAbono}
+                                              style={{ padding: '2px 8px', background: '#dc2626', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '11px', fontWeight: 700 }}>
+                                              {borrandoAbono ? '...' : '✓'}
+                                            </button>
+                                            <button onClick={() => setConfirmarBorrarAbono(null)}
+                                              style={{ padding: '2px 8px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '11px' }}>✕</button>
+                                          </div>
+                                        : <button onClick={() => setConfirmarBorrarAbono({ abonoId: a.id, planId: ins.id })}
+                                            style={{ padding: '2px 6px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '5px', cursor: 'pointer', fontSize: '11px' }}>🗑</button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>)
+      })()}
+
+      {/* Modal registrar pago taller */}
+      {pagoTallerModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '24px' }}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '28px', maxWidth: '400px', width: '100%' }}>
+            <p style={{ margin: '0 0 4px', fontSize: '17px', fontWeight: 800, color: '#111' }}>+ Registrar pago</p>
+            <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#9ca3af' }}>{pagoTallerModal.cliente_nombre}</p>
+            <p style={{ margin: '0 0 20px', fontSize: '13px', color: '#7c3aed', fontWeight: 600 }}>🎸 {pagoTallerModal.taller_nombre}</p>
+            {!pagoTallerModal.valor_plan && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
+                <p style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 700, color: '#dc2626' }}>⚠ Inscripción sin valor registrado</p>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>Valor de la inscripción ($) *</label>
+                <input type="number" value={nuevoValorPlan} onChange={e => setNuevoValorPlan(e.target.value)} placeholder="Ej: 120000" autoFocus
+                  style={{ width: '100%', padding: '11px 12px', border: '1.5px solid #fca5a5', borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box' as const }} />
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>Fecha</label>
+                <input type="date" value={nuevoFecha} onChange={e => setNuevoFecha(e.target.value)}
+                  style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box' as const }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>Método de pago</label>
+                <select value={nuevoMetodo} onChange={e => setNuevoMetodo(e.target.value)}
+                  style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box' as const, cursor: 'pointer' }}>
+                  {METODOS_PAGO.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>
+                  Monto ($)
+                  {pagoTallerModal.valor_plan && pagoTallerModal.saldo > 0 && (
+                    <span style={{ marginLeft: '8px', fontSize: '11px', color: '#9ca3af', fontWeight: 400 }}>Saldo: ${pagoTallerModal.saldo.toLocaleString('es-CO')}</span>
+                  )}
+                </label>
+                <input type="number" value={nuevoMonto} onChange={e => setNuevoMonto(e.target.value)} placeholder="0"
+                  style={{ width: '100%', padding: '11px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box' as const }} />
+              </div>
+              {errorPago && <p style={{ margin: 0, color: '#dc2626', fontSize: '13px' }}>⚠ {errorPago}</p>}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+                <button onClick={() => { setPagoTallerModal(null); setErrorPago(''); setNuevoValorPlan('') }}
+                  style={{ flex: 1, padding: '12px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}>Cancelar</button>
+                <button onClick={registrarPagoTaller} disabled={guardandoPago}
+                  style={{ flex: 2, padding: '12px', background: guardandoPago ? '#a0c8c8' : TEAL, color: 'white', border: 'none', borderRadius: '10px', cursor: guardandoPago ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 700 }}>
+                  {guardandoPago ? 'Guardando...' : '✓ Registrar pago'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -651,7 +927,7 @@ interface ProfesorHonorario {
   porSede: Record<string, SedeResumen>
   totalClases: number; totalMinutos: number; totalHonorario: number
   detalle: any[]
-  aprobado: boolean; pagado: boolean; apoyoConcierto: number
+  aprobado: boolean; pagado: boolean
 }
 
 function formatTiempo(min: number) {
@@ -763,7 +1039,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
           .in('estado', ['dada', 'cancelada'])
           .or('estado.eq.dada,cancelado_por_academia.eq.false'),
         supabase.from('talleres').select('id, nombre, hora, duracion_min, profesor_id, salones(sede_id, sedes(nombre))'),
-        supabase.from('honorarios_estado').select('profesor_id, aprobado, pagado, apoyo_concierto').eq('mes', mes),
+        supabase.from('honorarios_estado').select('profesor_id, aprobado, pagado').eq('mes', mes),
       ])
       if (errP || errT || errC || errTa || errE) throw (errP || errT || errC || errTa || errE)
 
@@ -817,8 +1093,8 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       const clasesConNumero = (clases || []).map((c: any) => ({ ...c, numero_calculado: numeracionMap.get(c.id) ?? null }))
       const todasClases = [...clasesConNumero, ...tallerRows]
       const tarifasL = tarifasData || []
-      const estadoMap: Record<string, { aprobado: boolean; pagado: boolean; apoyo_concierto: number }> = {}
-      ;(estados || []).forEach((e: any) => { estadoMap[e.profesor_id] = { aprobado: !!e.aprobado, pagado: !!e.pagado, apoyo_concierto: e.apoyo_concierto || 0 } })
+      const estadoMap: Record<string, { aprobado: boolean; pagado: boolean }> = {}
+      ;(estados || []).forEach((e: any) => { estadoMap[e.profesor_id] = { aprobado: !!e.aprobado, pagado: !!e.pagado } })
 
       const mapa: Record<string, ProfesorHonorario> = {}
       const sedeTotales: Record<string, { sede_nombre: string; honorario: number; clases: number; estudiantesSet: Set<string> }> = {}
@@ -832,7 +1108,6 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
             banco: p?.banco || null, tipo_cuenta: p?.tipo_cuenta || null, numero_cuenta: p?.numero_cuenta || null,
             porSede: {}, totalClases: 0, totalMinutos: 0, totalHonorario: 0, detalle: [],
             aprobado: estadoMap[profId]?.aprobado || false, pagado: estadoMap[profId]?.pagado || false,
-            apoyoConcierto: estadoMap[profId]?.apoyo_concierto || 0,
           }
         }
         return mapa[profId]
@@ -872,11 +1147,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       })
 
       setTarifas(tarifasL)
-      const profesoresConApoyo = Object.values(mapa).map(g => ({
-        ...g,
-        totalHonorario: g.totalHonorario + g.apoyoConcierto
-      }))
-      setProfesoresData(profesoresConApoyo.sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      setProfesoresData(Object.values(mapa).sort((a, b) => a.nombre.localeCompare(b.nombre)))
       const totalesSede: Record<string, { sede_nombre: string; honorario: number; clases: number; estudiantes: number }> = {}
       Object.entries(sedeTotales).forEach(([key, v]) => {
         totalesSede[key] = { sede_nombre: v.sede_nombre, honorario: v.honorario, clases: v.clases, estudiantes: v.estudiantesSet.size }
@@ -918,9 +1189,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       const fechaEmision = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
 
       const clasesDadas = g.detalle.filter((c: any) => (c.estado === 'dada' && !c.es_cortesia) || (c.estado === 'cancelada' && !c.cancelado_por_academia))
-      const totalHonClases = clasesDadas.reduce((s: number, c: any) => { const h = getHonorarioPDF(c, tarifasProf); return h === 'pendiente' ? s : s + h }, 0)
-      const apoyoVal = g.apoyoConcierto || 0
-      const totalHon = totalHonClases + apoyoVal
+      const totalHon = clasesDadas.reduce((s: number, c: any) => { const h = getHonorarioPDF(c, tarifasProf); return h === 'pendiente' ? s : s + h }, 0)
       const totalEnLetras = numerosALetrasH(totalHon)
 
       const porDuracion: Record<number, number> = {}
@@ -975,17 +1244,6 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
           { text: 'Por concepto de:', fontSize: 10, alignment: 'center', margin: [0, 0, 0, 8] },
           { text: `Clases dictadas (${resumenClases}${tallerStr}) individual en modalidad presencial durante el periodo comprendido entre el `, fontSize: 10, alignment: 'center', margin: [0, 0, 0, 4] },
           { text: `${primerDia} al ${ultimoDiaLabel} del año ${anio}.`, fontSize: 10, bold: true, alignment: 'center', margin: [0, 0, 0, 16] },
-          ...(apoyoVal > 0 ? [{
-            table: {
-              widths: ['*', 80],
-              body: [[
-                { text: 'Apoyo a concierto', fontSize: 9, bold: true, color: '#7c3aed' },
-                { text: `$${apoyoVal.toLocaleString('es-CO')}`, fontSize: 9, bold: true, alignment: 'right', color: '#7c3aed' }
-              ]]
-            },
-            layout: { hLineWidth: () => 0.5, vLineWidth: () => 0, hLineColor: () => '#e0e0e0', paddingLeft: () => 5, paddingRight: () => 5, paddingTop: () => 6, paddingBottom: () => 6 },
-            margin: [0, 0, 0, 12]
-          }] : []),
           filaDetalle.length > 0 ? {
             table: {
               headerRows: 1,
@@ -1171,10 +1429,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                     const d = g.porSede[s.id]
                     return <td key={s.id} style={{ ...tdS, textAlign: 'right', color: d ? '#16a34a' : '#d1d5db', fontWeight: d ? 700 : 400 }}>{d ? `$${d.honorario.toLocaleString('es-CO')}` : '—'}</td>
                   })}
-                  <td style={{ ...tdS, textAlign: 'right' }}>
-                    <div style={{ color: '#16a34a', fontWeight: 800, fontSize: '13px' }}>${g.totalHonorario.toLocaleString('es-CO')}</div>
-                    {g.apoyoConcierto > 0 && <div style={{ color: '#7c3aed', fontSize: '10px', marginTop: '2px' }}>Incl. concierto ${g.apoyoConcierto.toLocaleString('es-CO')}</div>}
-                  </td>
+                  <td style={{ ...tdS, textAlign: 'right', color: '#16a34a', fontWeight: 800 }}>${g.totalHonorario.toLocaleString('es-CO')}</td>
                   <td style={{ ...tdS, textAlign: 'center' }}>
                     <input type="checkbox" checked={g.aprobado} onChange={e => actualizarEstado(g.profesor_id, 'aprobado', e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: TEAL }} />
                   </td>
