@@ -315,7 +315,7 @@ export default function ProfesorApp() {
       const fechaStr = fechaLocal(dia)
       talleresConfirmados.forEach((t: any) => {
         const matchFecha = t.fecha_fin_vacacional
-          ? fechaStr >= t.fecha_unica && fechaStr <= t.fecha_fin_vacacional
+          ? fechaStr >= t.fecha_unica && fechaStr <= t.fecha_fin_vacacional && ![0,6].includes(new Date(fechaStr + 'T12:00:00').getDay())
           : t.fecha_unica ? t.fecha_unica === fechaStr
           : DIAS_SEMANA[t.dia_semana] === dia.getDay()
         if (matchFecha) {
