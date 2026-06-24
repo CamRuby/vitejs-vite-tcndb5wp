@@ -244,15 +244,19 @@ export default function ProfesorApp() {
       .gte('fecha', fi).lte('fecha', ff)
       .in('estado', ['programada', 'confirmada'])
       .order('fecha').order('hora')
-    const { data: dataAtrasadas } = await supabase.from('clases').select(SELECT_CLASES)
-      .eq('profesor_id', profesor.id)
-      .eq('estado', 'confirmada')
-      .lt('fecha', fi)
-      .order('fecha').order('hora')
+    const mesStr = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`
+    const [{ data: dataAtrasadas }, { data: talleresData }, apoyo] = await Promise.all([
+      supabase.from('clases').select(SELECT_CLASES)
+        .eq('profesor_id', profesor.id).eq('estado', 'confirmada').lt('fecha', fi)
+        .order('fecha').order('hora'),
+      supabase.from('talleres')
+        .select('id, nombre, dia_semana, hora, duracion_min, fecha_unica, fecha_fin_vacacional, salones(nombre, sedes(nombre))')
+        .eq('profesor_id', profesor.id),
+      supabase.from('honorarios_estado')
+        .select('apoyo_concierto').eq('profesor_id', profesor.id).eq('mes', mesStr).maybeSingle()
+    ])
+    setApoyoConcierto(apoyo.data?.apoyo_concierto || 0)
     const mesT = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`
-    const { data: talleresData } = await supabase.from('talleres')
-      .select('id, nombre, dia_semana, hora, duracion_min, fecha_unica, fecha_fin_vacacional, salones(nombre, sedes(nombre))')
-      .eq('profesor_id', profesor.id)
     const ids = (talleresData || []).map((t: any) => t.id)
     let talleresConfirmados: any[] = []
     if (ids.length > 0) {
@@ -373,11 +377,6 @@ export default function ProfesorApp() {
 
     clasesFinales.sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`))
     setClases(clasesFinales)
-    // Cargar apoyo a concierto del mes
-    const mesStr = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`
-    const { data: estadoMes } = await supabase.from('honorarios_estado')
-      .select('apoyo_concierto').eq('profesor_id', profesor.id).eq('mes', mesStr).single()
-    setApoyoConcierto(estadoMes?.apoyo_concierto || 0)
     setCargandoClases(false)
   }
 
