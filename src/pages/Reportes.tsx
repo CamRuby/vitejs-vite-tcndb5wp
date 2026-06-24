@@ -349,8 +349,8 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
         ))}
       </div>
 
-      {/* Totales */}
-      {!cargando && filtrados.length > 0 && (
+      {/* Totales — muestran planes o talleres según la pestaña activa */}
+      {pestaña === 'planes' && !cargando && filtrados.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
           {[
             { label: 'Planes',         valor: String(filtrados.length),                  color: TEAL },
@@ -365,6 +365,34 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
           ))}
         </div>
       )}
+      {pestaña === 'talleres' && !cargandoTalleres && datosTalleres.length > 0 && (() => {
+        const ft = datosTalleres.filter(t => {
+          if (filtroSede && t.sede_id !== filtroSede) return false
+          if (filtroTaller && t.taller_id !== filtroTaller) return false
+          if (filtroMetodo && !t.abonos.some(a => a.metodo === filtroMetodo)) return false
+          if (filtroPago !== 'todos' && estadoPagoT(t) !== filtroPago) return false
+          if (busqueda && !t.cliente_nombre.toLowerCase().includes(busqueda.toLowerCase()) && !t.taller_nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
+          return true
+        })
+        const tvTotal = ft.reduce((s, t) => s + (t.valor_plan || 0), 0)
+        const tvPagado = ft.reduce((s, t) => s + t.total_pagado, 0)
+        const tvSaldo = ft.reduce((s, t) => s + t.saldo, 0)
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
+            {[
+              { label: 'Inscripciones',  valor: String(ft.length),                        color: TEAL },
+              { label: 'Valor total',    valor: `$${tvTotal.toLocaleString('es-CO')}`,    color: '#7c3aed' },
+              { label: 'Recaudado',      valor: `$${tvPagado.toLocaleString('es-CO')}`,   color: '#16a34a' },
+              { label: 'Saldo pendiente',valor: `$${tvSaldo.toLocaleString('es-CO')}`,    color: tvSaldo > 0 ? '#dc2626' : '#16a34a' },
+            ].map(t => (
+              <div key={t.label} style={{ background: 'white', border: `1px solid ${TEAL_MID}`, borderRadius: '10px', padding: '12px 16px' }}>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: t.color }}>{t.valor}</div>
+                <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{t.label}</div>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
 
       {pestaña === 'planes' && <>
       {cargando && <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>Cargando...</div>}
@@ -506,21 +534,6 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
               {talleresUnicos.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
             </select>
           </div>
-          {!cargandoTalleres && filtradosTalleres.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '20px' }}>
-              {[
-                { label: 'Inscripciones', valor: String(filtradosTalleres.length), color: TEAL },
-                { label: 'Valor total', valor: `$${tvTotal.toLocaleString('es-CO')}`, color: '#7c3aed' },
-                { label: 'Recaudado', valor: `$${tvPagado.toLocaleString('es-CO')}`, color: '#16a34a' },
-                { label: 'Saldo pendiente', valor: `$${tvSaldo.toLocaleString('es-CO')}`, color: tvSaldo > 0 ? '#dc2626' : '#16a34a' },
-              ].map(t => (
-                <div key={t.label} style={{ background: 'white', border: `1px solid ${TEAL_MID}`, borderRadius: '10px', padding: '12px 16px' }}>
-                  <div style={{ fontSize: '18px', fontWeight: 800, color: t.color }}>{t.valor}</div>
-                  <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>{t.label}</div>
-                </div>
-              ))}
-            </div>
-          )}
           {cargandoTalleres && <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>Cargando...</div>}
           {!cargandoTalleres && filtradosTalleres.length === 0 && (
             <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
