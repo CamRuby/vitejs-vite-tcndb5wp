@@ -36,7 +36,7 @@ export default function Profesores() {
   const [prof, setProf] = useState<any>(null)
   const [cargando, setCargando] = useState(false)
 
-  const fVacio = { nombre: '', telefono: '', email: '', ciudad: 'Bogotá', ciudad_cc: 'Bogotá', activo: true, cc: '', banco: '', tipo_cuenta: 'Ahorros', numero_cuenta: '' }
+  const fVacio = { nombre: '', telefono: '', email: '', ciudad: 'Bogotá', ciudad_cc: '', activo: true, cc: '', banco: '', tipo_cuenta: 'Ahorros', numero_cuenta: '' }
   const [form, setForm] = useState<any>(fVacio)
   const [guardando, setGuardando] = useState(false)
   const [errForm, setErrForm] = useState('')
@@ -115,7 +115,7 @@ export default function Profesores() {
     const { data: c } = await supabase.from('profesores').select('*').eq('id', p.id).single()
     const pr = c || p
     setProf(pr)
-    setForm({ nombre: pr.nombre || '', telefono: pr.telefono || '', email: pr.email || '', ciudad: pr.ciudad || 'Bogotá', ciudad_cc: pr.ciudad_cc || 'Bogotá', activo: pr.activo !== false, cc: pr.cc || '', banco: pr.banco || '', tipo_cuenta: pr.tipo_cuenta || 'Ahorros', numero_cuenta: pr.numero_cuenta || '' })
+    setForm({ nombre: pr.nombre || '', telefono: pr.telefono || '', email: pr.email || '', ciudad: pr.ciudad || 'Bogotá', ciudad_cc: pr.ciudad_cc || '', activo: pr.activo !== false, cc: pr.cc || '', banco: pr.banco || '', tipo_cuenta: pr.tipo_cuenta || 'Ahorros', numero_cuenta: pr.numero_cuenta || '' })
     const { data: d } = await supabase.from('profesor_disponibilidad').select('*').eq('profesor_id', p.id).order('dia_semana')
     setDisponibilidad(d || [])
     const { data: t } = await supabase.from('profesor_tarifas').select('*').eq('profesor_id', p.id).order('modalidad').order('duracion_min')
@@ -543,7 +543,7 @@ const dadas = clases.filter(c => c.estado === 'dada')
                     <button type="button" onClick={guardar} disabled={guardando} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', color: TEAL, borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
                       {guardando ? '...' : '✓ Guardar'}
                     </button>
-                    <button onClick={() => { setForm({ nombre: prof.nombre, telefono: prof.telefono || '', email: prof.email || '', ciudad: prof.ciudad || 'Bogotá', ciudad_cc: prof.ciudad_cc || 'Bogotá', activo: prof.activo !== false, cc: prof.cc || '', banco: prof.banco || '', tipo_cuenta: prof.tipo_cuenta || 'Ahorros', numero_cuenta: prof.numero_cuenta || '' }); setEditando(false) }}
+                    <button onClick={() => { setForm({ nombre: prof.nombre, telefono: prof.telefono || '', email: prof.email || '', ciudad: prof.ciudad || 'Bogotá', ciudad_cc: prof.ciudad_cc || '', activo: prof.activo !== false, cc: prof.cc || '', banco: prof.banco || '', tipo_cuenta: prof.tipo_cuenta || 'Ahorros', numero_cuenta: prof.numero_cuenta || '' }); setEditando(false) }}
                       style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px' }}>
                       Cancelar
                     </button>
