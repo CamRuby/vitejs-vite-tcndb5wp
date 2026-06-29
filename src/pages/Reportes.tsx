@@ -1196,9 +1196,9 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       const [anio, mesNum] = mes.split('-')
       const nombreMes = MESES[parseInt(mesNum) - 1].toLowerCase()
       const mesLabelCap = `${MESES[parseInt(mesNum) - 1]} ${anio}`
-      const primerDia = `01 de ${nombreMes} de ${anio}`
+      const primerDia = `01 de ${nombreMes}`
       const ultimoDiaNum = new Date(parseInt(anio), parseInt(mesNum), 0).getDate()
-      const ultimoDiaLabel = `${ultimoDiaNum} de ${nombreMes} de ${anio}`
+      const ultimoDiaLabel = `${ultimoDiaNum} de ${nombreMes}`
       const fechaEmision = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
 
       const clasesDadas = g.detalle.filter((c: any) => (c.estado === 'dada' && !c.es_cortesia) || (c.estado === 'cancelada' && !c.cancelado_por_academia))
@@ -1236,7 +1236,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       const nombre = g.nombre || '—'
       const cc = g.cc || '—'
       const ciudad = g.ciudad || 'Bogotá'
-      const ciudadCC = g.ciudad_cc || ciudad
+      const ciudadCC = g.ciudad_cc || null
       const banco = g.banco || '—'
       const tipoCuenta = g.tipo_cuenta || 'Ahorros'
       const numCuenta = g.numero_cuenta || '—'
@@ -1251,7 +1251,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
           { text: 'N.I.T. 901.257.419-4', fontSize: 10, alignment: 'center', margin: [0, 2, 0, 2] },
           { text: 'Debe a:', fontSize: 10, alignment: 'center', margin: [0, 10, 0, 4] },
           { text: nombre, fontSize: 11, bold: true, alignment: 'center' },
-          { text: `C.C. No. ${cc} de ${ciudadCC}.`, fontSize: 10, alignment: 'center', margin: [0, 2, 0, 20] },
+          { text: ciudadCC ? `C.C. No. ${cc} de ${ciudadCC}.` : `C.C. No. ${cc}.`, fontSize: 10, alignment: 'center', margin: [0, 2, 0, 20] },
           { text: 'La Suma de:', fontSize: 10, alignment: 'center', margin: [0, 0, 0, 6] },
           { text: `$${totalHon.toLocaleString('es-CO')} (${totalEnLetras} pesos.)`, fontSize: 12, bold: true, alignment: 'center', margin: [0, 0, 0, 20] },
           { text: 'Por concepto de:', fontSize: 10, alignment: 'center', margin: [0, 0, 0, 8] },
