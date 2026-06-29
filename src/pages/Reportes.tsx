@@ -1435,7 +1435,14 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
             <tbody>
               {filtrados.map(g => (
                 <tr key={g.profesor_id}>
-                  <td style={{ ...tdS, fontWeight: 700 }}>{g.nombre}</td>
+                  <td style={{ ...tdS }}>
+                    <div style={{ fontWeight: 700 }}>{g.nombre}</div>
+                    {(g.banco || g.numero_cuenta) && (
+                      <div style={{ fontSize: '11px', color: '#a0b4b4', marginTop: '2px' }}>
+                        {[g.banco, g.numero_cuenta].filter(Boolean).join(' · ')}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ ...tdS, textAlign: 'center', color: '#7c3aed', fontWeight: 700 }}>{g.totalClases}</td>
                   <td style={{ ...tdS, textAlign: 'center', color: '#0ea5e9', fontWeight: 700 }}>{formatTiempo(g.totalMinutos)}</td>
                   {sedes.map(s => {
