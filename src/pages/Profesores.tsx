@@ -82,14 +82,23 @@ export default function Profesores() {
   const [confirmarRevocar, setConfirmarRevocar] = useState(false)
   // Apoyo a concierto
   const [apoyoMes, setApoyoMes] = useState(() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}` })
+  const [apoyoSede, setApoyoSede] = useState('')
   const [apoyoValor, setApoyoValor] = useState('')
   const [apoyoGuardando, setApoyoGuardando] = useState(false)
   const [apoyoOk, setApoyoOk] = useState('')
   const [apoyoErr, setApoyoErr] = useState('')
-  const [apoyoConcierto, setApoyoConcierto] = useState(0)
+  const [apoyoConciertoTotal, setApoyoConciertoTotal] = useState(0)
+  const [apoyoRegistrosMes, setApoyoRegistrosMes] = useState<{ id: string; sede_id: string; sede_nombre: string; valor: number }[]>([])
+  const [sedesLista, setSedesLista] = useState<{ id: string; nombre: string }[]>([])
+  const [borrandoApoyo, setBorrandoApoyo] = useState<string | null>(null)
 
-  useEffect(() => { cargarProfesores() }, [])
+  useEffect(() => { cargarProfesores(); cargarSedesLista() }, [])
   useEffect(() => { if (prof) cargarClases(prof) }, [mes])
+
+  async function cargarSedesLista() {
+    const { data } = await supabase.from('sedes').select('id, nombre').order('nombre')
+    setSedesLista(data || [])
+  }
 
   async function cargarProfesores() {
     setCargando(true)
@@ -152,20 +161,31 @@ export default function Profesores() {
   }
 
   async function cargarApoyo(profId: string, mes: string) {
-    const { data } = await supabase.from('honorarios_estado')
-      .select('apoyo_concierto').eq('profesor_id', profId).eq('mes', mes).maybeSingle()
-    setApoyoValor(data?.apoyo_concierto ? String(data.apoyo_concierto) : '')
+    const { data } = await supabase.from('profesor_apoyo_concierto')
+      .select('id, sede_id, valor, sedes(nombre)').eq('profesor_id', profId).eq('mes', mes)
+    const registros = (data || []).map((r: any) => ({ id: r.id, sede_id: r.sede_id, sede_nombre: r.sedes?.nombre || '—', valor: Number(r.valor) }))
+    setApoyoRegistrosMes(registros)
+    setApoyoSede(''); setApoyoValor('')
   }
 
   async function guardarApoyo() {
     if (!prof?.id) return
+    if (!apoyoSede) { setApoyoErr('Selecciona una sede'); return }
+    if (!apoyoValor || Number(apoyoValor) <= 0) { setApoyoErr('Ingresa un valor mayor a 0'); return }
     setApoyoGuardando(true); setApoyoOk(''); setApoyoErr('')
-    const valor = apoyoValor !== '' ? parseInt(apoyoValor) : 0
-    const { error } = await supabase.from('honorarios_estado')
-      .upsert({ profesor_id: prof.id, mes: apoyoMes, apoyo_concierto: valor }, { onConflict: 'profesor_id,mes' })
+    const valor = parseInt(apoyoValor)
+    const { error } = await supabase.from('profesor_apoyo_concierto')
+      .upsert({ profesor_id: prof.id, sede_id: apoyoSede, mes: apoyoMes, valor }, { onConflict: 'profesor_id,sede_id,mes' })
     if (error) setApoyoErr('Error al guardar: ' + error.message)
-    else setApoyoOk('✓ Guardado')
+    else { setApoyoOk('✓ Guardado'); setApoyoSede(''); setApoyoValor(''); await cargarApoyo(prof.id, apoyoMes) }
     setApoyoGuardando(false)
+  }
+
+  async function borrarApoyo(id: string) {
+    setBorrandoApoyo(id)
+    const { error } = await supabase.from('profesor_apoyo_concierto').delete().eq('id', id)
+    if (!error && prof?.id) await cargarApoyo(prof.id, apoyoMes)
+    setBorrandoApoyo(null)
   }
 
   async function resetearPassword() {
@@ -281,10 +301,10 @@ export default function Profesores() {
       )
     }
     setClases(result)
-    // Cargar apoyo a concierto del mes
-    const { data: estadoApoyo } = await supabase.from('honorarios_estado')
-      .select('apoyo_concierto').eq('profesor_id', p.id).eq('mes', mes).maybeSingle()
-    setApoyoConcierto(estadoApoyo?.apoyo_concierto || 0)
+    // Cargar apoyo a concierto del mes (suma de todas las sedes)
+    const { data: apoyosMes } = await supabase.from('profesor_apoyo_concierto')
+      .select('valor').eq('profesor_id', p.id).eq('mes', mes)
+    setApoyoConciertoTotal((apoyosMes || []).reduce((s: number, a: any) => s + Number(a.valor || 0), 0))
   }
 
   async function guardar() {
@@ -412,7 +432,7 @@ export default function Profesores() {
     : clases.filter(c => c.estado === 'dada' || c.estado === 'cancelada')
 const dadas = clases.filter(c => c.estado === 'dada')
  const canceladasTarde = clases.filter(c => c.estado === 'cancelada' && (c.cancelado_tarde || (!c.cancelado_por_academia && c.honorario_valor !== null && c.honorario_valor !== undefined)))
-  const totalHon = [...dadas, ...canceladasTarde].reduce((s, c) => s + getHon(c), 0) + apoyoConcierto
+  const totalHon = [...dadas, ...canceladasTarde].reduce((s, c) => s + getHon(c), 0) + apoyoConciertoTotal
   const cnt = {
     programada: clases.filter(c => c.estado === 'programada').length,
     confirmada: clases.filter(c => c.estado === 'confirmada').length,
@@ -643,20 +663,48 @@ const dadas = clases.filter(c => c.estado === 'dada')
                   <div>
                     <label style={lS}>Mes</label>
                     <input type="month" value={apoyoMes}
-                      onChange={e => { setApoyoMes(e.target.value); setApoyoOk(''); if (prof?.id) cargarApoyo(prof.id, e.target.value) }}
+                      onChange={e => { setApoyoMes(e.target.value); setApoyoOk(''); setApoyoErr(''); if (prof?.id) cargarApoyo(prof.id, e.target.value) }}
                       style={fS} />
                   </div>
-                  <div>
-                    <label style={lS}>Valor ($)</label>
-                    <input type="number" min={0} value={apoyoValor} onChange={e => { setApoyoValor(e.target.value); setApoyoOk('') }}
-                      placeholder="0" style={fS} />
+
+                  {apoyoRegistrosMes.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {apoyoRegistrosMes.map(r => (
+                        <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: '8px', padding: '6px 10px' }}>
+                          <span style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>{r.sede_nombre}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: '700', color: '#7c3aed' }}>${r.valor.toLocaleString()}</span>
+                            <button onClick={() => borrarApoyo(r.id)} disabled={borrandoApoyo === r.id}
+                              style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '12px', padding: '2px 4px' }}>
+                              {borrandoApoyo === r.id ? '...' : '✕'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#9ca3af' }}>Total del mes: <strong style={{ color: '#7c3aed' }}>${apoyoRegistrosMes.reduce((s, r) => s + r.valor, 0).toLocaleString()}</strong></p>
+                    </div>
+                  )}
+
+                  <div style={{ borderTop: apoyoRegistrosMes.length > 0 ? '1px solid #eef2f7' : 'none', paddingTop: apoyoRegistrosMes.length > 0 ? '10px' : '0', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div>
+                      <label style={lS}>Sede</label>
+                      <select value={apoyoSede} onChange={e => { setApoyoSede(e.target.value); setApoyoOk(''); setApoyoErr('') }} style={fS}>
+                        <option value="">Seleccionar sede...</option>
+                        {sedesLista.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={lS}>Valor ($)</label>
+                      <input type="number" min={0} value={apoyoValor} onChange={e => { setApoyoValor(e.target.value); setApoyoOk('') }}
+                        placeholder="0" style={fS} />
+                    </div>
+                    <button onClick={guardarApoyo} disabled={apoyoGuardando}
+                      style={{ padding: '8px', background: apoyoGuardando ? '#cbd5e1' : TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                      {apoyoGuardando ? 'Guardando...' : '+ Agregar apoyo'}
+                    </button>
+                    {apoyoOk && <p style={{ margin: 0, color: '#166534', fontSize: '12px', fontWeight: '600' }}>{apoyoOk}</p>}
+                    {apoyoErr && <p style={{ margin: 0, color: '#dc2626', fontSize: '12px' }}>{apoyoErr}</p>}
                   </div>
-                  <button onClick={guardarApoyo} disabled={apoyoGuardando}
-                    style={{ padding: '8px', background: apoyoGuardando ? '#cbd5e1' : TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
-                    {apoyoGuardando ? 'Guardando...' : 'Guardar apoyo'}
-                  </button>
-                  {apoyoOk && <p style={{ margin: 0, color: '#166534', fontSize: '12px', fontWeight: '600' }}>{apoyoOk}</p>}
-                  {apoyoErr && <p style={{ margin: 0, color: '#dc2626', fontSize: '12px' }}>{apoyoErr}</p>}
                 </div>
               </div>
             </div>
@@ -815,7 +863,7 @@ const dadas = clases.filter(c => c.estado === 'dada')
                   <p style={{ margin: '2px 0 0', fontSize: '12px', color: TEAL }}>
                     Honorarios ({dadas.length} dadas{canceladasTarde.length > 0 ? ` + ${canceladasTarde.length} tarde` : ''})
                   </p>
-                  {apoyoConcierto > 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#7c3aed', fontWeight: '600' }}>Incl. concierto ${apoyoConcierto.toLocaleString()}</p>}
+                  {apoyoConciertoTotal > 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#7c3aed', fontWeight: '600' }}>Incl. concierto ${apoyoConciertoTotal.toLocaleString()}</p>}
                 </div>
               </div>
 
