@@ -252,10 +252,10 @@ export default function ProfesorApp() {
       supabase.from('talleres')
         .select('id, nombre, dia_semana, hora, duracion_min, fecha_unica, fecha_fin_vacacional, salones(nombre, sedes(nombre))')
         .eq('profesor_id', profesor.id),
-      supabase.from('honorarios_estado')
-        .select('apoyo_concierto').eq('profesor_id', profesor.id).eq('mes', mesStr).maybeSingle()
+      supabase.from('profesor_apoyo_concierto')
+        .select('valor').eq('profesor_id', profesor.id).eq('mes', mesStr)
     ])
-    setApoyoConcierto(apoyo.data?.apoyo_concierto || 0)
+    setApoyoConcierto((apoyo.data || []).reduce((s: number, a: any) => s + Number(a.valor || 0), 0))
     const mesT = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`
     const ids = (talleresData || []).map((t: any) => t.id)
     let talleresConfirmados: any[] = []
