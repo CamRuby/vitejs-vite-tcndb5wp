@@ -1173,27 +1173,21 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       })
 
       // Profesores que tienen apoyo a concierto este mes pero no dieron ninguna clase
-      // (ej. solo fueron a ayudar en el evento, sin clases regulares ese mes).
       Object.keys(apoyoTotalPorProfesor).forEach(profId => { if (!mapa[profId]) ensure(profId) })
 
       setTarifas(tarifasL)
-      const profesoresConApoyo = Object.values(mapa).map(g => {
-        // Sumar el apoyo de cada sede a porSede, para que la columna de esa sede
-        // refleje el apoyo (según se acordó: aparece en la columna de la sede y suma al total).
-        const porSedeConApoyo = { ...g.porSede }
-        Object.entries(g.apoyoPorSede).forEach(([sedeId, valor]) => {
-          if (!porSedeConApoyo[sedeId]) {
-            const sedeNombre = sedeTotales[sedeId]?.sede_nombre || sedes.find(s => s.id === sedeId)?.nombre || '—'
-            porSedeConApoyo[sedeId] = { sede_nombre: sedeNombre, clases: 0, minutos: 0, honorario: 0 }
-          }
-          porSedeConApoyo[sedeId] = { ...porSedeConApoyo[sedeId], honorario: porSedeConApoyo[sedeId].honorario + valor }
-          // También se suma al total por sede general (igual que con las clases).
-          if (!sedeTotales[sedeId]) sedeTotales[sedeId] = { sede_nombre: porSedeConApoyo[sedeId].sede_nombre, honorario: 0, clases: 0, estudiantesSet: new Set() }
-          sedeTotales[sedeId].honorario += valor
-        })
-        return { ...g, porSede: porSedeConApoyo, totalHonorario: g.totalHonorario + g.apoyoConcierto }
-      })
+      const profesoresConApoyo = Object.values(mapa).map(g => ({
+        ...g,
+        totalHonorario: g.totalHonorario + g.apoyoConcierto
+      }))
       setProfesoresData(profesoresConApoyo.sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      // Sumar el apoyo a concierto a los totales por sede
+      ;(apoyos || []).forEach((a: any) => {
+        const key = a.sede_id || 'sin_sede'
+        if (sedeTotales[key]) sedeTotales[key].honorario += Number(a.valor || 0)
+        else sedeTotales[key] = { sede_nombre: sedes.find(s => s.id === a.sede_id)?.nombre || '—', honorario: Number(a.valor || 0), clases: 0, estudiantesSet: new Set() }
+      })
+
       const totalesSede: Record<string, { sede_nombre: string; honorario: number; clases: number; estudiantes: number }> = {}
       Object.entries(sedeTotales).forEach(([key, v]) => {
         totalesSede[key] = { sede_nombre: v.sede_nombre, honorario: v.honorario, clases: v.clases, estudiantes: v.estudiantesSet.size }
@@ -1492,8 +1486,18 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                   <td style={{ ...tdS, textAlign: 'center', color: '#7c3aed', fontWeight: 700 }}>{g.totalClases}</td>
                   <td style={{ ...tdS, textAlign: 'center', color: '#0ea5e9', fontWeight: 700 }}>{formatTiempo(g.totalMinutos)}</td>
                   {sedes.map(s => {
-                    const d = g.porSede[s.id]
-                    return <td key={s.id} style={{ ...tdS, textAlign: 'right', color: d ? '#16a34a' : '#d1d5db', fontWeight: d ? 700 : 400 }}>{d ? `$${d.honorario.toLocaleString('es-CO')}` : '—'}</td>
+                    const clases = g.porSede[s.id]?.honorario || 0
+                    const apoyo = (g.apoyoPorSede as Record<string, number>)[s.id] || 0
+                    const total = clases + apoyo
+                    return (
+                      <td key={s.id} style={{ ...tdS, textAlign: 'right', color: total > 0 ? '#16a34a' : '#d1d5db', fontWeight: total > 0 ? 700 : 400 }}>
+                        {total > 0 ? (<>
+                          <div>${total.toLocaleString('es-CO')}</div>
+                          {apoyo > 0 && clases > 0 && <div style={{ fontSize: '10px', color: '#7c3aed', marginTop: '1px' }}>Incl. conc. ${apoyo.toLocaleString('es-CO')}</div>}
+                          {apoyo > 0 && clases === 0 && <div style={{ fontSize: '10px', color: '#7c3aed', marginTop: '1px' }}>Solo concierto</div>}
+                        </>) : '—'}
+                      </td>
+                    )
                   })}
                   <td style={{ ...tdS, textAlign: 'right' }}>
                     <div style={{ color: '#16a34a', fontWeight: 800, fontSize: '13px' }}>${g.totalHonorario.toLocaleString('es-CO')}</div>
