@@ -1087,7 +1087,7 @@ clasesDadas.forEach(c => {
                       {pendientesCobro > 0 && <p style={{ margin:'3px 0 0', fontSize:'11px', color:'#c2410c', fontWeight:'600' }}>+ {pendientesCobro} inasistencia(s)</p>}
                       {apoyoConcierto > 0 && <p style={{ margin:'3px 0 0', fontSize:'11px', color:'#7c3aed', fontWeight:'600' }}>Incl. apoyo a concierto de ${apoyoConcierto.toLocaleString('es-CO')}</p>}
                     </div>
-                    <p style={{ margin:0, fontSize:'28px', fontWeight:'800', color:TEAL, letterSpacing:'-1px' }}>${totalHon.toLocaleString('es-CO')}</p>
+                    <p style={{ margin:0, fontSize:'28px', fontWeight:'800', color:TEAL, letterSpacing:'-1px' }}>${(totalHon + apoyoConcierto).toLocaleString('es-CO')}</p>
                   </div>
                 </div>
               )}
