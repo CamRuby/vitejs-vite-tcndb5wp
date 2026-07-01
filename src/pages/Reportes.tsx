@@ -940,7 +940,7 @@ interface ProfesorHonorario {
   porSede: Record<string, SedeResumen>
   totalClases: number; totalMinutos: number; totalHonorario: number
   detalle: any[]
-  aprobado: boolean; pagado: boolean; apoyoConcierto: number; apoyoPorSede: Record<string, number>
+  aprobado: boolean; pagado: boolean; revisado: boolean; apoyoConcierto: number; apoyoPorSede: Record<string, number>
 }
 
 function formatTiempo(min: number) {
@@ -1053,7 +1053,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
           .in('estado', ['dada', 'cancelada'])
           .or('estado.eq.dada,cancelado_por_academia.eq.false'),
         supabase.from('talleres').select('id, nombre, hora, duracion_min, profesor_id, salones(sede_id, sedes(nombre))'),
-        supabase.from('honorarios_estado').select('profesor_id, aprobado, pagado').eq('mes', mes),
+        supabase.from('honorarios_estado').select('profesor_id, aprobado, pagado, revisado').eq('mes', mes),
         supabase.from('profesor_apoyo_concierto').select('profesor_id, sede_id, valor').eq('mes', mes),
       ])
       if (errP || errT || errC || errTa || errE || errAp) throw (errP || errT || errC || errTa || errE || errAp)
@@ -1108,8 +1108,8 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       const clasesConNumero = (clases || []).map((c: any) => ({ ...c, numero_calculado: numeracionMap.get(c.id) ?? null }))
       const todasClases = [...clasesConNumero, ...tallerRows]
       const tarifasL = tarifasData || []
-      const estadoMap: Record<string, { aprobado: boolean; pagado: boolean }> = {}
-      ;(estados || []).forEach((e: any) => { estadoMap[e.profesor_id] = { aprobado: !!e.aprobado, pagado: !!e.pagado } })
+      const estadoMap: Record<string, { aprobado: boolean; pagado: boolean; revisado: boolean }> = {}
+      ;(estados || []).forEach((e: any) => { estadoMap[e.profesor_id] = { aprobado: !!e.aprobado, pagado: !!e.pagado, revisado: !!e.revisado } })
 
       // Apoyo a concierto: puede haber varios registros por profesor en el mes (uno por sede).
       const apoyoTotalPorProfesor: Record<string, number> = {}
@@ -1132,6 +1132,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
             banco: p?.banco || null, tipo_cuenta: p?.tipo_cuenta || null, numero_cuenta: p?.numero_cuenta || null,
             porSede: {}, totalClases: 0, totalMinutos: 0, totalHonorario: 0, detalle: [],
             aprobado: estadoMap[profId]?.aprobado || false, pagado: estadoMap[profId]?.pagado || false,
+            revisado: estadoMap[profId]?.revisado || false,
             apoyoConcierto: apoyoTotalPorProfesor[profId] || 0,
             apoyoPorSede: apoyoPorProfesorYSede[profId] || {},
           }
@@ -1198,20 +1199,22 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
     finally { setCargando(false) }
   }
 
-  async function actualizarEstado(profesorId: string, campo: 'aprobado' | 'pagado', valor: boolean) {
+  async function actualizarEstado(profesorId: string, campo: 'aprobado' | 'pagado' | 'revisado', valor: boolean) {
     const g = profesoresData.find(p => p.profesor_id === profesorId)
     if (!g) return
     const aprobadoAnterior = g.aprobado
     const pagadoAnterior = g.pagado
+    const revisadoAnterior = g.revisado
     const aprobado = campo === 'aprobado' ? valor : g.aprobado
     const pagado = campo === 'pagado' ? valor : g.pagado
-    setProfesoresData(prev => prev.map(p => p.profesor_id === profesorId ? { ...p, aprobado, pagado } : p))
+    const revisado = campo === 'revisado' ? valor : g.revisado
+    setProfesoresData(prev => prev.map(p => p.profesor_id === profesorId ? { ...p, aprobado, pagado, revisado } : p))
     const { error: errGuardar } = await supabase
       .from('honorarios_estado')
-      .upsert({ profesor_id: profesorId, mes, aprobado, pagado }, { onConflict: 'profesor_id,mes' })
+      .upsert({ profesor_id: profesorId, mes, aprobado, pagado, revisado }, { onConflict: 'profesor_id,mes' })
     if (errGuardar) {
-      console.error('Error al guardar aprobado/pagado:', errGuardar)
-      setProfesoresData(prev => prev.map(p => p.profesor_id === profesorId ? { ...p, aprobado: aprobadoAnterior, pagado: pagadoAnterior } : p))
+      console.error('Error al guardar estado:', errGuardar)
+      setProfesoresData(prev => prev.map(p => p.profesor_id === profesorId ? { ...p, aprobado: aprobadoAnterior, pagado: pagadoAnterior, revisado: revisadoAnterior } : p))
       setError(`No se pudo guardar el estado de ${g.nombre}. Detalle: ${errGuardar.message}`)
     }
   }
@@ -1467,6 +1470,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                 {sedes.map(s => <th key={s.id} style={{ ...thS, textAlign: 'right' }}>{s.nombre}</th>)}
                 <th style={{ ...thS, textAlign: 'right' }}>Total</th>
                 <th style={{ ...thS, textAlign: 'center' }}>Aprobado</th>
+                <th style={{ ...thS, textAlign: 'center' }}>Revisado</th>
                 <th style={{ ...thS, textAlign: 'center' }}>Pagado</th>
 
                 <th style={{ ...thS, textAlign: 'center' }}>Cuenta de cobro</th>
@@ -1505,6 +1509,9 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                   </td>
                   <td style={{ ...tdS, textAlign: 'center' }}>
                     <input type="checkbox" checked={g.aprobado} onChange={e => actualizarEstado(g.profesor_id, 'aprobado', e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: TEAL }} />
+                  </td>
+                  <td style={{ ...tdS, textAlign: 'center' }}>
+                    <input type="checkbox" checked={g.revisado} onChange={e => actualizarEstado(g.profesor_id, 'revisado', e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#7c3aed' }} />
                   </td>
                   <td style={{ ...tdS, textAlign: 'center' }}>
                     <input type="checkbox" checked={g.pagado} onChange={e => actualizarEstado(g.profesor_id, 'pagado', e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#16a34a' }} />
