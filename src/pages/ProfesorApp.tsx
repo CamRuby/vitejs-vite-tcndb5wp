@@ -244,7 +244,7 @@ export default function ProfesorApp() {
       .gte('fecha', fi).lte('fecha', ff)
       .in('estado', ['programada', 'confirmada'])
       .order('fecha').order('hora')
-    const mesStr = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`
+    const mesStr = mes  // usar el mes seleccionado, no siempre el mes actual
     const [{ data: dataAtrasadas }, { data: talleresData }, apoyo] = await Promise.all([
       supabase.from('clases').select(SELECT_CLASES)
         .eq('profesor_id', profesor.id).eq('estado', 'confirmada').lt('fecha', fi)
@@ -454,6 +454,10 @@ export default function ProfesorApp() {
         return (b.hora || '').localeCompare(a.hora || '')
       })
     setClases(merged)
+    // Cargar apoyo a concierto del mes del historial
+    const { data: apoyoData } = await supabase.from('profesor_apoyo_concierto')
+      .select('valor').eq('profesor_id', profesor.id).eq('mes', mes)
+    setApoyoConcierto((apoyoData || []).reduce((s: number, a: any) => s + Number(a.valor || 0), 0))
     setCargandoClases(false)
   }
 
@@ -1083,7 +1087,7 @@ clasesDadas.forEach(c => {
                       {pendientesCobro > 0 && <p style={{ margin:'3px 0 0', fontSize:'11px', color:'#c2410c', fontWeight:'600' }}>+ {pendientesCobro} inasistencia(s)</p>}
                       {apoyoConcierto > 0 && <p style={{ margin:'3px 0 0', fontSize:'11px', color:'#7c3aed', fontWeight:'600' }}>Incl. apoyo a concierto de ${apoyoConcierto.toLocaleString('es-CO')}</p>}
                     </div>
-                    <p style={{ margin:0, fontSize:'28px', fontWeight:'800', color:TEAL, letterSpacing:'-1px' }}>${(totalHon + apoyoConcierto).toLocaleString('es-CO')}</p>
+                    <p style={{ margin:0, fontSize:'28px', fontWeight:'800', color:TEAL, letterSpacing:'-1px' }}>${totalHon.toLocaleString('es-CO')}</p>
                   </div>
                 </div>
               )}
