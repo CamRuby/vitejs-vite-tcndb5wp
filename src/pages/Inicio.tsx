@@ -275,7 +275,7 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
                     <div style={{ textAlign: 'left' }}>
                       <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: '600', color: '#1a1a1a' }}>{nombreC}</p>
                       <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>
-                        {c.fecha?.substring(8,10)}/{c.fecha?.substring(5,7)} · {formatHora(c.hora)} · {c.profesores?.nombre || '—'}
+                        {new Date(c.fecha + 'T12:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })} · {formatHora(c.hora)} · {c.profesores?.nombre || '—'}
                       </p>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end', flexShrink: 0, marginLeft: '10px' }}>
