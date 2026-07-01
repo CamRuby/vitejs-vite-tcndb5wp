@@ -1153,12 +1153,27 @@ await cargarDatosCliente(cliente)
       auditar('crear_plan', 'contratos', undefined, { cliente_id: clienteSeleccionado?.id })
             const { data: nuevoPlan, error } = await supabase.from('contratos').insert(registro).select().single()
       if (error) { alert('Error al crear plan: ' + error.message); return }
-      if (esRenovacion && modalPlan?.id && nuevoPlan) {
+      // Siempre migrar clases futuras programadas/confirmadas al nuevo plan.
+      // Esto cubre tanto renovaciones explícitas como planes nuevos creados desde cero.
+      if (nuevoPlan) {
         const hoy = new Date().toISOString().split('T')[0]
-        const updateClases: any = { contrato_id: nuevoPlan.id }
-        if (Number(payload.duracion_min) !== Number(modalPlan.duracion_min)) updateClases.duracion_min = payload.duracion_min
-        await supabase.from('clases').update(updateClases).eq('contrato_id', modalPlan.id).eq('estado', 'programada').gte('fecha', hoy)
-        await supabase.from('contratos').update({ estado: 'archivado' }).eq('id', modalPlan.id)
+        // Buscar todos los contratos del cliente que tengan clases futuras pendientes
+        const { data: contratosCliente } = await supabase.from('contratos').select('id, duracion_min')
+          .eq('cliente_id', clienteSeleccionado.id).neq('id', nuevoPlan.id)
+        const idsContratos = (contratosCliente || []).map((c: any) => c.id)
+        if (idsContratos.length > 0) {
+          const updateClases: any = { contrato_id: nuevoPlan.id }
+          if (Number(payload.duracion_min)) updateClases.duracion_min = payload.duracion_min
+          // Mover programadas y confirmadas futuras al nuevo plan
+          await supabase.from('clases').update(updateClases)
+            .in('contrato_id', idsContratos)
+            .in('estado', ['programada', 'confirmada'])
+            .gte('fecha', hoy)
+        }
+        // Si era renovación explícita, archivar el plan anterior
+        if (esRenovacion && modalPlan?.id) {
+          await supabase.from('contratos').update({ estado: 'archivado' }).eq('id', modalPlan.id)
+        }
       }
     }
     setModalPlan(null); setEsRenovacion(false)
