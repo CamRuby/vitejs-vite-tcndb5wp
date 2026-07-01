@@ -31,6 +31,10 @@ type FiltroPago = 'todos' | 'al_dia' | 'parcial' | 'sin_pago'
 
 function mesActual() {
   const h = new Date()
+  if (h.getDate() <= 5) {
+    const anterior = new Date(h.getFullYear(), h.getMonth() - 1, 1)
+    return `${anterior.getFullYear()}-${String(anterior.getMonth()+1).padStart(2,'0')}`
+  }
   return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`
 }
 
