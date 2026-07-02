@@ -11,8 +11,8 @@ const TALLER_BG     = '#f3e8ff'
 const TALLER_COLOR  = '#7c3aed'
 const TALLER_BORDER = '#d8b4fe'
 
-const HORAS = Array.from({ length: 169 }, (_, i) => {
-  const totalMin = 7 * 60 + i * 5
+const HORAS = Array.from({ length: 57 }, (_, i) => {
+  const totalMin = 7 * 60 + i * 15
   const h = Math.floor(totalMin / 60)
   const m = totalMin % 60
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
@@ -398,15 +398,13 @@ async function verificarConflictosEnMemoria(
   const fechaMin = fechas[0]
   const fechaMax = fechas[fechas.length - 1]
 
-  const [{ data: clasesSalon }, { data: clasesProfesor }, { data: talleresProfesor }, { data: talleresSalon }] = await Promise.all([
+  const [{ data: clasesSalon }, { data: clasesProfesor }, { data: talleresProfesor }] = await Promise.all([
     supabase.from('clases').select('id, fecha, hora, duracion_min, contratos(clientes(nombre))')
       .eq('salon_id', salonId).neq('estado', 'cancelada').gte('fecha', fechaMin).lte('fecha', fechaMax),
     profId ? supabase.from('clases').select('id, fecha, hora, duracion_min, contratos(clientes(nombre))')
       .eq('profesor_id', profId).neq('estado', 'cancelada').gte('fecha', fechaMin).lte('fecha', fechaMax) : Promise.resolve({ data: [] }),
     profId ? supabase.from('talleres').select('id, nombre, hora, duracion_min, dia_semana')
-      .eq('profesor_id', profId) : Promise.resolve({ data: [] }),
-    supabase.from('talleres').select('id, nombre, hora, duracion_min, dia_semana, tipo, fecha_unica, fecha_fin_vacacional')
-      .eq('salon_id', salonId).neq('estado', 'archivado')
+      .eq('profesor_id', profId) : Promise.resolve({ data: [] })
   ])
 
   const inicio = horaAMinutos(hora)
@@ -421,22 +419,6 @@ async function verificarConflictosEnMemoria(
       const cF = cI + ((c as any).duracion_min || 60)
       if (inicio < cF && fin > cI) {
         conflictos[fecha] = `Conflicto de salón con ${(c as any).contratos?.clientes?.nombre || 'otra clase'}`
-        break
-      }
-    }
-    if (conflictos[fecha]) continue
-
-    // Verificar talleres en el mismo salón
-    const diaSemanaT = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
-    for (const t of (talleresSalon || [])) {
-      const esEseDia = (t as any).fecha_fin_vacacional
-        ? fecha >= (t as any).fecha_unica && fecha <= (t as any).fecha_fin_vacacional && ![0,6].includes(parseFechaLocal(fecha).getDay())
-        : (t as any).dia_semana === diaSemanaT
-      if (!esEseDia) continue
-      const tI = horaAMinutos(((t as any).hora || '').substring(0, 5))
-      const tF = tI + ((t as any).duracion_min || 60)
-      if (inicio < tF && fin > tI) {
-        conflictos[fecha] = `El salón tiene el taller "${(t as any).nombre}" en ese horario`
         break
       }
     }
@@ -997,8 +979,6 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
     } else {
 const updatePayload: any = { hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha }
-      const salonNombre = (salones.find((s: any) => s.id === editSalonId)?.nombre || '').toLowerCase()
-      updatePayload.modalidad = salonNombre.includes('domicilio') ? 'domicilio' : salonNombre.includes('virtual') ? 'virtual' : 'presencial'
 if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalculado !== null) updatePayload.honorario_valor = honorarioCalculado
      if (editEstado === 'confirmada' && editConteoWhatsapp !== '') {
         await supabase.from('contratos').update({ conteo_whatsapp: Number(editConteoWhatsapp) }).eq('id', claseEditando.contratos.id)
@@ -2120,9 +2100,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                   </div>
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Hora de inicio</label>
-                    <select value={editHora} onChange={e => setEditHora(e.target.value)} style={fieldStyle}>
-                      {HORAS.map(h => <option key={h} value={h}>{h}</option>)}
-                    </select>
+                   <input type="time" value={editHora} onChange={e => setEditHora(e.target.value)} style={fieldStyle} min="07:00" max="21:00" step="300" />
                   </div>
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Duración</label>
