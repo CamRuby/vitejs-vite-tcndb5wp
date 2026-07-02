@@ -369,14 +369,20 @@ setCargando(false)
     if (data?.length) {
       const hoy = new Date()
       const mes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-01`
+      const hoyStr = formatFecha(hoy)
       const [{ data: ins }, { data: sesiones }] = await Promise.all([
-        supabase.from('taller_inscripciones').select('taller_id')
-          .in('taller_id', data.map((t: any) => t.id)).eq('estado', 'activo').gte('mes', mes),
+        supabase.from('taller_inscripciones').select('taller_id, mes, fecha_inicio, fecha_fin')
+          .in('taller_id', data.map((t: any) => t.id)).eq('estado', 'activo'),
         supabase.from('taller_sesiones').select('taller_id, fecha, estado, hora, salon_id')
           .in('taller_id', data.map((t: any) => t.id))
       ])
       const conteo: Record<string, number> = {}
-      ;(ins || []).forEach((i: any) => { conteo[i.taller_id] = (conteo[i.taller_id] || 0) + 1 })
+      ;(ins || []).forEach((i: any) => {
+        const vigente = (i.fecha_inicio && i.fecha_fin)
+          ? (i.fecha_fin >= hoyStr)
+          : (i.mes && i.mes >= mes)
+        if (vigente) conteo[i.taller_id] = (conteo[i.taller_id] || 0) + 1
+      })
       setInscritosPorTaller(conteo)
       const sMap: Record<string, string> = {}
       const horaMap: Record<string, string> = {}
