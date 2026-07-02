@@ -398,14 +398,24 @@ async function verificarConflictosEnMemoria(
   const fechaMin = fechas[0]
   const fechaMax = fechas[fechas.length - 1]
 
-  const [{ data: clasesSalon }, { data: clasesProfesor }, { data: talleresProfesor }] = await Promise.all([
+  const [{ data: clasesSalon }, { data: clasesProfesor }, { data: talleresProfesor }, { data: talleresSalon }] = await Promise.all([
     supabase.from('clases').select('id, fecha, hora, duracion_min, contratos(clientes(nombre))')
       .eq('salon_id', salonId).neq('estado', 'cancelada').gte('fecha', fechaMin).lte('fecha', fechaMax),
     profId ? supabase.from('clases').select('id, fecha, hora, duracion_min, contratos(clientes(nombre))')
       .eq('profesor_id', profId).neq('estado', 'cancelada').gte('fecha', fechaMin).lte('fecha', fechaMax) : Promise.resolve({ data: [] }),
     profId ? supabase.from('talleres').select('id, nombre, hora, duracion_min, dia_semana')
-      .eq('profesor_id', profId) : Promise.resolve({ data: [] })
+      .eq('profesor_id', profId) : Promise.resolve({ data: [] }),
+    supabase.from('talleres').select('id, nombre, salon_id, hora, duracion_min, dia_semana, fecha_unica, fecha_fin_vacacional')
+      .eq('salon_id', salonId).neq('estado', 'archivado')
   ])
+
+  const idsTalleresSalon = (talleresSalon || []).map((t: any) => t.id)
+  const { data: sesionesTalleresSalon } = idsTalleresSalon.length
+    ? await supabase.from('taller_sesiones').select('taller_id, fecha, hora, salon_id, estado')
+        .in('taller_id', idsTalleresSalon).gte('fecha', fechaMin).lte('fecha', fechaMax)
+    : { data: [] }
+  const sesionesTallerMap: Record<string, any> = {}
+  ;(sesionesTalleresSalon || []).forEach((s: any) => { sesionesTallerMap[`${s.taller_id}-${s.fecha}`] = s })
 
   const inicio = horaAMinutos(hora)
   const fin = inicio + durMin
@@ -419,6 +429,33 @@ async function verificarConflictosEnMemoria(
       const cF = cI + ((c as any).duracion_min || 60)
       if (inicio < cF && fin > cI) {
         conflictos[fecha] = `Conflicto de salón con ${(c as any).contratos?.clientes?.nombre || 'otra clase'}`
+        break
+      }
+    }
+    if (conflictos[fecha]) continue
+
+    // Verificar salón contra talleres (clases grupales) que usan ese mismo espacio
+    const diaSemanaSalon = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
+    for (const t of (talleresSalon || [])) {
+      const sesion = sesionesTallerMap[`${t.id}-${fecha}`]
+      let ocupa = false
+      let horaEf = (t as any).hora?.substring(0, 5)
+      let salonEf = (t as any).salon_id
+      if (sesion) {
+        if (sesion.estado === 'cancelada') continue
+        ocupa = true
+        horaEf = sesion.hora ? sesion.hora.substring(0, 5) : horaEf
+        salonEf = sesion.salon_id || salonEf
+      } else {
+        ocupa = (t as any).fecha_fin_vacacional
+          ? (fecha >= (t as any).fecha_unica && fecha <= (t as any).fecha_fin_vacacional && ![0, 6].includes(parseFechaLocal(fecha).getDay()))
+          : (t as any).dia_semana === diaSemanaSalon
+      }
+      if (!ocupa || salonEf !== salonId) continue
+      const tI = horaAMinutos(horaEf || '00:00')
+      const tF = tI + ((t as any).duracion_min || 60)
+      if (inicio < tF && fin > tI) {
+        conflictos[fecha] = `Choca con el taller "${(t as any).nombre}" en ese salón`
         break
       }
     }
@@ -937,11 +974,32 @@ if (err) setError('Error: ' + err.message)
 
   async function guardarEdicion(alcance: 'esta' | 'futuras') {
     setEditGuardando(true); setEditError('')
-   const conflictos = await verificarConflictosEnMemoria(
-  editSalonId, editProfesorId,
-  [editFecha], editHora, parseInt(editDuracion), claseEditando.id
-)
-if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardando(false); return }
+
+    // Si aplica a todas las futuras, buscamos primero esas fechas para revisar choques en TODAS, no solo la actual
+    let fechasAVerificar = [editFecha]
+    let idsClasesFuturas: string[] | null = null
+    if (alcance === 'futuras' && claseEditando.patron_id) {
+      const { data: clasesFuturas, error: errorBuscar } = await supabase
+        .from('clases').select('id, fecha')
+        .eq('patron_id', claseEditando.patron_id)
+        .gte('fecha', claseEditando.fecha)
+      if (errorBuscar || !clasesFuturas || clasesFuturas.length === 0) {
+        setEditError('No se encontraron clases futuras en la serie.')
+        setEditGuardando(false); return
+      }
+      idsClasesFuturas = clasesFuturas.map((c: any) => c.id)
+      fechasAVerificar = clasesFuturas.map((c: any) => c.fecha)
+    }
+
+    const conflictos = await verificarConflictosEnMemoria(
+      editSalonId, editProfesorId,
+      fechasAVerificar, editHora, parseInt(editDuracion), claseEditando.id
+    )
+    const fechaConChoque = fechasAVerificar.find(f => conflictos[f])
+    if (fechaConChoque) {
+      setEditError(`${conflictos[fechaConChoque]} (fecha: ${fechaConChoque})`)
+      setEditGuardando(false); return
+    }
 
     let numeroPlan: number | undefined = undefined
    let honorarioCalculado: number | null = null
@@ -963,19 +1021,10 @@ if (conflictos[editFecha]) { setEditError(conflictos[editFecha]); setEditGuardan
           if (tarifa) honorarioCalculado = Number(tarifa.valor)
         }
         
-        if (alcance === 'futuras' && claseEditando.patron_id) {
-      const { data: clasesFuturas, error: errorBuscar } = await supabase
-        .from('clases').select('id')
-        .eq('patron_id', claseEditando.patron_id)
-        .gte('fecha', claseEditando.fecha)
-      if (errorBuscar || !clasesFuturas || clasesFuturas.length === 0) {
-        setEditError('No se encontraron clases futuras en la serie.')
-        setEditGuardando(false); return
-      }
-      const ids = clasesFuturas.map((c: any) => c.id)
+        if (alcance === 'futuras' && claseEditando.patron_id && idsClasesFuturas) {
       const { error } = await supabase.from('clases')
         .update({ hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado })
-        .in('id', ids)
+        .in('id', idsClasesFuturas)
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
     } else {
 const updatePayload: any = { hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha }
