@@ -1032,6 +1032,11 @@ if (err) setError('Error: ' + err.message)
         .update({ hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado })
         .in('id', idsClasesFuturas)
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
+      if (editEstado !== claseEditando.estado) {
+        auditar('cambiar_estado_clase', 'clases', claseEditando.id, {
+          de: claseEditando.estado, a: editEstado, alcance: 'futuras', cantidad: idsClasesFuturas.length
+        })
+      }
     } else {
 const updatePayload: any = { hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha }
 if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalculado !== null) updatePayload.honorario_valor = honorarioCalculado
@@ -1065,6 +1070,11 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
         .update(updatePayload)
         .eq('id', claseEditando.id)
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
+      if (editEstado !== claseEditando.estado) {
+        auditar('cambiar_estado_clase', 'clases', claseEditando.id, {
+          de: claseEditando.estado, a: editEstado, motivo: updatePayload.motivo_cancelacion || null
+        })
+      }
       // Notificación al cancelar desde admin
       if (editEstado === 'cancelada') {
         const esTardia = updatePayload.cancelado_tarde
@@ -2021,6 +2031,9 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                                   cancelado_por_academia: null,
                                   cancelado_tarde: false
                                 }).eq('id', claseEditando.id)
+                                auditar('cambiar_estado_clase', 'clases', claseEditando.id, {
+                                  de: 'cancelada', a: 'confirmada', motivo: 'reasignación de profesor'
+                                })
                                 setClaseEditando((prev: any) => ({ ...prev, profesor_id: nuevoProf, estado: 'confirmada', cancelado_por_academia: null, cancelado_tarde: false }))
                                 setEditEstado('confirmada')
                                 await cargarClases()
