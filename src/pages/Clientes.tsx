@@ -87,8 +87,12 @@ function calcularFechaFin(fechaInicio: string, diaSemana?: string, numSesiones =
 function estaVencida(inscripcion: any): boolean {
   if (inscripcion.estado !== 'activo') return false
   const hoy = new Date().toISOString().split('T')[0]
-  const fechaFin = inscripcion.fecha_fin || inscripcion.mes
-  return !!fechaFin && fechaFin < hoy
+  if (inscripcion.fecha_inicio) {
+    // Sistema nuevo (con rango de fechas): sin fecha_fin = abierta, nunca vencida
+    return !!inscripcion.fecha_fin && inscripcion.fecha_fin < hoy
+  }
+  // Sistema antiguo (solo con "mes")
+  return !!inscripcion.mes && inscripcion.mes < hoy
 }
 
 function opcionesMesTaller(): { valor: string; etiqueta: string }[] {
@@ -562,6 +566,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [inscripcionesTalleres, setInscripcionesTalleres] = useState<any[]>([])
   const [sesionesPorInscripcion, setSesionesPorInscripcion] = useState<Record<string, any[]>>({})
   const [inscripcionExpandida, setInscripcionExpandida] = useState<string | null>(null)
+  const [editandoFechaFinId, setEditandoFechaFinId] = useState<string | null>(null)
+  const [nuevaFechaFin, setNuevaFechaFin] = useState('')
   const [modalHistorialTalleres, setModalHistorialTalleres] = useState(false)
   const [modo, setModo] = useState('lista')
   const [cargando, setCargando] = useState(false)
@@ -873,6 +879,15 @@ await cargarDatosCliente(cliente)
     setInscripcionesTalleres(prev => prev.map(i => i.id === inscripcionId ? { ...i, estado: nuevoEstado } : i))
     const { error } = await supabase.from('taller_inscripciones').update({ estado: nuevoEstado }).eq('id', inscripcionId)
     if (error) { alert('Error: ' + error.message); await cargarDatosCliente(clienteSeleccionado) }
+  }
+
+  async function guardarNuevaFechaFin(inscripcionId: string) {
+    if (!nuevaFechaFin) return
+    const { error } = await supabase.from('taller_inscripciones').update({ fecha_fin: nuevaFechaFin }).eq('id', inscripcionId)
+    if (error) { alert('Error: ' + error.message); return }
+    setInscripcionesTalleres(prev => prev.map(i => i.id === inscripcionId ? { ...i, fecha_fin: nuevaFechaFin } : i))
+    setEditandoFechaFinId(null)
+    setNuevaFechaFin('')
   }
 
   async function renovarInscripcionTaller(inscripcion: any) {
@@ -1808,9 +1823,19 @@ await cargarDatosCliente(cliente)
                       </span>
                     </div>
                     <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>🏫 {ins.talleres?.salones?.nombre} — {ins.talleres?.salones?.sedes?.nombre}</p>
-                    <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>
+                    <p style={{ margin: 0, fontSize: '13px', color: '#666', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       📅 {ins.fecha_inicio || mesLabel} → {ins.fecha_fin || '—'} · {ins.num_sesiones || 4} sesiones · {ins.talleres?.dia_semana}
+                      <button onClick={() => { setEditandoFechaFinId(ins.id); setNuevaFechaFin(ins.fecha_fin || '') }}
+                        style={{ padding: '1px 8px', background: '#f1f5f9', color: '#666', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontSize: '11px' }}>✏️ Editar fecha fin</button>
                     </p>
+                    {editandoFechaFinId === ins.id && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                        <input type="date" value={nuevaFechaFin} onChange={e => setNuevaFechaFin(e.target.value)}
+                          style={{ padding: '5px 8px', border: `1px solid ${TEAL_MID}`, borderRadius: '6px', fontSize: '12px' }} />
+                        <button onClick={() => guardarNuevaFechaFin(ins.id)} style={{ padding: '5px 12px', background: TEAL, color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Guardar</button>
+                        <button onClick={() => { setEditandoFechaFinId(null); setNuevaFechaFin('') }} style={{ padding: '5px 12px', background: 'white', color: '#666', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>Cancelar</button>
+                      </div>
+                    )}
                   </div>
                 </div>
                 {valorPlanIns > 0 && (
