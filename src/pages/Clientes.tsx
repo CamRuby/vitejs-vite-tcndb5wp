@@ -839,11 +839,16 @@ await cargarDatosCliente(cliente)
   }
 
   async function cambiarEstadoPlan(planId: string, nuevoEstado: string) {
-    setPlanes(prev => prev.map(p => p.id === planId ? { ...p, estado: nuevoEstado } : p))
     if (nuevoEstado === 'archivado') {
       const hoy = new Date().toISOString().split('T')[0]
-      await supabase.from('clases').delete().eq('contrato_id', planId).eq('estado', 'programada').gte('fecha', hoy)
+      const { count } = await supabase.from('clases').select('id', { count: 'exact', head: true })
+        .eq('contrato_id', planId).eq('estado', 'programada').gte('fecha', hoy)
+      if (count && count > 0) {
+        alert(`Este plan tiene ${count} clase(s) futuras programadas. No se puede archivar directamente: crea el plan nuevo con "Renovar plan" y las clases se heredan solas, luego este plan se archiva automáticamente.`)
+        return
+      }
     }
+    setPlanes(prev => prev.map(p => p.id === planId ? { ...p, estado: nuevoEstado } : p))
     auditar('cambiar_estado_plan', 'contratos', planId, { estado: nuevoEstado })
     const { error } = await supabase.from('contratos').update({ estado: nuevoEstado }).eq('id', planId)
     if (error) { alert('Error: ' + error.message); await cargarDatosCliente(clienteSeleccionado) }
