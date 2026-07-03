@@ -476,7 +476,7 @@ export default function AdminApp() {
     if (!nuevoPlanSedeId) { setNuevoPlanError('Selecciona una sede'); return }
     setNuevoPlanError('')
     setGuardando(true)
-    const { error } = await supabase.from('contratos').insert({
+    const { data: nuevoPlan, error } = await supabase.from('contratos').insert({
       cliente_id: creandoPlan,
       instrumento_id: nuevoPlanInstrumentoId,
       profesor_id: nuevoPlanProfesorId,
@@ -487,8 +487,24 @@ export default function AdminApp() {
       fecha_inicio: nuevoPlanFechaInicio,
       estado: 'activo',
       clases_tomadas: 0,
-    })
+    }).select().single()
     if (error) { setNuevoPlanError('Error: ' + error.message); setGuardando(false); return }
+    if (nuevoPlan) {
+      const hoy = new Date().toISOString().split('T')[0]
+      // Heredar clases futuras programadas/confirmadas de otros planes del mismo cliente
+      const { data: contratosCliente } = await supabase.from('contratos').select('id')
+        .eq('cliente_id', creandoPlan).neq('id', nuevoPlan.id)
+      const idsContratos = (contratosCliente || []).map((c: any) => c.id)
+      if (idsContratos.length > 0) {
+        await supabase.from('clases').update({ contrato_id: nuevoPlan.id, duracion_min: parseInt(nuevoPlanDuracion) })
+          .in('contrato_id', idsContratos)
+          .in('estado', ['programada', 'confirmada'])
+          .gte('fecha', hoy)
+      }
+      // Archivar automáticamente los planes completados de este cliente
+      await supabase.from('contratos').update({ estado: 'archivado' })
+        .eq('cliente_id', creandoPlan).eq('estado', 'completado').neq('id', nuevoPlan.id)
+    }
     setCreandoPlan(null)
     await cargarPlanes(creandoPlan)
     setMensajeOk('Plan creado correctamente')
