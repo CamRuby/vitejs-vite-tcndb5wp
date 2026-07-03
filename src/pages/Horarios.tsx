@@ -378,8 +378,8 @@ setCargando(false)
       ])
       const conteo: Record<string, number> = {}
       ;(ins || []).forEach((i: any) => {
-        const vigente = (i.fecha_inicio && i.fecha_fin)
-          ? (i.fecha_fin >= hoyStr)
+        const vigente = i.fecha_inicio
+          ? (!i.fecha_fin || i.fecha_fin >= hoyStr)
           : (i.mes && i.mes >= mes)
         if (vigente) conteo[i.taller_id] = (conteo[i.taller_id] || 0) + 1
       })
@@ -635,10 +635,10 @@ async function verificarConflictosEnMemoria(
       // Filter client-side to handle nulls gracefully
       const mesCol = fechaCol.substring(0, 7) + '-01'
       inscData = (data || []).filter((ins: any) => {
-        if (ins.fecha_inicio && ins.fecha_fin) {
-          return ins.fecha_inicio <= fechaCol && ins.fecha_fin >= fechaCol
+        if (ins.fecha_inicio) {
+          return ins.fecha_inicio <= fechaCol && (!ins.fecha_fin || ins.fecha_fin >= fechaCol)
         }
-        // fallback: same month
+        // fallback: same month (solo para inscripciones antiguas sin fecha_inicio)
         return ins.mes && ins.mes.substring(0, 7) === fechaCol.substring(0, 7)
       })
     } catch { inscData = [] }
