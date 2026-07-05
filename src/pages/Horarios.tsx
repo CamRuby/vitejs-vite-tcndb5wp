@@ -98,6 +98,7 @@ export default function Horarios() {
   const [fechaBase, setFechaBase] = useState(new Date())
   const [diaSeleccionado, setDiaSeleccionado] = useState(new Date())
   const [sedeSeleccionada, setSedeSeleccionada] = useState('')
+  const [filtroProfesorId, setFiltroProfesorId] = useState('')
   const [sedes, setSedes] = useState<any[]>([])
   const [salones, setSalones] = useState<any[]>([])
   const [profesores, setProfesores] = useState<any[]>([])
@@ -1127,6 +1128,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
   const slotMin = horaAMinutos(hora)
   return clases.filter((c: any) => {
     if (c.salones?.id !== salonId || c.fecha !== fecha) return false
+    if (filtroProfesorId && c.profesores?.id !== filtroProfesorId) return false
     const claseMin = horaAMinutos(c.hora?.substring(0, 5) || '00:00')
     return claseMin >= slotMin && claseMin < slotMin + 15
   })
@@ -1137,6 +1139,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
     // Caso normal: taller recurrente (o vacacional en su rango) cuyo salón y hora coinciden
     const normal = talleres.find(t => {
       if (t.salon_id !== salonId || t.hora?.substring(0, 5) !== hora) return false
+      if (filtroProfesorId && t.profesor_id !== filtroProfesorId) return false
       // Para vacacional: mostrar en todos los días del rango
       const esEsteDia = (t as any).fecha_fin_vacacional
         ? fecha >= (t as any).fecha_unica && fecha <= (t as any).fecha_fin_vacacional && ![0,6].includes(new Date(fecha + 'T12:00:00').getDay())
@@ -1155,6 +1158,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
     if (normal) return normal
     // Caso excepción: sesión movida a un día diferente (salón y hora propios de la sesión)
     return talleres.find(t => {
+      if (filtroProfesorId && t.profesor_id !== filtroProfesorId) return false
       if (t.dia_semana === diaSemana) return false
       const horaOverride = sesionesHoraMap[`${t.id}-${fecha}`]
       const salonOverride = sesionesSalonMap[`${t.id}-${fecha}`] || t.salon_id
@@ -1185,6 +1189,11 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
             <select value={sedeSeleccionada} onChange={e => setSedeSeleccionada(e.target.value)}
               style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '14px' }}>
               {sedes.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+            </select>
+            <select value={filtroProfesorId} onChange={e => setFiltroProfesorId(e.target.value)}
+              style={{ padding: '7px 12px', border: `1px solid ${filtroProfesorId ? TEAL : TEAL_MID}`, borderRadius: '8px', fontSize: '14px', background: filtroProfesorId ? TEAL_LIGHT : 'white' }}>
+              <option value="">Todos los profesores</option>
+              {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </select>
             <div style={{ display: 'flex', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', overflow: 'hidden' }}>
               {(['dia', 'semana'] as const).map(v => (
