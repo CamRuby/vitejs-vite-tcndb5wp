@@ -6,6 +6,19 @@ const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
 const TEAL_DARK = '#146f6f'
+
+function fechaLocalVP(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function fechaHoyLocalVP(): string { return fechaLocalVP(new Date()) }
+const DIAS_SEMANA_VP: Record<string, number> = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6 }
+const SELECT_CLASES_VP = [
+  'id', 'fecha', 'hora', 'duracion_min', 'estado', 'modalidad', 'cancelado_por_academia',
+  'cancelado_tarde', 'es_cortesia', 'inasistencia_perdonada',
+  'observaciones', 'contrato_id', 'honorario_valor', 'motivo_cancelacion',
+  'contratos(clientes(nombre), instrumentos(nombre), duracion_min, clases_tomadas, total_clases, conteo_whatsapp)',
+  'salones(nombre, sedes(nombre))'
+].join(', ')
 const PURPLE = '#7c3aed'
 const PURPLE_LIGHT = '#f3e8ff'
 const PURPLE_MID = '#d8b4fe'
@@ -131,11 +144,14 @@ export default function AdminApp() {
   const [loginError, setLoginError] = useState('')
   const [loginCargando, setLoginCargando] = useState(false)
 
-  const [vistaActual, setVistaActual] = useState<'clientes' | 'reportes'>('clientes')
+  const [vistaActual, setVistaActual] = useState<'clientes' | 'reportes' | 'vistaprofesor'>('clientes')
 
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [sedes, setSedes] = useState<{ id: string; nombre: string }[]>([])
   const [profesores, setProfesores] = useState<{ id: string; nombre: string }[]>([])
+  const [vpProfesorId, setVpProfesorId] = useState('')
+  const [vpClases, setVpClases] = useState<any[]>([])
+  const [vpCargando, setVpCargando] = useState(false)
   const [instrumentos, setInstrumentos] = useState<Instrumento[]>([])
   const [cargando, setCargando] = useState(false)
 
@@ -411,6 +427,88 @@ export default function AdminApp() {
       if (!clientesConProfesor) return false
       return clientesConProfesor.has(c.id)
     })
+
+  async function cargarVistaProfesor(profesorId: string) {
+    if (!profesorId) return
+    setVpCargando(true)
+    const hoy = new Date()
+    const diaSemana = hoy.getDay()
+    const diasHastaSabado = diaSemana === 6 ? 7 : 6 - diaSemana
+    const sabado = new Date(hoy); sabado.setDate(hoy.getDate() + diasHastaSabado)
+    const fi = fechaHoyLocalVP()
+    const ff = fechaLocalVP(sabado)
+    const { data } = await supabase.from('clases').select(SELECT_CLASES_VP)
+      .eq('profesor_id', profesorId)
+      .gte('fecha', fi).lte('fecha', ff)
+      .in('estado', ['programada', 'confirmada'])
+      .order('fecha').order('hora')
+    const [{ data: dataAtrasadas }, { data: talleresData }] = await Promise.all([
+      supabase.from('clases').select(SELECT_CLASES_VP)
+        .eq('profesor_id', profesorId).eq('estado', 'confirmada').lt('fecha', fi)
+        .order('fecha').order('hora'),
+      supabase.from('talleres')
+        .select('id, nombre, dia_semana, hora, duracion_min, fecha_unica, fecha_fin_vacacional, salones(nombre, sedes(nombre))')
+        .eq('profesor_id', profesorId)
+    ])
+    const ids = (talleresData || []).map((t: any) => t.id)
+    let talleresConfirmados: any[] = []
+    const talleresAtrasados: any[] = []
+    if (ids.length > 0) {
+      const { data: sesiones } = await supabase.from('taller_sesiones')
+        .select('taller_id, fecha, estado')
+        .in('taller_id', ids)
+      const sesionMap: Record<string, string> = {}
+      ;(sesiones || []).forEach((s: any) => { sesionMap[`${s.taller_id}-${s.fecha}`] = s.estado })
+      talleresConfirmados = (talleresData || []).map((t: any) => ({ ...t, _sesionMap: sesionMap }))
+
+      const { data: sesAtrasadas } = await supabase
+        .from('taller_sesiones')
+        .select('id, fecha, estado, taller_id')
+        .in('taller_id', ids)
+        .eq('estado', 'confirmada')
+        .lt('fecha', fi)
+        .order('fecha').order('taller_id')
+      ;(sesAtrasadas || []).forEach((s: any) => {
+        const t = (talleresData || []).find((x: any) => x.id === s.taller_id)
+        if (!t) return
+        talleresAtrasados.push({
+          id: `taller-${t.id}-${s.fecha}`,
+          fecha: s.fecha, hora: t.hora, duracion_min: t.duracion_min,
+          estado: 'confirmada', esTaller: true, nombreTaller: t.nombre,
+          salones: t.salones, contratos: null, esAtrasada: true,
+        })
+      })
+    }
+    const clasesFinales = [
+      ...talleresAtrasados,
+      ...(dataAtrasadas || []).map((c: any) => ({ ...c, esAtrasada: true })),
+      ...(data || [])
+    ]
+    for (let offset = 0; offset <= diasHastaSabado; offset++) {
+      const dia = new Date(hoy); dia.setDate(hoy.getDate() + offset)
+      const fechaStr = fechaLocalVP(dia)
+      talleresConfirmados.forEach((t: any) => {
+        const matchFecha = t.fecha_fin_vacacional
+          ? fechaStr >= t.fecha_unica && fechaStr <= t.fecha_fin_vacacional && ![0, 6].includes(new Date(fechaStr + 'T12:00:00').getDay())
+          : t.fecha_unica ? t.fecha_unica === fechaStr
+          : DIAS_SEMANA_VP[t.dia_semana] === dia.getDay()
+        if (matchFecha) {
+          const sesionEstadoHoy = t._sesionMap?.[`${t.id}-${fechaStr}`] || null
+          const estadoTaller = sesionEstadoHoy || 'programada'
+          if (estadoTaller === 'dada') { /* skip, ya se dio */ } else
+            clasesFinales.push({
+              id: `taller-${t.id}-${fechaStr}`,
+              fecha: fechaStr, hora: t.hora, duracion_min: t.duracion_min,
+              estado: estadoTaller, esTaller: true, nombreTaller: t.nombre,
+              salones: t.salones, contratos: null,
+            })
+        }
+      })
+    }
+    clasesFinales.sort((a, b) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`))
+    setVpClases(clasesFinales)
+    setVpCargando(false)
+  }
 
   function abrirEditarPlan(plan: Plan) {
     setEditandoPlan(plan)
@@ -756,7 +854,7 @@ export default function AdminApp() {
           <button onClick={() => supabase.auth.signOut()} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', padding: '6px 12px', borderRadius: '20px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Salir</button>
         </div>
         <div style={{ display: 'flex', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-          {[{ key: 'clientes', label: '👥 Clientes' }, { key: 'reportes', label: '📊 Reportes' }].map(tab => (
+          {[{ key: 'clientes', label: '👥 Clientes' }, { key: 'reportes', label: '📊 Reportes' }, { key: 'vistaprofesor', label: '👁️ Ver como profesor' }].map(tab => (
             <button key={tab.key} onClick={() => setVistaActual(tab.key as any)}
               style={{ flex: 1, padding: '12px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: '700', fontFamily: 'inherit', background: vistaActual === tab.key ? 'white' : 'transparent', color: vistaActual === tab.key ? TEAL_DARK : 'rgba(255,255,255,0.7)', borderRadius: vistaActual === tab.key ? '12px 12px 0 0' : '0' }}>
               {tab.label}
@@ -776,6 +874,43 @@ export default function AdminApp() {
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
           <p style={{ fontSize: '18px', fontWeight: '700', color: '#374151', margin: '0 0 8px' }}>Reportes</p>
           <p style={{ fontSize: '14px', color: '#9ca3af', margin: 0 }}>Próximamente — módulo de reportes en desarrollo.</p>
+        </div>
+      )}
+
+      {vistaActual === 'vistaprofesor' && (
+        <div style={{ padding: '16px', paddingBottom: '48px' }}>
+          <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 12px', lineHeight: '1.5' }}>
+            Esto muestra exactamente lo mismo que ve el profesor en su celular (solo lectura, no cambia nada).
+          </p>
+          <select value={vpProfesorId} onChange={e => { setVpProfesorId(e.target.value); setVpClases([]); if (e.target.value) cargarVistaProfesor(e.target.value) }}
+            style={{ width: '100%', padding: '10px 12px', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', fontSize: '14px', marginBottom: '16px', background: 'white' }}>
+            <option value="">— Selecciona un profesor —</option>
+            {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+
+          {vpCargando && <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: '14px' }}>Cargando...</p>}
+
+          {!vpCargando && vpProfesorId && vpClases.length === 0 && (
+            <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: '14px', padding: '24px 0' }}>Este profesor no tiene nada programado esta semana.</p>
+          )}
+
+          {vpClases.map((c: any) => {
+            const nombre = c.esTaller ? `🎸 ${c.nombreTaller}` : (c.contratos?.clientes?.nombre || '—')
+            const estadoColor: any = { programada: '#6b7280', confirmada: '#166534', dada: '#854d0e', cancelada: '#991b1b' }
+            return (
+              <div key={c.id} style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '12px 14px', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#374151' }}>{nombre}</p>
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: estadoColor[c.estado] || '#6b7280' }}>
+                    {c.esAtrasada ? '⚠️ ATRASADA · ' : ''}{c.estado}
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#9ca3af' }}>
+                  {c.fecha} · {c.hora?.substring(0, 5)} · {c.salones?.nombre || '—'}
+                </p>
+              </div>
+            )
+          })}
         </div>
       )}
 
