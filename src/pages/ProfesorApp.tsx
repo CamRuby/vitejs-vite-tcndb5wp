@@ -538,7 +538,7 @@ export default function ProfesorApp() {
       .eq('taller_id', c.tallerRealId).eq('estado', 'activo')
     const fechaClase = c.fecha
     const inscFiltradosFecha = (inscritos || []).filter((ins: any) => {
-      if (ins.fecha_inicio && ins.fecha_fin) return ins.fecha_inicio <= fechaClase && ins.fecha_fin >= fechaClase
+      if (ins.fecha_inicio) return ins.fecha_inicio <= fechaClase && (!ins.fecha_fin || ins.fecha_fin >= fechaClase)
       return ins.mes && ins.mes.substring(0,7) === fechaClase.substring(0,7)
     })
     const { data: sesion } = await supabase.from('taller_sesiones').select('id, fecha, estado, observaciones')
