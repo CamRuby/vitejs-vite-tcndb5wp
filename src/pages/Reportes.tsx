@@ -25,7 +25,7 @@ interface TallerInscripcion {
   estado: string; abonos: Abono[]
 }
 
-const METODOS_PAGO = ['Ideal Chicó','Ideal Rosales','Bancolombia Ruby','Davivienda Ruby','Wompi','Tarjeta Redeban','Efectivo']
+const METODOS_PAGO = ['Ideal Chicó','Ideal Rosales','Bancolombia Ruby','Davivienda Ruby','Wompi','Tarjeta Redeban','Efectivo','Ajuste (comisión pasarela)']
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 type FiltroPago = 'todos' | 'al_dia' | 'parcial' | 'sin_pago'
 
@@ -641,6 +641,12 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {pagoTallerModal.valor_plan && pagoTallerModal.saldo > 0 && (
+                <button onClick={() => { setNuevoMonto(String(pagoTallerModal.saldo)); setNuevoMetodo('Ajuste (comisión pasarela)') }}
+                  style={{ padding: '8px', background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                  ⚖️ Ajustar saldo pendiente (${pagoTallerModal.saldo.toLocaleString('es-CO')}) a $0
+                </button>
+              )}
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>Fecha</label>
                 <input type="date" value={nuevoFecha} onChange={e => setNuevoFecha(e.target.value)}
@@ -692,6 +698,12 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {pagoModal.valor_plan && pagoModal.saldo > 0 && (
+                <button onClick={() => { setNuevoMonto(String(pagoModal.saldo)); setNuevoMetodo('Ajuste (comisión pasarela)') }}
+                  style={{ padding: '8px', background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                  ⚖️ Ajustar saldo pendiente (${pagoModal.saldo.toLocaleString('es-CO')}) a $0
+                </button>
+              )}
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>Fecha</label>
                 <input type="date" value={nuevoFecha} onChange={e => setNuevoFecha(e.target.value)}
