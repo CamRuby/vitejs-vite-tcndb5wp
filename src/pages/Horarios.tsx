@@ -1156,10 +1156,12 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
       return true
     })
     if (normal) return normal
-    // Caso excepción: sesión movida a un día diferente (salón y hora propios de la sesión)
+    // Caso excepción: sesión movida a un día/hora diferente (salón y hora propios de la sesión)
     return talleres.find(t => {
       if (filtroProfesorId && t.profesor_id !== filtroProfesorId) return false
-      if (t.dia_semana === diaSemana) return false
+      const esVacacional = !!(t as any).fecha_fin_vacacional
+      // Para talleres semanales normales, si ya coincide su día fijo, la rama "normal" de arriba ya lo habría mostrado
+      if (!esVacacional && t.dia_semana === diaSemana) return false
       const horaOverride = sesionesHoraMap[`${t.id}-${fecha}`]
       const salonOverride = sesionesSalonMap[`${t.id}-${fecha}`] || t.salon_id
       if (!horaOverride) return false
