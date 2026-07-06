@@ -690,7 +690,30 @@ export default function AdminApp() {
           payload.estado = editEstado; payload.es_cortesia = false
           if (editEstado !== 'cancelada') { payload.cancelado_por_academia = null; payload.cancelado_tarde = false }
         }
+        const estadoAntes = editandoClase.estado
+        const esCortesiaAntes = !!editandoClase.es_cortesia
+        const canceladoAcademiaAntes = !!editandoClase.cancelado_por_academia
+        const perdonadaAntes = !!editandoClase.inasistencia_perdonada
+        const cuenta = (estado: string, cortesia: boolean, porAcademia: boolean, perdonada: boolean) => {
+          if (estado === 'dada') return !cortesia
+          if (estado === 'cancelada' && !porAcademia) return !perdonada
+          return false
+        }
+        const contababaAntes = cuenta(estadoAntes, esCortesiaAntes, canceladoAcademiaAntes, perdonadaAntes)
+        const contaDespues = cuenta(
+          payload.estado,
+          payload.es_cortesia ?? esCortesiaAntes,
+          payload.cancelado_por_academia ?? canceladoAcademiaAntes,
+          payload.inasistencia_perdonada ?? perdonadaAntes
+        )
         await supabase.from('clases').update(payload).eq('id', editandoClase.id)
+        if (contababaAntes !== contaDespues && editandoClase.contrato_id) {
+          const durPlan = editandoClase.contratos?.duracion_min || parseInt(editDuracion) || 60
+          const fraccion = parseFloat((parseInt(editDuracion) / durPlan).toFixed(4))
+          const ctActual = Number(editandoClase.contratos?.clases_tomadas || 0)
+          const nuevasCT = Math.max(parseFloat((ctActual + (contaDespues ? fraccion : -fraccion)).toFixed(4)), 0)
+          await supabase.from('contratos').update({ clases_tomadas: nuevasCT }).eq('id', editandoClase.contrato_id)
+        }
         setEditandoClase(null)
         await cargarClases(editandoClase.contrato_id, editandoClase.cliente_id)
         setMensajeOk('Clase actualizada correctamente')
