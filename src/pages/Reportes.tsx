@@ -199,16 +199,24 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
     await cargarDatosTalleres()
   }
 
+  async function guardarValorPlanTaller() {
+    if (!pagoTallerModal) return
+    if (!nuevoValorPlan || Number(nuevoValorPlan) <= 0) { setErrorPago('Ingresa un valor válido'); return }
+    setGuardandoPago(true); setErrorPago('')
+    const nuevoSaldo = Number(nuevoValorPlan) - (pagoTallerModal.total_pagado || 0)
+    await supabase.from('taller_inscripciones').update({ valor_plan: Number(nuevoValorPlan), saldo: nuevoSaldo }).eq('id', pagoTallerModal.id)
+    setGuardandoPago(false)
+    setMensajeOk('Valor de la inscripción guardado'); setTimeout(() => setMensajeOk(''), 3000)
+    await cargarDatosTalleres()
+    setPagoTallerModal((prev: any) => prev ? { ...prev, valor_plan: Number(nuevoValorPlan), saldo: nuevoSaldo } : prev)
+  }
+
   async function registrarPagoTaller() {
     if (!pagoTallerModal) return
     if (!nuevoMonto || Number(nuevoMonto) <= 0) { setErrorPago('Ingresa un monto válido'); return }
-    if (!pagoTallerModal.valor_plan && !nuevoValorPlan) { setErrorPago('Ingresa el valor del plan antes de continuar.'); return }
     setGuardandoPago(true); setErrorPago('')
-    if (nuevoValorPlan && Number(nuevoValorPlan) > 0)
-      await supabase.from('taller_inscripciones').update({ valor_plan: Number(nuevoValorPlan) }).eq('id', pagoTallerModal.id)
     const nuevoTotal = pagoTallerModal.total_pagado + Number(nuevoMonto)
-    const valorPlan = nuevoValorPlan ? Number(nuevoValorPlan) : (pagoTallerModal.valor_plan || 0)
-    const nuevoSaldo = valorPlan - nuevoTotal
+    const nuevoSaldo = (pagoTallerModal.valor_plan || 0) - nuevoTotal
     const { error } = await supabase.from('pagos').insert({ inscripcion_id: pagoTallerModal.id, monto: Number(nuevoMonto), metodo: nuevoMetodo, fecha: nuevoFecha })
     if (error) { setErrorPago('Error: ' + error.message); setGuardandoPago(false); return }
     await supabase.from('taller_inscripciones').update({ total_pagado: nuevoTotal, saldo: nuevoSaldo }).eq('id', pagoTallerModal.id)
@@ -217,6 +225,7 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
     setMensajeOk('Pago registrado'); setTimeout(() => setMensajeOk(''), 3000)
     await cargarDatosTalleres()
   }
+
 
   function estadoPagoT(t: TallerInscripcion): FiltroPago {
     if (!t.valor_plan) return 'sin_pago'
@@ -241,13 +250,21 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
     setTimeout(() => setMensajeOk(''), 3000)
     await cargarDatos()
   }
+  async function guardarValorPlan() {
+    if (!pagoModal) return
+    if (!nuevoValorPlan || Number(nuevoValorPlan) <= 0) { setErrorPago('Ingresa un valor válido'); return }
+    setGuardandoPago(true); setErrorPago('')
+    await supabase.from('contratos').update({ valor_plan: Number(nuevoValorPlan) }).eq('id', pagoModal.id)
+    setGuardandoPago(false)
+    setMensajeOk('Valor del plan guardado'); setTimeout(() => setMensajeOk(''), 3000)
+    await cargarDatos()
+    setPagoModal((prev: any) => prev ? { ...prev, valor_plan: Number(nuevoValorPlan) } : prev)
+  }
+
   async function registrarPago() {
     if (!pagoModal) return
     if (!nuevoMonto || Number(nuevoMonto) <= 0) { setErrorPago('Ingresa un monto válido'); return }
-    if (!pagoModal.valor_plan && !nuevoValorPlan) { setErrorPago('Ingresa el valor del plan antes de continuar.'); return }
     setGuardandoPago(true); setErrorPago('')
-    if (nuevoValorPlan && Number(nuevoValorPlan) > 0)
-      await supabase.from('contratos').update({ valor_plan: Number(nuevoValorPlan) }).eq('id', pagoModal.id)
     const { error } = await supabase.from('pagos').insert({ contrato_id: pagoModal.id, monto: Number(nuevoMonto), metodo: nuevoMetodo, fecha: nuevoFecha })
     if (error) { setErrorPago('Error: ' + error.message); setGuardandoPago(false); return }
     setGuardandoPago(false); setPagoModal(null); setNuevoMonto(''); setNuevoValorPlan('')
@@ -255,6 +272,7 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
     setMensajeOk('Pago registrado'); setTimeout(() => setMensajeOk(''), 3000)
     await cargarDatos()
   }
+
 
   const filtrados = datos.filter(d => {
     if (filtroSede && d.sede_id !== filtroSede) return false
@@ -465,7 +483,7 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
                         </span>
                       </div>
                       {modoEdicion && (
-                        <button onClick={() => { setPagoModal(plan); setNuevoMonto(''); setNuevoMetodo(METODOS_PAGO[0]); setNuevoFecha(new Date().toISOString().split('T')[0]); setNuevoValorPlan(''); setErrorPago('') }}
+                        <button onClick={() => { setPagoModal(plan); setNuevoMonto(''); setNuevoMetodo(METODOS_PAGO[0]); setNuevoFecha(new Date().toISOString().split('T')[0]); setNuevoValorPlan(plan.valor_plan ? String(plan.valor_plan) : ''); setErrorPago('') }}
                           style={{ marginTop: '6px', padding: '7px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}>
                           + Registrar pago
                         </button>
@@ -582,7 +600,7 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
                             </span>
                           </div>
                           {modoEdicion && (
-                            <button onClick={() => { setPagoTallerModal(ins); setNuevoMonto(''); setNuevoMetodo(METODOS_PAGO[0]); setNuevoFecha(new Date().toISOString().split('T')[0]); setNuevoValorPlan(''); setErrorPago('') }}
+                            <button onClick={() => { setPagoTallerModal(ins); setNuevoMonto(''); setNuevoMetodo(METODOS_PAGO[0]); setNuevoFecha(new Date().toISOString().split('T')[0]); setNuevoValorPlan(ins.valor_plan ? String(ins.valor_plan) : ''); setErrorPago('') }}
                               style={{ marginTop: '6px', padding: '7px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}>
                               + Registrar pago
                             </button>
@@ -632,14 +650,18 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
             <p style={{ margin: '0 0 4px', fontSize: '17px', fontWeight: 800, color: '#111' }}>+ Registrar pago</p>
             <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#9ca3af' }}>{pagoTallerModal.cliente_nombre}</p>
             <p style={{ margin: '0 0 20px', fontSize: '13px', color: '#7c3aed', fontWeight: 600 }}>🎸 {pagoTallerModal.taller_nombre}</p>
-            {!pagoTallerModal.valor_plan && (
-              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
-                <p style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 700, color: '#dc2626' }}>⚠ Inscripción sin valor registrado</p>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>Valor de la inscripción ($) *</label>
-                <input type="number" value={nuevoValorPlan} onChange={e => setNuevoValorPlan(e.target.value)} placeholder="Ej: 120000" autoFocus
-                  style={{ width: '100%', padding: '11px 12px', border: '1.5px solid #fca5a5', borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box' as const }} />
+            <div style={{ background: pagoTallerModal.valor_plan ? '#f8fafc' : '#fef2f2', border: `1px solid ${pagoTallerModal.valor_plan ? '#e2e8f0' : '#fecaca'}`, borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
+              {!pagoTallerModal.valor_plan && <p style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 700, color: '#dc2626' }}>⚠ Inscripción sin valor registrado</p>}
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>Valor de la inscripción ($)</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input type="number" value={nuevoValorPlan} onChange={e => setNuevoValorPlan(e.target.value)} placeholder="Ej: 120000" autoFocus={!pagoTallerModal.valor_plan}
+                  style={{ flex: 1, padding: '11px 12px', border: `1.5px solid ${pagoTallerModal.valor_plan ? TEAL_MID : '#fca5a5'}`, borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box' as const }} />
+                <button onClick={guardarValorPlanTaller} disabled={guardandoPago || String(pagoTallerModal.valor_plan || '') === nuevoValorPlan}
+                  style={{ padding: '0 16px', background: TEAL, color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 700, opacity: (guardandoPago || String(pagoTallerModal.valor_plan || '') === nuevoValorPlan) ? 0.5 : 1 }}>
+                  Guardar
+                </button>
               </div>
-            )}
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {pagoTallerModal.valor_plan && pagoTallerModal.saldo > 0 && (
                 <button onClick={() => { setNuevoMonto(String(pagoTallerModal.saldo)); setNuevoMetodo('Ajuste (comisión pasarela)') }}
@@ -689,14 +711,18 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
           <div style={{ background: 'white', borderRadius: '16px', padding: '28px', maxWidth: '400px', width: '100%' }}>
             <p style={{ margin: '0 0 4px', fontSize: '17px', fontWeight: 800, color: '#111' }}>+ Registrar pago</p>
             <p style={{ margin: '0 0 20px', fontSize: '13px', color: '#9ca3af' }}>{pagoModal.cliente_nombre}</p>
-            {!pagoModal.valor_plan && (
-              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
-                <p style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 700, color: '#dc2626' }}>⚠ Plan sin valor registrado</p>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>Valor del plan ($) *</label>
-                <input type="number" value={nuevoValorPlan} onChange={e => setNuevoValorPlan(e.target.value)} placeholder="Ej: 250000" autoFocus
-                  style={{ width: '100%', padding: '11px 12px', border: '1.5px solid #fca5a5', borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box' as const }} />
+            <div style={{ background: pagoModal.valor_plan ? '#f8fafc' : '#fef2f2', border: `1px solid ${pagoModal.valor_plan ? '#e2e8f0' : '#fecaca'}`, borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
+              {!pagoModal.valor_plan && <p style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 700, color: '#dc2626' }}>⚠ Plan sin valor registrado</p>}
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#6b7280', marginBottom: '6px' }}>Valor del plan ($)</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input type="number" value={nuevoValorPlan} onChange={e => setNuevoValorPlan(e.target.value)} placeholder="Ej: 250000" autoFocus={!pagoModal.valor_plan}
+                  style={{ flex: 1, padding: '11px 12px', border: `1.5px solid ${pagoModal.valor_plan ? TEAL_MID : '#fca5a5'}`, borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box' as const }} />
+                <button onClick={guardarValorPlan} disabled={guardandoPago || String(pagoModal.valor_plan || '') === nuevoValorPlan}
+                  style={{ padding: '0 16px', background: TEAL, color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 700, opacity: (guardandoPago || String(pagoModal.valor_plan || '') === nuevoValorPlan) ? 0.5 : 1 }}>
+                  Guardar
+                </button>
               </div>
-            )}
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               {pagoModal.valor_plan && pagoModal.saldo > 0 && (
                 <button onClick={() => { setNuevoMonto(String(pagoModal.saldo)); setNuevoMetodo('Ajuste (comisión pasarela)') }}
