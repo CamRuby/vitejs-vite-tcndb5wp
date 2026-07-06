@@ -8,7 +8,7 @@ pdfMake.vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
-const METODOS_PAGO = ['Ideal Chicó', 'Ideal Rosales', 'Bancolombia Ruby', 'Davivienda Ruby', 'Wompi', 'Tarjeta Redeban', 'Efectivo']
+const METODOS_PAGO = ['Ideal Chicó', 'Ideal Rosales', 'Bancolombia Ruby', 'Davivienda Ruby', 'Wompi', 'Tarjeta Redeban', 'Efectivo', 'Ajuste (comisión pasarela)']
 
 const estiloInput = {
   width: '100%', padding: '10px 12px',
@@ -517,6 +517,12 @@ function ModalAbono({ plan, pagos, onRegistrar, onAnular, onCerrar, guardando, e
           )}
           <div style={{ padding: '16px 24px' }}>
             <p style={{ margin: '0 0 14px', fontSize: '13px', fontWeight: '600', color: '#555' }}>Nuevo abono</p>
+            {saldo !== null && saldo > 0 && (
+              <button onClick={() => setForm({ ...form, monto: String(saldo), metodo: 'Ajuste (comisión pasarela)', notas: 'Ajuste por comisión de pasarela de pago (ej: Wompi)' })}
+                style={{ width: '100%', marginBottom: '14px', padding: '8px', background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                ⚖️ Ajustar saldo pendiente (${saldo.toLocaleString()}) a $0
+              </button>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
               <div>
                 <label style={labelStyle}>Monto ($) *</label>
@@ -1190,10 +1196,9 @@ await cargarDatosCliente(cliente)
             .in('estado', ['programada', 'confirmada'])
             .gte('fecha', hoy)
         }
-        // Si era renovación explícita, archivar el plan anterior
-        if (esRenovacion && modalPlan?.id) {
-          await supabase.from('contratos').update({ estado: 'archivado' }).eq('id', modalPlan.id)
-        }
+        // Archivar automáticamente los planes completados de este cliente (sin importar si fue "Renovar" o "Crear plan")
+        await supabase.from('contratos').update({ estado: 'archivado' })
+          .eq('cliente_id', clienteSeleccionado.id).eq('estado', 'completado').neq('id', nuevoPlan.id)
       }
     }
     setModalPlan(null); setEsRenovacion(false)
