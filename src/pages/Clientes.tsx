@@ -601,6 +601,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [tallerError, setTallerError] = useState('')
   const [esRenovacion, setEsRenovacion] = useState(false)
   const [modalHistorial, setModalHistorial] = useState(false)
+  const [modalHistorialPagos, setModalHistorialPagos] = useState(false)
+  const [historialPagosData, setHistorialPagosData] = useState<any[]>([])
+  const [cargandoHistorialPagos, setCargandoHistorialPagos] = useState(false)
   const [confirmarBorrar, setConfirmarBorrar] = useState(false)
   const [errorBorrar, setErrorBorrar] = useState('')
   const [borrando, setBorrando] = useState(false)
@@ -919,6 +922,39 @@ await cargarDatosCliente(cliente)
     await supabase.from('taller_inscripciones').update({ estado: 'archivado' }).eq('id', inscripcion.id)
     await cargarDatosCliente(clienteSeleccionado)
   }
+
+  async function abrirHistorialPagos() {
+    if (!clienteSeleccionado) return
+    setModalHistorialPagos(true)
+    setCargandoHistorialPagos(true)
+    const [{ data: contratosCliente }, { data: inscripcionesCliente }] = await Promise.all([
+      supabase.from('contratos').select('id, fecha_inicio, instrumentos(nombre), sedes(nombre)').eq('cliente_id', clienteSeleccionado.id),
+      supabase.from('taller_inscripciones').select('id, fecha_inicio, talleres(nombre, salones(sedes(nombre)))').eq('cliente_id', clienteSeleccionado.id),
+    ])
+    const idsContratos = (contratosCliente || []).map((c: any) => c.id)
+    const idsInscripciones = (inscripcionesCliente || []).map((i: any) => i.id)
+    const [{ data: pagosPlan }, { data: pagosTaller }] = await Promise.all([
+      idsContratos.length ? supabase.from('pagos').select('id, fecha, monto, metodo, contrato_id').in('contrato_id', idsContratos) : Promise.resolve({ data: [] }),
+      idsInscripciones.length ? supabase.from('pagos').select('id, fecha, monto, metodo, inscripcion_id').in('inscripcion_id', idsInscripciones) : Promise.resolve({ data: [] }),
+    ])
+    const mapContratos: Record<string, any> = {}
+    ;(contratosCliente || []).forEach((c: any) => { mapContratos[c.id] = c })
+    const mapInscripciones: Record<string, any> = {}
+    ;(inscripcionesCliente || []).forEach((i: any) => { mapInscripciones[i.id] = i })
+    const combinados = [
+      ...(pagosPlan || []).map((p: any) => {
+        const c = mapContratos[p.contrato_id]
+        return { ...p, concepto: c?.instrumentos?.nombre || 'Plan', sede: c?.sedes?.nombre || '—' }
+      }),
+      ...(pagosTaller || []).map((p: any) => {
+        const i = mapInscripciones[p.inscripcion_id]
+        return { ...p, concepto: i?.talleres?.nombre || 'Taller', sede: i?.talleres?.salones?.sedes?.nombre || '—' }
+      }),
+    ].sort((a, b) => b.fecha.localeCompare(a.fecha))
+    setHistorialPagosData(combinados)
+    setCargandoHistorialPagos(false)
+  }
+
 
   async function generarHistorialClases() {
     const contrIds = planes.map((p: any) => p.id)
@@ -1577,6 +1613,7 @@ await cargarDatosCliente(cliente)
               <h3 style={{ margin: 0, fontSize: '20px', color: '#1a1a1a' }}>Planes activos <span style={{ color: '#aaa', fontWeight: '400', fontSize: '15px' }}>({planesActivos.length})</span></h3>
               {planesArchivados.length > 0 && <button onClick={() => setModalHistorial(true)} style={{ padding: '5px 14px', background: '#f1f5f9', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>📋 Ver historial ({planesArchivados.length} archivados)</button>}
               <button onClick={generarHistorialClases} style={{ padding: '5px 14px', background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>📄 Historial de clases</button>
+              <button onClick={abrirHistorialPagos} style={{ padding: '5px 14px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '500' }}>💰 Historial de pagos</button>
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button onClick={() => { setEsRenovacion(false); setModalPlan({}) }} style={{ padding: '8px 18px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>+ Crear plan</button>
@@ -2086,6 +2123,40 @@ await cargarDatosCliente(cliente)
       )}
 
       {modalHistorial && <ModalHistorialPlanes planes={planesArchivados} onCerrar={() => setModalHistorial(false)} onVerClases={cargarClasesArchivadas} clasesArchivadasMap={clasesArchivadasPlan} planExpandido={planArchivadoExpandido} />}
+
+      {modalHistorialPagos && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '24px' }}>
+          <div style={{ background: 'white', borderRadius: '16px', padding: '24px', maxWidth: '600px', width: '100%', maxHeight: '80vh', overflowY: 'auto' as const }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <p style={{ margin: 0, fontSize: '17px', fontWeight: 800, color: '#111' }}>💰 Historial de pagos</p>
+              <button onClick={() => setModalHistorialPagos(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#9ca3af' }}>×</button>
+            </div>
+            {cargandoHistorialPagos && <p style={{ textAlign: 'center', color: '#9ca3af', padding: '30px' }}>Cargando...</p>}
+            {!cargandoHistorialPagos && historialPagosData.length === 0 && (
+              <p style={{ textAlign: 'center', color: '#9ca3af', padding: '30px' }}>Este cliente no tiene pagos registrados.</p>
+            )}
+            {!cargandoHistorialPagos && historialPagosData.length > 0 && (
+              <>
+                <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: TEAL_DARK }}>Total pagado (histórico)</span>
+                  <span style={{ fontSize: '15px', fontWeight: 800, color: TEAL_DARK }}>
+                    ${historialPagosData.reduce((s, p) => s + Number(p.monto), 0).toLocaleString('es-CO')}
+                  </span>
+                </div>
+                {historialPagosData.map((p: any) => (
+                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 4px', borderBottom: '1px solid #f1f5f9' }}>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#374151' }}>{p.fecha}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#9ca3af' }}>{p.concepto} · {p.sede} · {p.metodo}</p>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#166534' }}>${Number(p.monto).toLocaleString('es-CO')}</p>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Modal de clase: ver resumen + observaciones + opción cortesía ── */}
       {modalCortesia && (
