@@ -93,11 +93,14 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
   const [confirmarBorrarAbono, setConfirmarBorrarAbono] = useState<{ abonoId: string; planId: string } | null>(null)
   const [borrandoAbono, setBorrandoAbono] = useState(false)
   // Pestaña de talleres
-  const [pestaña, setPestaña] = useState<'planes' | 'talleres'>('planes')
+  const [pestaña, setPestaña] = useState<'planes' | 'talleres' | 'flujo_caja'>('planes')
   const [datosTalleres, setDatosTalleres] = useState<TallerInscripcion[]>([])
   const [filtroTaller, setFiltroTaller] = useState('')
   const [cargandoTalleres, setCargandoTalleres] = useState(false)
   const [pagoTallerModal, setPagoTallerModal] = useState<TallerInscripcion | null>(null)
+  // Flujo de caja (pagos hechos en el mes, sin importar cuándo empezó el plan)
+  const [datosFlujoCaja, setDatosFlujoCaja] = useState<any[]>([])
+  const [cargandoFlujoCaja, setCargandoFlujoCaja] = useState(false)
 
   useEffect(() => { cargarSedes() }, [])
   useEffect(() => { cargarDatos() }, [mes])
@@ -150,6 +153,33 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
   }
 
   useEffect(() => { if (pestaña === 'talleres') cargarDatosTalleres() }, [mes, pestaña])
+  useEffect(() => { if (pestaña === 'flujo_caja') cargarFlujoCaja() }, [mes, pestaña])
+
+  async function cargarFlujoCaja() {
+    setCargandoFlujoCaja(true)
+    try {
+      const mesInicio = `${mes}-01`
+      const [anio, mesNum] = mes.split('-')
+      const ultimoDia = new Date(parseInt(anio), parseInt(mesNum), 0).getDate()
+      const mesFin = `${mes}-${String(ultimoDia).padStart(2, '0')}`
+      const { data: pagos, error: err } = await supabase.from('pagos')
+        .select(`id, fecha, monto, metodo, contrato_id, inscripcion_id,
+          contratos(fecha_inicio, clientes(nombre)),
+          taller_inscripciones(fecha_inicio, clientes(nombre), talleres(nombre))`)
+        .gte('fecha', mesInicio).lte('fecha', mesFin)
+        .order('fecha', { ascending: true })
+      if (err) throw err
+      setDatosFlujoCaja((pagos || []).map((p: any) => ({
+        id: p.id, fecha: p.fecha, monto: Number(p.monto), metodo: p.metodo || '—',
+        cliente_nombre: p.contratos?.clientes?.nombre || p.taller_inscripciones?.clientes?.nombre || '—',
+        concepto: p.contrato_id ? 'Plan' : 'Taller',
+        detalle: p.taller_inscripciones?.talleres?.nombre || null,
+        mes_inicio_plan: (p.contratos?.fecha_inicio || p.taller_inscripciones?.fecha_inicio || '').substring(0, 7),
+      })))
+    } catch { setError('No se pudieron cargar los datos de flujo de caja.') }
+    finally { setCargandoFlujoCaja(false) }
+  }
+
 
   async function cargarDatosTalleres() {
     setCargandoTalleres(true)
@@ -316,7 +346,9 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
           <button onClick={onVolver} style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>← Reportes</button>
           <div>
             <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: '0 0 2px' }}>💳 Control de pagos</h2>
-            <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>{pestaña === 'planes' ? `Planes iniciados en ${labelMes}` : `Talleres con inscripción en ${labelMes}`}</p>
+            <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>
+              {pestaña === 'planes' ? `Planes iniciados en ${labelMes}` : pestaña === 'talleres' ? `Talleres con inscripción en ${labelMes}` : `Pagos realizados en ${labelMes} (sin importar cuándo inició el plan)`}
+            </p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -330,10 +362,10 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
 
       {/* Pestañas */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '16px', borderBottom: `2px solid ${TEAL_MID}`, paddingBottom: '0' }}>
-        {(['planes', 'talleres'] as const).map(p => (
+        {(['planes', 'talleres', 'flujo_caja'] as const).map(p => (
           <button key={p} onClick={() => setPestaña(p)}
             style={{ padding: '8px 20px', background: pestaña === p ? TEAL : 'white', color: pestaña === p ? 'white' : TEAL_DARK, border: `1.5px solid ${pestaña === p ? TEAL : TEAL_MID}`, borderBottom: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer', fontSize: '13px', fontWeight: 700 }}>
-            {p === 'planes' ? '📋 Planes' : '🎸 Talleres'}
+            {p === 'planes' ? '📋 Planes' : p === 'talleres' ? '🎸 Talleres' : '💰 Ingresos del mes'}
           </button>
         ))}
       </div>
@@ -342,11 +374,13 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
       <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
         <input type="month" value={mes} onChange={e => setMes(e.target.value)}
           style={{ padding: '7px 12px', borderRadius: '10px', border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', fontWeight: 600, color: TEAL_DARK, outline: 'none', background: TEAL_LIGHT }} />
-        <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)}
-          style={{ padding: '7px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${filtroSede ? TEAL : TEAL_MID}`, background: filtroSede ? TEAL_LIGHT : 'white', color: filtroSede ? TEAL_DARK : '#475569', outline: 'none', cursor: 'pointer' }}>
-          <option value="">🏢 Todas las sedes</option>
-          {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-        </select>
+        {pestaña !== 'flujo_caja' && (
+          <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)}
+            style={{ padding: '7px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${filtroSede ? TEAL : TEAL_MID}`, background: filtroSede ? TEAL_LIGHT : 'white', color: filtroSede ? TEAL_DARK : '#475569', outline: 'none', cursor: 'pointer' }}>
+            <option value="">🏢 Todas las sedes</option>
+            {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+          </select>
+        )}
         <select value={filtroMetodo} onChange={e => setFiltroMetodo(e.target.value)}
           style={{ padding: '7px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${filtroMetodo ? TEAL : TEAL_MID}`, background: filtroMetodo ? TEAL_LIGHT : 'white', color: filtroMetodo ? TEAL_DARK : '#475569', outline: 'none', cursor: 'pointer' }}>
           <option value="">💳 Todos los métodos</option>
@@ -357,6 +391,7 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
       </div>
 
       {/* Filtros estado pago */}
+      {pestaña !== 'flujo_caja' && (
       <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
         {([
           { k: 'todos',    l: 'Todos',           color: TEAL,      n: conteos.todos },
@@ -370,6 +405,7 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
           </button>
         ))}
       </div>
+      )}
 
       {/* Totales — muestran planes o talleres según la pestaña activa */}
       {pestaña === 'planes' && !cargando && filtrados.length > 0 && (
@@ -643,7 +679,58 @@ function ReporteControlPagos({ onVolver }: { onVolver: () => void }) {
         </>)
       })()}
 
-      {/* Modal registrar pago taller */}
+      {pestaña === 'flujo_caja' && (() => {
+        const filtradosFlujo = datosFlujoCaja.filter(p => {
+          if (filtroMetodo && p.metodo !== filtroMetodo) return false
+          if (busqueda && !p.cliente_nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
+          return true
+        })
+        const totalMes = filtradosFlujo.reduce((s, p) => s + p.monto, 0)
+        return (<>
+          <div style={{ background: 'white', border: `1.5px solid ${TEAL}`, borderRadius: '12px', padding: '14px 20px', marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '14px', fontWeight: 700, color: '#374151' }}>Total recibido en {labelMes}</span>
+            <span style={{ fontSize: '22px', fontWeight: 800, color: TEAL_DARK }}>${totalMes.toLocaleString('es-CO')}</span>
+          </div>
+          {cargandoFlujoCaja && <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>Cargando...</div>}
+          {!cargandoFlujoCaja && filtradosFlujo.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
+              No se registraron pagos en {labelMes}.
+            </div>
+          )}
+          {!cargandoFlujoCaja && filtradosFlujo.length > 0 && (
+            <div style={{ background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}`, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: TEAL_LIGHT }}>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '12px', color: TEAL_DARK }}>Fecha del pago</th>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '12px', color: TEAL_DARK }}>Cliente</th>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '12px', color: TEAL_DARK }}>Concepto</th>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '12px', color: TEAL_DARK }}>Método</th>
+                    <th style={{ textAlign: 'left', padding: '10px 14px', fontSize: '12px', color: TEAL_DARK }}>Plan/taller inició en</th>
+                    <th style={{ textAlign: 'right', padding: '10px 14px', fontSize: '12px', color: TEAL_DARK }}>Monto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtradosFlujo.map(p => (
+                    <tr key={p.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '10px 14px', fontSize: '13px' }}>{p.fecha}</td>
+                      <td style={{ padding: '10px 14px', fontSize: '13px', fontWeight: 600 }}>{p.cliente_nombre}</td>
+                      <td style={{ padding: '10px 14px', fontSize: '13px' }}>{p.concepto}{p.detalle ? ` · ${p.detalle}` : ''}</td>
+                      <td style={{ padding: '10px 14px', fontSize: '13px' }}>{p.metodo}</td>
+                      <td style={{ padding: '10px 14px', fontSize: '12px', color: p.mes_inicio_plan !== mes ? '#d97706' : '#9ca3af' }}>
+                        {p.mes_inicio_plan}{p.mes_inicio_plan !== mes ? ' (otro mes)' : ''}
+                      </td>
+                      <td style={{ padding: '10px 14px', fontSize: '13px', textAlign: 'right', fontWeight: 700, color: '#166534' }}>${p.monto.toLocaleString('es-CO')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>)
+      })()}
+
+
       {pagoTallerModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '24px' }}>
           <div style={{ background: 'white', borderRadius: '16px', padding: '28px', maxWidth: '400px', width: '100%' }}>
