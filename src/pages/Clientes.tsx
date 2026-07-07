@@ -6,6 +6,7 @@ import pdfFonts from 'pdfmake/build/vfs_fonts'
 pdfMake.vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs
 
 const TEAL = '#1a8a8a'
+const TEAL_DARK = '#146f6f'
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
 const METODOS_PAGO = ['Ideal Chicó', 'Ideal Rosales', 'Bancolombia Ruby', 'Davivienda Ruby', 'Wompi', 'Tarjeta Redeban', 'Efectivo', 'Ajuste (comisión pasarela)']
