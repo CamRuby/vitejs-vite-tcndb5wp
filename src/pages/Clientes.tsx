@@ -2144,28 +2144,47 @@ await cargarDatosCliente(cliente)
             {!cargandoHistorialPagos && historialPagosData.length === 0 && (
               <p style={{ textAlign: 'center', color: '#9ca3af', padding: '30px' }}>Este cliente no tiene pagos registrados.</p>
             )}
-            {!cargandoHistorialPagos && historialPagosData.length > 0 && (
-              <>
-                <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: TEAL_DARK }}>Total pagado (histórico)</span>
-                  <span style={{ fontSize: '15px', fontWeight: 800, color: TEAL_DARK }}>
-                    ${historialPagosData.reduce((s, p) => s + Number(p.monto), 0).toLocaleString('es-CO')}
-                  </span>
-                </div>
-                {historialPagosData.map((p: any) => (
-                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 4px', borderBottom: '1px solid #f1f5f9' }}>
-                    <div>
-                      <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#374151' }}>{p.fecha}</p>
-                      <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#9ca3af' }}>{p.concepto} · {p.sede} · {p.metodo}</p>
-                      <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#9ca3af' }}>
-                        Plan: {p.plan_fecha_inicio || '—'} → {p.plan_activo ? <span style={{ color: '#16a34a', fontWeight: 700 }}>Activo</span> : (p.plan_fecha_fin || '—')}
-                      </p>
-                    </div>
-                    <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#166534' }}>${Number(p.monto).toLocaleString('es-CO')}</p>
+            {!cargandoHistorialPagos && historialPagosData.length > 0 && (() => {
+              const grupos: Record<string, any> = {}
+              historialPagosData.forEach((p: any) => {
+                const key = p.contrato_id || p.inscripcion_id
+                if (!grupos[key]) grupos[key] = { ...p, pagos: [] }
+                grupos[key].pagos.push(p)
+              })
+              const listaGrupos = Object.values(grupos).sort((a: any, b: any) => (b.plan_fecha_inicio || '').localeCompare(a.plan_fecha_inicio || ''))
+              return (
+                <>
+                  <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: TEAL_DARK }}>Total pagado (histórico)</span>
+                    <span style={{ fontSize: '15px', fontWeight: 800, color: TEAL_DARK }}>
+                      ${historialPagosData.reduce((s, p) => s + Number(p.monto), 0).toLocaleString('es-CO')}
+                    </span>
                   </div>
-                ))}
-              </>
-            )}
+                  {listaGrupos.map((g: any) => {
+                    const subtotal = g.pagos.reduce((s: number, p: any) => s + Number(p.monto), 0)
+                    return (
+                      <div key={g.contrato_id || g.inscripcion_id} style={{ border: '1px solid #e5e7eb', borderRadius: '10px', marginBottom: '12px', overflow: 'hidden' }}>
+                        <div style={{ background: '#f8fafc', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#374151' }}>{g.concepto} · {g.sede}</p>
+                            <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#9ca3af' }}>
+                              {g.plan_fecha_inicio || '—'} → {g.plan_activo ? <span style={{ color: '#16a34a', fontWeight: 700 }}>Activo</span> : (g.plan_fecha_fin || '—')}
+                            </p>
+                          </div>
+                          <p style={{ margin: 0, fontSize: '14px', fontWeight: 800, color: '#166534' }}>${subtotal.toLocaleString('es-CO')}</p>
+                        </div>
+                        {g.pagos.map((p: any) => (
+                          <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 14px', borderTop: '1px solid #f1f5f9' }}>
+                            <p style={{ margin: 0, fontSize: '12px', color: '#6b7280' }}>{p.fecha} · {p.metodo}</p>
+                            <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#374151' }}>${Number(p.monto).toLocaleString('es-CO')}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </>
+              )
+            })()}
           </div>
         </div>
       )}
