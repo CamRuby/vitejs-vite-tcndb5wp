@@ -929,8 +929,8 @@ await cargarDatosCliente(cliente)
     setModalHistorialPagos(true)
     setCargandoHistorialPagos(true)
     const [{ data: contratosCliente }, { data: inscripcionesCliente }] = await Promise.all([
-      supabase.from('contratos').select('id, fecha_inicio, instrumentos(nombre), sedes(nombre)').eq('cliente_id', clienteSeleccionado.id),
-      supabase.from('taller_inscripciones').select('id, fecha_inicio, talleres(nombre, salones(sedes(nombre)))').eq('cliente_id', clienteSeleccionado.id),
+      supabase.from('contratos').select('id, fecha_inicio, fecha_fin, estado, instrumentos(nombre), sedes(nombre)').eq('cliente_id', clienteSeleccionado.id),
+      supabase.from('taller_inscripciones').select('id, fecha_inicio, fecha_fin, estado, talleres(nombre, salones(sedes(nombre)))').eq('cliente_id', clienteSeleccionado.id),
     ])
     const idsContratos = (contratosCliente || []).map((c: any) => c.id)
     const idsInscripciones = (inscripcionesCliente || []).map((i: any) => i.id)
@@ -945,11 +945,19 @@ await cargarDatosCliente(cliente)
     const combinados = [
       ...(pagosPlan || []).map((p: any) => {
         const c = mapContratos[p.contrato_id]
-        return { ...p, concepto: c?.instrumentos?.nombre || 'Plan', sede: c?.sedes?.nombre || '—' }
+        return {
+          ...p, concepto: c?.instrumentos?.nombre || 'Plan', sede: c?.sedes?.nombre || '—',
+          plan_fecha_inicio: c?.fecha_inicio || null, plan_fecha_fin: c?.fecha_fin || null,
+          plan_activo: c?.estado === 'activo',
+        }
       }),
       ...(pagosTaller || []).map((p: any) => {
         const i = mapInscripciones[p.inscripcion_id]
-        return { ...p, concepto: i?.talleres?.nombre || 'Taller', sede: i?.talleres?.salones?.sedes?.nombre || '—' }
+        return {
+          ...p, concepto: i?.talleres?.nombre || 'Taller', sede: i?.talleres?.salones?.sedes?.nombre || '—',
+          plan_fecha_inicio: i?.fecha_inicio || null, plan_fecha_fin: i?.fecha_fin || null,
+          plan_activo: i?.estado === 'activo',
+        }
       }),
     ].sort((a, b) => b.fecha.localeCompare(a.fecha))
     setHistorialPagosData(combinados)
@@ -2149,6 +2157,9 @@ await cargarDatosCliente(cliente)
                     <div>
                       <p style={{ margin: 0, fontSize: '13px', fontWeight: 600, color: '#374151' }}>{p.fecha}</p>
                       <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#9ca3af' }}>{p.concepto} · {p.sede} · {p.metodo}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#9ca3af' }}>
+                        Plan: {p.plan_fecha_inicio || '—'} → {p.plan_activo ? <span style={{ color: '#16a34a', fontWeight: 700 }}>Activo</span> : (p.plan_fecha_fin || '—')}
+                      </p>
                     </div>
                     <p style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#166534' }}>${Number(p.monto).toLocaleString('es-CO')}</p>
                   </div>
