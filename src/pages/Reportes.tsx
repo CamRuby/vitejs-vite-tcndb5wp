@@ -1158,6 +1158,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
   const [mes, setMes] = useState(mesActual())
   const [sedesSeleccionadas, setSedesSeleccionadas] = useState<string[]>([])
   const [generandoPdf, setGenerandoPdf] = useState<string | null>(null)
+  const [inasistenciasProfesor, setInasistenciasProfesor] = useState<any[]>([])
 
   function toggleSede(id: string) {
     setSedesSeleccionadas(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -1201,6 +1202,15 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
         supabase.from('profesor_apoyo_concierto').select('profesor_id, sede_id, valor').eq('mes', mes),
       ])
       if (errP || errT || errC || errTa || errE || errAp) throw (errP || errT || errC || errTa || errE || errAp)
+
+      // Inasistencias del PROFESOR (canceló él, tarde) — el reporte principal las excluye
+      // porque no se pagan, pero igual sirve verlas aquí para control administrativo.
+      const { data: inasistProf } = await supabase.from('clases')
+        .select('id, fecha, hora, profesor_id, observaciones_admin, contratos(clientes(nombre, nombres, apellidos)), profesores(nombre)')
+        .eq('estado', 'cancelada').eq('cancelado_por_academia', true).eq('cancelado_tarde', true)
+        .gte('fecha', fechaInicio).lte('fecha', fechaFin)
+        .order('fecha', { ascending: true })
+      setInasistenciasProfesor(inasistProf || [])
 
       // Talleres: solo sesiones efectivamente dadas (la app del profesor nunca incluye
       // sesiones de taller canceladas en la cuenta de cobro).
@@ -1575,6 +1585,38 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                     <td style={tdS}>{nombreClienteH(c)}</td>
                     <td style={{ ...tdS, fontWeight: 700, color: '#166534' }}>${Number(c.honorario_valor).toLocaleString('es-CO')}</td>
                     <td style={tdS}>{c.etiqueta}</td>
+                    <td style={{ ...tdS, color: c.observaciones_admin ? '#1e293b' : '#9ca3af', fontStyle: c.observaciones_admin ? 'normal' : 'italic' }}>
+                      {c.observaciones_admin || 'Sin observación'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+
+      {!cargando && inasistenciasProfesor.length > 0 && (
+        <details style={{ marginBottom: '20px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', padding: '4px 16px' }}>
+          <summary style={{ cursor: 'pointer', padding: '10px 0', fontSize: '13px', fontWeight: 700, color: '#991b1b' }}>
+            🚫 Inasistencias del profesor en {labelMes} ({inasistenciasProfesor.length}) — canceló él, no se paga
+          </summary>
+          <div style={{ overflowX: 'auto' as const, paddingBottom: '12px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={thS}>Fecha</th>
+                  <th style={thS}>Profesor</th>
+                  <th style={thS}>Cliente</th>
+                  <th style={thS}>Observación administrativa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inasistenciasProfesor.map((c: any) => (
+                  <tr key={c.id}>
+                    <td style={tdS}>{c.fecha}</td>
+                    <td style={tdS}>{c.profesores?.nombre || '—'}</td>
+                    <td style={tdS}>{nombreClienteH(c)}</td>
                     <td style={{ ...tdS, color: c.observaciones_admin ? '#1e293b' : '#9ca3af', fontStyle: c.observaciones_admin ? 'normal' : 'italic' }}>
                       {c.observaciones_admin || 'Sin observación'}
                     </td>
