@@ -1192,7 +1192,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
         supabase.from('profesores').select('id, nombre, cc, ciudad, ciudad_cc, banco, tipo_cuenta, numero_cuenta'),
         supabase.from('profesor_tarifas').select('profesor_id, modalidad, duracion_min, taller_grupal, valor').eq('taller_grupal', false),
         supabase.from('clases_con_numero')
-          .select('id, fecha, hora, duracion_min, estado, modalidad, cancelado_por_academia, es_cortesia, observaciones, contrato_id, honorario_valor, profesor_id, contratos(cliente_id, clientes(nombre, nombres, apellidos), total_clases), salones(sede_id, sedes(nombre))')
+          .select('id, fecha, hora, duracion_min, estado, modalidad, cancelado_por_academia, es_cortesia, observaciones, observaciones_admin, contrato_id, honorario_valor, profesor_id, contratos(cliente_id, clientes(nombre, nombres, apellidos), total_clases), salones(sede_id, sedes(nombre))')
           .gte('fecha', fechaInicio).lte('fecha', fechaFin)
           .in('estado', ['dada', 'cancelada'])
           .or('estado.eq.dada,cancelado_por_academia.eq.false'),
@@ -1509,6 +1509,26 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
 
   // Mismo cálculo de Pagado/Saldo para cada sede, basado en el estado del profesor
   // (aprobado/pagado es por profesor, no por sede).
+  // Inasistencias del cliente donde ya se decidió pagarle algo al profesor (100%, 50%, o un valor editado a mano).
+  // Sirve para revisar rápido antes de pagar las cuentas de cobro del mes.
+  const inasistenciasPagadas = filtrados.flatMap(g => {
+    const tarifasProf = tarifas.filter((t: any) => t.profesor_id === g.profesor_id)
+    return g.detalle
+      .filter((c: any) => !c.esTaller && c.estado === 'cancelada' && !c.cancelado_por_academia && c.honorario_valor !== null && c.honorario_valor !== undefined)
+      .map((c: any) => {
+        const modalidad = (c.modalidad || 'presencial').toLowerCase()
+        const duracion = Number(c.duracion_min)
+        let tarifa = tarifasProf.find((t: any) => t.modalidad?.toLowerCase() === modalidad && Number(t.duracion_min) === duracion)
+        if (!tarifa && (modalidad === 'presencial' || modalidad === 'virtual'))
+          tarifa = tarifasProf.find((t: any) => (t.modalidad?.toLowerCase() === 'presencial' || t.modalidad?.toLowerCase() === 'virtual') && Number(t.duracion_min) === duracion)
+        const valorNormal = tarifa ? Number(tarifa.valor) : 0
+        const pagado = Number(c.honorario_valor)
+        const pct = valorNormal > 0 ? Math.round((pagado / valorNormal) * 100) : null
+        const etiqueta = pct === 100 ? '100%' : pct === 50 ? '50%' : pct !== null ? `${pct}% (editado)` : 'Editado'
+        return { ...c, profesor_nombre: g.nombre, etiqueta, valorNormal }
+      })
+  }).sort((a, b) => a.fecha.localeCompare(b.fecha))
+
   function statsSede(sedeId: string) {
     const base = totalesPorSede[sedeId] || { honorario: 0, clases: 0, estudiantes: 0 }
     const pagado = profesoresData.reduce((s, g) => s + (g.pagado ? (g.porSede[sedeId]?.honorario || 0) : 0), 0)
@@ -1529,6 +1549,42 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
         <input type="month" value={mes} onChange={e => setMes(e.target.value)}
           style={{ padding: '7px 12px', borderRadius: '10px', border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', fontWeight: 600, color: TEAL_DARK, outline: 'none', background: TEAL_LIGHT }} />
       </div>
+
+      {!cargando && inasistenciasPagadas.length > 0 && (
+        <details style={{ marginBottom: '20px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '4px 16px' }}>
+          <summary style={{ cursor: 'pointer', padding: '10px 0', fontSize: '13px', fontWeight: 700, color: '#92400e' }}>
+            ⚠️ Inasistencias con honorario pagado en {labelMes} ({inasistenciasPagadas.length}) — revisar antes de pagar
+          </summary>
+          <div style={{ overflowX: 'auto' as const, paddingBottom: '12px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={thS}>Fecha</th>
+                  <th style={thS}>Profesor</th>
+                  <th style={thS}>Cliente</th>
+                  <th style={thS}>Pagado</th>
+                  <th style={thS}>%</th>
+                  <th style={thS}>Observación administrativa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inasistenciasPagadas.map((c: any) => (
+                  <tr key={c.id}>
+                    <td style={tdS}>{c.fecha}</td>
+                    <td style={tdS}>{c.profesor_nombre}</td>
+                    <td style={tdS}>{nombreClienteH(c)}</td>
+                    <td style={{ ...tdS, fontWeight: 700, color: '#166534' }}>${Number(c.honorario_valor).toLocaleString('es-CO')}</td>
+                    <td style={tdS}>{c.etiqueta}</td>
+                    <td style={{ ...tdS, color: c.observaciones_admin ? '#1e293b' : '#9ca3af', fontStyle: c.observaciones_admin ? 'normal' : 'italic' }}>
+                      {c.observaciones_admin || 'Sin observación'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
 
       {/* Totales por sede + Todas las sedes: siempre los totales reales, sin importar el filtro */}
       {!cargando && sedes.length > 0 && (
