@@ -39,6 +39,7 @@ function mesActual() {
 }
 
 const REPORTES = [
+  { id: 'utilidad_planes', icono: '💹', titulo: 'Utilidad por plan', descripcion: 'Ingreso por clases dadas menos honorario del profesor, por plan y sede' },
   { id: 'control_pagos', icono: '💳', titulo: 'Control de pagos', descripcion: 'Seguimiento mensual de pagos, abonos y saldos por plan' },
   { id: 'clases_tomadas', icono: '📋', titulo: 'Clases tomadas por plan', descripcion: 'Planes activos con conteo de clases y verificación WhatsApp por sede' },
   { id: 'honorarios_profesores', icono: '👩‍🏫', titulo: 'Honorarios mensuales profesores', descripcion: 'Clases, tiempo y honorarios por profesor y sede, con totales mensuales' },
@@ -47,6 +48,7 @@ const REPORTES = [
 export default function Reportes({ rol }: { rol?: string }) {
   const [reporteActivo, setReporteActivo] = useState<string | null>(null)
 
+  if (reporteActivo === 'utilidad_planes') return <ReporteUtilidadPlanes onVolver={() => setReporteActivo(null)} />
   if (reporteActivo === 'control_pagos') return <ReporteControlPagos onVolver={() => setReporteActivo(null)} />
   if (reporteActivo === 'clases_tomadas') return <ReporteClasesTomadasPlaceholder onVolver={() => setReporteActivo(null)} />
   if (reporteActivo === 'honorarios_profesores') return <ReporteHonorariosProfesores onVolver={() => setReporteActivo(null)} />
@@ -1766,6 +1768,188 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                       {generandoPdf === g.profesor_id ? '...' : '📄 PDF'}
                     </button>
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReporteUtilidadPlanes({ onVolver }: { onVolver: () => void }) {
+  const [mes, setMes] = useState(mesActual())
+  const [sedes, setSedes] = useState<Sede[]>([])
+  const [sedesSeleccionadas, setSedesSeleccionadas] = useState<string[]>([])
+  const [datos, setDatos] = useState<any[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  function toggleSede(id: string) {
+    setSedesSeleccionadas(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  useEffect(() => { cargarSedes() }, [])
+  useEffect(() => { cargarDatos() }, [mes])
+
+  async function cargarSedes() {
+    const { data } = await supabase.from('sedes').select('id, nombre').order('nombre')
+    setSedes(data || [])
+  }
+
+  async function cargarDatos() {
+    setCargando(true); setError(null)
+    try {
+      const fechaInicio = `${mes}-01`
+      const [anio, mesNum] = mes.split('-')
+      const ultimoDia = new Date(parseInt(anio), parseInt(mesNum), 0).getDate()
+      const fechaFin = `${mes}-${String(ultimoDia).padStart(2, '0')}`
+
+      const [{ data: clases, error: errC }, { data: tarifasData, error: errT }] = await Promise.all([
+        supabase.from('clases')
+          .select('id, contrato_id, profesor_id, duracion_min, modalidad, estado, es_cortesia, honorario_valor, contratos(id, valor_plan, total_clases, sede_id, sedes(nombre), clientes(nombre), instrumentos(nombre), profesores(nombre))')
+          .eq('estado', 'dada').eq('es_cortesia', false)
+          .gte('fecha', fechaInicio).lte('fecha', fechaFin),
+        supabase.from('profesor_tarifas').select('profesor_id, modalidad, duracion_min, valor').eq('taller_grupal', false),
+      ])
+      if (errC || errT) throw (errC || errT)
+
+      function tarifaDe(profesorId: string, modalidad: string, duracion: number) {
+        const tarifasProf = (tarifasData || []).filter((t: any) => t.profesor_id === profesorId)
+        const mod = (modalidad || 'presencial').toLowerCase()
+        let tarifa = tarifasProf.find((t: any) => t.modalidad?.toLowerCase() === mod && Number(t.duracion_min) === duracion)
+        if (!tarifa && (mod === 'presencial' || mod === 'virtual'))
+          tarifa = tarifasProf.find((t: any) => (t.modalidad?.toLowerCase() === 'presencial' || t.modalidad?.toLowerCase() === 'virtual') && Number(t.duracion_min) === duracion)
+        return tarifa ? Number(tarifa.valor) : 0
+      }
+
+      const porPlan: Record<string, any> = {}
+      ;(clases || []).forEach((c: any) => {
+        const co = c.contratos
+        if (!co) return
+        if (!porPlan[co.id]) {
+          porPlan[co.id] = {
+            contrato_id: co.id, cliente: co.clientes?.nombre || '—', instrumento: co.instrumentos?.nombre || '—',
+            profesor: co.profesores?.nombre || '—', sede_id: co.sede_id, sede_nombre: co.sedes?.nombre || '—',
+            valorPlan: Number(co.valor_plan) || 0, totalClases: Number(co.total_clases) || 0,
+            clasesDadas: 0, ingreso: 0, honorario: 0,
+          }
+        }
+        const g = porPlan[co.id]
+        g.clasesDadas += 1
+        const valorPorClase = g.totalClases > 0 ? g.valorPlan / g.totalClases : 0
+        g.ingreso += valorPorClase
+        const hon = c.honorario_valor !== null && c.honorario_valor !== undefined
+          ? Number(c.honorario_valor)
+          : tarifaDe(c.profesor_id, c.modalidad, Number(c.duracion_min))
+        g.honorario += hon
+      })
+
+      const lista = Object.values(porPlan).map((g: any) => ({ ...g, utilidad: g.ingreso - g.honorario }))
+      setDatos(lista)
+    } catch {
+      setError('No se pudieron cargar los datos de utilidad por plan.')
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  const filtrados = (sedesSeleccionadas.length === 0 ? datos : datos.filter(d => sedesSeleccionadas.includes(d.sede_id)))
+    .sort((a, b) => b.utilidad - a.utilidad)
+
+  const totalesPorSede: Record<string, { nombre: string; ingreso: number; honorario: number; utilidad: number }> = {}
+  datos.forEach(d => {
+    if (!totalesPorSede[d.sede_id]) totalesPorSede[d.sede_id] = { nombre: d.sede_nombre, ingreso: 0, honorario: 0, utilidad: 0 }
+    totalesPorSede[d.sede_id].ingreso += d.ingreso
+    totalesPorSede[d.sede_id].honorario += d.honorario
+    totalesPorSede[d.sede_id].utilidad += d.utilidad
+  })
+
+  const [anioSel, mesSel] = mes.split('-')
+  const labelMes = `${MESES[parseInt(mesSel) - 1]} ${anioSel}`
+  const thS: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL_DARK, fontWeight: 700, whiteSpace: 'nowrap' }
+  const tdS: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#1e293b', borderTop: '1px solid #f1f5f9' }
+
+  return (
+    <div style={{ padding: '24px 28px', maxWidth: '1100px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button onClick={onVolver} style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>← Reportes</button>
+          <div>
+            <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: '0 0 2px' }}>💹 Utilidad por plan</h2>
+            <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>Planes con clases dadas en {labelMes}, de mayor a menor utilidad</p>
+          </div>
+        </div>
+        <input type="month" value={mes} onChange={e => setMes(e.target.value)}
+          style={{ padding: '7px 12px', borderRadius: '10px', border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', fontWeight: 600, color: TEAL_DARK, outline: 'none', background: TEAL_LIGHT }} />
+      </div>
+
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
+        <button onClick={() => setSedesSeleccionadas([])}
+          style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${sedesSeleccionadas.length === 0 ? TEAL : '#e5e7eb'}`, background: sedesSeleccionadas.length === 0 ? TEAL : 'white', color: sedesSeleccionadas.length === 0 ? 'white' : '#475569' }}>
+          Todas las sedes
+        </button>
+        {sedes.map(s => (
+          <button key={s.id} onClick={() => toggleSede(s.id)}
+            style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${sedesSeleccionadas.includes(s.id) ? TEAL : '#e5e7eb'}`, background: sedesSeleccionadas.includes(s.id) ? TEAL : 'white', color: sedesSeleccionadas.includes(s.id) ? 'white' : '#475569' }}>
+            {s.nombre}
+          </button>
+        ))}
+      </div>
+
+      {!cargando && Object.keys(totalesPorSede).length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Object.keys(totalesPorSede).length}, 1fr)`, gap: '10px', marginBottom: '20px' }}>
+          {Object.values(totalesPorSede).map((t: any) => (
+            <div key={t.nombre} style={{ background: 'white', border: `1px solid ${TEAL_MID}`, borderRadius: '10px', padding: '12px 16px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: TEAL_DARK, marginBottom: '8px' }}>{t.nombre}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
+                <span>Ingreso</span><span style={{ fontWeight: 700 }}>${Math.round(t.ingreso).toLocaleString('es-CO')}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
+                <span>Honorarios</span><span style={{ fontWeight: 700, color: '#dc2626' }}>−${Math.round(t.honorario).toLocaleString('es-CO')}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', paddingTop: '4px', borderTop: '1px solid #f1f5f9' }}>
+                <span style={{ fontWeight: 700 }}>Utilidad</span><span style={{ fontWeight: 800, color: t.utilidad >= 0 ? '#16a34a' : '#dc2626' }}>${Math.round(t.utilidad).toLocaleString('es-CO')}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && <p style={{ color: '#dc2626', fontSize: '13px' }}>{error}</p>}
+      {cargando && <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>Cargando...</div>}
+      {!cargando && filtrados.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
+          No hay planes con clases dadas en {labelMes}.
+        </div>
+      )}
+      {!cargando && filtrados.length > 0 && (
+        <div style={{ background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}`, overflow: 'hidden', overflowX: 'auto' as const }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: TEAL_LIGHT }}>
+                <th style={thS}>Cliente</th>
+                <th style={thS}>Instrumento</th>
+                <th style={thS}>Profesor</th>
+                <th style={thS}>Sede</th>
+                <th style={thS}>Clases dadas</th>
+                <th style={thS}>Ingreso</th>
+                <th style={thS}>Honorario pagado</th>
+                <th style={thS}>Utilidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtrados.map(d => (
+                <tr key={d.contrato_id}>
+                  <td style={{ ...tdS, fontWeight: 600 }}>{d.cliente}</td>
+                  <td style={tdS}>{d.instrumento}</td>
+                  <td style={tdS}>{d.profesor}</td>
+                  <td style={tdS}>{d.sede_nombre}</td>
+                  <td style={{ ...tdS, textAlign: 'center' }}>{d.clasesDadas}</td>
+                  <td style={tdS}>${Math.round(d.ingreso).toLocaleString('es-CO')}</td>
+                  <td style={{ ...tdS, color: '#dc2626' }}>−${Math.round(d.honorario).toLocaleString('es-CO')}</td>
+                  <td style={{ ...tdS, fontWeight: 800, color: d.utilidad >= 0 ? '#16a34a' : '#dc2626' }}>${Math.round(d.utilidad).toLocaleString('es-CO')}</td>
                 </tr>
               ))}
             </tbody>
