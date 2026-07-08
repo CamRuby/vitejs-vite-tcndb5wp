@@ -431,7 +431,7 @@ export default function Profesores() {
     ? clases.filter(c => c.estado === 'programada' || c.estado === 'confirmada')
     : clases.filter(c => c.estado === 'dada' || c.estado === 'cancelada')
 const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
- const canceladasTarde = clases.filter(c => c.estado === 'cancelada' && (c.cancelado_tarde || (!c.cancelado_por_academia && c.honorario_valor !== null && c.honorario_valor !== undefined)))
+ const canceladasTarde = clases.filter(c => c.estado === 'cancelada' && !c.cancelado_por_academia && (c.cancelado_tarde || (c.honorario_valor !== null && c.honorario_valor !== undefined)))
   const totalHon = [...dadas, ...canceladasTarde].reduce((s, c) => s + getHon(c), 0) + apoyoConciertoTotal
   const cnt = {
     programada: clases.filter(c => c.estado === 'programada').length,
@@ -884,7 +884,7 @@ const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
                       const esTarde = c.cancelado_tarde
                       const col = colEstado(c.estado, esTarde)
                       const hon = getHon(c)
-                      const pagarHon = c.estado === 'dada' || esTarde
+                      const pagarHon = c.estado === 'dada' || (esTarde && !c.cancelado_por_academia)
                       return (
                         <tr key={c.id} style={{ borderTop: '1px solid #f8fafc', background: (c.estado === 'cancelada' && !c.cancelado_por_academia) ? '#fff7ed' : i % 2 === 0 ? 'white' : '#fafbfc' }}>
                           <td style={tdS}>{c.fecha}</td>
