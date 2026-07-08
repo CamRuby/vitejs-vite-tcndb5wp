@@ -1517,27 +1517,47 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
     border: `1.5px solid ${activo ? TEAL : '#e5e7eb'}`, background: activo ? TEAL : 'white', color: activo ? 'white' : '#475569'
   })
 
-  // Mismo cálculo de Pagado/Saldo para cada sede, basado en el estado del profesor
-  // (aprobado/pagado es por profesor, no por sede).
-  // Inasistencias del cliente donde ya se decidió pagarle algo al profesor (100%, 50%, o un valor editado a mano).
-  // Sirve para revisar rápido antes de pagar las cuentas de cobro del mes.
-  const inasistenciasPagadas = filtrados.flatMap(g => {
-    const tarifasProf = tarifas.filter((t: any) => t.profesor_id === g.profesor_id)
-    return g.detalle
-      .filter((c: any) => !c.esTaller && c.estado === 'cancelada' && !c.cancelado_por_academia && c.honorario_valor !== null && c.honorario_valor !== undefined)
-      .map((c: any) => {
+  // Una sola lista con los 3 casos que hay que revisar antes de pagar:
+  // 1) Inasistencia del cliente con honorario resuelto (pagado, en cualquier %)
+  // 2) Inasistencia del profesor (canceló él tarde, nunca se paga)
+  // 3) Clase dada normal con el honorario editado a mano (distinto de lo que calcula la tarifa)
+  const revisionHonorarios = (() => {
+    const filas: any[] = []
+    filtrados.forEach(g => {
+      const tarifasProf = tarifas.filter((t: any) => t.profesor_id === g.profesor_id)
+      function tarifaDe(c: any) {
         const modalidad = (c.modalidad || 'presencial').toLowerCase()
         const duracion = Number(c.duracion_min)
         let tarifa = tarifasProf.find((t: any) => t.modalidad?.toLowerCase() === modalidad && Number(t.duracion_min) === duracion)
         if (!tarifa && (modalidad === 'presencial' || modalidad === 'virtual'))
           tarifa = tarifasProf.find((t: any) => (t.modalidad?.toLowerCase() === 'presencial' || t.modalidad?.toLowerCase() === 'virtual') && Number(t.duracion_min) === duracion)
-        const valorNormal = tarifa ? Number(tarifa.valor) : 0
+        return tarifa ? Number(tarifa.valor) : 0
+      }
+      g.detalle.forEach((c: any) => {
+        if (c.esTaller) return
+        const esInasistenciaCliente = c.estado === 'cancelada' && !c.cancelado_por_academia
+        const esDadaEditada = c.estado === 'dada' && !c.es_cortesia && c.honorario_valor !== null && c.honorario_valor !== undefined
+        if (!esInasistenciaCliente && !esDadaEditada) return
+        if (esInasistenciaCliente && (c.honorario_valor === null || c.honorario_valor === undefined)) return // pendiente, no resuelto aún
+        const valorNormal = tarifaDe(c)
         const pagado = Number(c.honorario_valor)
         const pct = valorNormal > 0 ? Math.round((pagado / valorNormal) * 100) : null
-        const etiqueta = pct === 100 ? '100%' : pct === 50 ? '50%' : pct !== null ? `${pct}% (editado)` : 'Editado'
-        return { ...c, profesor_nombre: g.nombre, etiqueta, valorNormal }
+        filas.push({
+          ...c, profesor_nombre: g.nombre,
+          estadoLabel: esInasistenciaCliente ? 'Inasistencia' : 'Dada',
+          editado: pct !== 100,
+          etiqueta: pct !== null ? `${pct}%` : '—',
+        })
       })
-  }).sort((a, b) => a.fecha.localeCompare(b.fecha))
+    })
+    inasistenciasProfesor.forEach((c: any) => {
+      filas.push({
+        ...c, profesor_nombre: c.profesores?.nombre || '—',
+        estadoLabel: 'Cancelada (tarde)', editado: false, etiqueta: '—', honorario_valor: null,
+      })
+    })
+    return filas.sort((a, b) => a.fecha.localeCompare(b.fecha))
+  })()
 
   function statsSede(sedeId: string) {
     const base = totalesPorSede[sedeId] || { honorario: 0, clases: 0, estudiantes: 0 }
@@ -1560,10 +1580,10 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
           style={{ padding: '7px 12px', borderRadius: '10px', border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', fontWeight: 600, color: TEAL_DARK, outline: 'none', background: TEAL_LIGHT }} />
       </div>
 
-      {!cargando && inasistenciasPagadas.length > 0 && (
+      {!cargando && revisionHonorarios.length > 0 && (
         <details style={{ marginBottom: '20px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', padding: '4px 16px' }}>
           <summary style={{ cursor: 'pointer', padding: '10px 0', fontSize: '13px', fontWeight: 700, color: '#92400e' }}>
-            ⚠️ Inasistencias con honorario pagado en {labelMes} ({inasistenciasPagadas.length}) — revisar antes de pagar
+            ⚠️ Honorarios editados e inasistencias en {labelMes} ({revisionHonorarios.length}) — revisar antes de pagar
           </summary>
           <div style={{ overflowX: 'auto' as const, paddingBottom: '12px' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1572,51 +1592,31 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                   <th style={thS}>Fecha</th>
                   <th style={thS}>Profesor</th>
                   <th style={thS}>Cliente</th>
-                  <th style={thS}>Pagado</th>
+                  <th style={thS}>Estado</th>
+                  <th style={thS}>Honorario</th>
                   <th style={thS}>%</th>
+                  <th style={thS}>Editado</th>
                   <th style={thS}>Observación administrativa</th>
                 </tr>
               </thead>
               <tbody>
-                {inasistenciasPagadas.map((c: any) => (
+                {revisionHonorarios.map((c: any) => (
                   <tr key={c.id}>
                     <td style={tdS}>{c.fecha}</td>
                     <td style={tdS}>{c.profesor_nombre}</td>
                     <td style={tdS}>{nombreClienteH(c)}</td>
-                    <td style={{ ...tdS, fontWeight: 700, color: '#166534' }}>${Number(c.honorario_valor).toLocaleString('es-CO')}</td>
-                    <td style={tdS}>{c.etiqueta}</td>
-                    <td style={{ ...tdS, color: c.observaciones_admin ? '#1e293b' : '#9ca3af', fontStyle: c.observaciones_admin ? 'normal' : 'italic' }}>
-                      {c.observaciones_admin || 'Sin observación'}
+                    <td style={tdS}>
+                      <span style={{
+                        padding: '2px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700,
+                        background: c.estadoLabel === 'Cancelada (tarde)' ? '#fee2e2' : c.estadoLabel === 'Inasistencia' ? '#fff7ed' : '#dcfce7',
+                        color: c.estadoLabel === 'Cancelada (tarde)' ? '#991b1b' : c.estadoLabel === 'Inasistencia' ? '#c2410c' : '#166534',
+                      }}>{c.estadoLabel}</span>
                     </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      )}
-
-      {!cargando && inasistenciasProfesor.length > 0 && (
-        <details style={{ marginBottom: '20px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', padding: '4px 16px' }}>
-          <summary style={{ cursor: 'pointer', padding: '10px 0', fontSize: '13px', fontWeight: 700, color: '#991b1b' }}>
-            🚫 Inasistencias del profesor en {labelMes} ({inasistenciasProfesor.length}) — canceló él, no se paga
-          </summary>
-          <div style={{ overflowX: 'auto' as const, paddingBottom: '12px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={thS}>Fecha</th>
-                  <th style={thS}>Profesor</th>
-                  <th style={thS}>Cliente</th>
-                  <th style={thS}>Observación administrativa</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inasistenciasProfesor.map((c: any) => (
-                  <tr key={c.id}>
-                    <td style={tdS}>{c.fecha}</td>
-                    <td style={tdS}>{c.profesores?.nombre || '—'}</td>
-                    <td style={tdS}>{nombreClienteH(c)}</td>
+                    <td style={{ ...tdS, fontWeight: 700, color: c.honorario_valor !== null ? '#166534' : '#9ca3af' }}>
+                      {c.honorario_valor !== null ? `$${Number(c.honorario_valor).toLocaleString('es-CO')}` : '— (no se paga)'}
+                    </td>
+                    <td style={tdS}>{c.etiqueta}</td>
+                    <td style={tdS}>{c.editado ? <span style={{ color: '#d97706', fontWeight: 700 }}>Sí</span> : 'No'}</td>
                     <td style={{ ...tdS, color: c.observaciones_admin ? '#1e293b' : '#9ca3af', fontStyle: c.observaciones_admin ? 'normal' : 'italic' }}>
                       {c.observaciones_admin || 'Sin observación'}
                     </td>
