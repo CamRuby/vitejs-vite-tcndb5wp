@@ -1536,12 +1536,14 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       g.detalle.forEach((c: any) => {
         if (c.esTaller) return
         const esInasistenciaCliente = c.estado === 'cancelada' && !c.cancelado_por_academia
-        const esDadaEditada = c.estado === 'dada' && !c.es_cortesia && c.honorario_valor !== null && c.honorario_valor !== undefined
-        if (!esInasistenciaCliente && !esDadaEditada) return
-        if (esInasistenciaCliente && (c.honorario_valor === null || c.honorario_valor === undefined)) return // pendiente, no resuelto aún
+        const tieneHonorarioGuardado = c.honorario_valor !== null && c.honorario_valor !== undefined
+        if (esInasistenciaCliente && !tieneHonorarioGuardado) return // pendiente, no resuelto aún
         const valorNormal = tarifaDe(c)
-        const pagado = Number(c.honorario_valor)
+        const pagado = tieneHonorarioGuardado ? Number(c.honorario_valor) : 0
         const pct = valorNormal > 0 ? Math.round((pagado / valorNormal) * 100) : null
+        // Una clase "Dada" solo entra a la lista si el honorario realmente quedó distinto al 100% normal.
+        const esDadaEditada = c.estado === 'dada' && !c.es_cortesia && tieneHonorarioGuardado && pct !== 100
+        if (!esInasistenciaCliente && !esDadaEditada) return
         filas.push({
           ...c, profesor_nombre: g.nombre,
           estadoLabel: esInasistenciaCliente ? 'Inasistencia' : 'Dada',
