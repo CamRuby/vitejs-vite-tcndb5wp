@@ -1785,6 +1785,8 @@ function ReporteUtilidadPlanes({ onVolver }: { onVolver: () => void }) {
   const [datos, setDatos] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [busquedaCliente, setBusquedaCliente] = useState('')
+  const [profesorSeleccionado, setProfesorSeleccionado] = useState('')
 
   function toggleSede(id: string) {
     setSedesSeleccionadas(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -1808,7 +1810,7 @@ function ReporteUtilidadPlanes({ onVolver }: { onVolver: () => void }) {
 
       const [{ data: clases, error: errC }, { data: tarifasData, error: errT }] = await Promise.all([
         supabase.from('clases')
-          .select('id, contrato_id, profesor_id, duracion_min, modalidad, estado, es_cortesia, honorario_valor, contratos(id, valor_plan, total_clases, sede_id, sedes(nombre), clientes(nombre), instrumentos(nombre), profesores(nombre))')
+          .select('id, contrato_id, profesor_id, duracion_min, modalidad, estado, es_cortesia, honorario_valor, contratos(id, valor_plan, total_clases, fecha_inicio, sede_id, sedes(nombre), clientes(nombre), profesor_id, profesores(nombre))')
           .eq('estado', 'dada').eq('es_cortesia', false)
           .gte('fecha', fechaInicio).lte('fecha', fechaFin),
         supabase.from('profesor_tarifas').select('profesor_id, modalidad, duracion_min, valor').eq('taller_grupal', false),
@@ -1830,8 +1832,8 @@ function ReporteUtilidadPlanes({ onVolver }: { onVolver: () => void }) {
         if (!co) return
         if (!porPlan[co.id]) {
           porPlan[co.id] = {
-            contrato_id: co.id, cliente: co.clientes?.nombre || '—', instrumento: co.instrumentos?.nombre || '—',
-            profesor: co.profesores?.nombre || '—', sede_id: co.sede_id, sede_nombre: co.sedes?.nombre || '—',
+            contrato_id: co.id, cliente: co.clientes?.nombre || '—', fechaInicio: co.fecha_inicio || '—',
+            profesor: co.profesores?.nombre || '—', profesor_id: co.profesor_id, sede_id: co.sede_id, sede_nombre: co.sedes?.nombre || '—',
             valorPlan: Number(co.valor_plan) || 0, totalClases: Number(co.total_clases) || 0,
             clasesDadas: 0, ingreso: 0, honorario: 0,
           }
@@ -1855,8 +1857,15 @@ function ReporteUtilidadPlanes({ onVolver }: { onVolver: () => void }) {
     }
   }
 
-  const filtrados = (sedesSeleccionadas.length === 0 ? datos : datos.filter(d => sedesSeleccionadas.includes(d.sede_id)))
+  const filtrados = datos
+    .filter(d => sedesSeleccionadas.length === 0 || sedesSeleccionadas.includes(d.sede_id))
+    .filter(d => !profesorSeleccionado || d.profesor_id === profesorSeleccionado)
+    .filter(d => !busquedaCliente || d.cliente.toLowerCase().includes(busquedaCliente.toLowerCase()))
     .sort((a, b) => b.utilidad - a.utilidad)
+
+  const profesoresDisponibles = Array.from(
+    new Map(datos.map(d => [d.profesor_id, d.profesor])).entries()
+  ).filter(([id]) => id).sort((a, b) => a[1].localeCompare(b[1]))
 
   const totalesPorSede: Record<string, { nombre: string; ingreso: number; honorario: number; utilidad: number }> = {}
   datos.forEach(d => {
@@ -1885,7 +1894,7 @@ function ReporteUtilidadPlanes({ onVolver }: { onVolver: () => void }) {
           style={{ padding: '7px 12px', borderRadius: '10px', border: `1.5px solid ${TEAL_MID}`, fontSize: '13px', fontWeight: 600, color: TEAL_DARK, outline: 'none', background: TEAL_LIGHT }} />
       </div>
 
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap' }}>
         <button onClick={() => setSedesSeleccionadas([])}
           style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${sedesSeleccionadas.length === 0 ? TEAL : '#e5e7eb'}`, background: sedesSeleccionadas.length === 0 ? TEAL : 'white', color: sedesSeleccionadas.length === 0 ? 'white' : '#475569' }}>
           Todas las sedes
@@ -1896,6 +1905,16 @@ function ReporteUtilidadPlanes({ onVolver }: { onVolver: () => void }) {
             {s.nombre}
           </button>
         ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <input value={busquedaCliente} onChange={e => setBusquedaCliente(e.target.value)} placeholder="🔍 Buscar cliente..."
+          style={{ flex: '1 1 220px', padding: '7px 12px', borderRadius: '10px', border: `1.5px solid ${busquedaCliente ? TEAL : TEAL_MID}`, fontSize: '13px', outline: 'none' }} />
+        <select value={profesorSeleccionado} onChange={e => setProfesorSeleccionado(e.target.value)}
+          style={{ padding: '7px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${profesorSeleccionado ? TEAL : TEAL_MID}`, background: profesorSeleccionado ? TEAL_LIGHT : 'white', color: profesorSeleccionado ? TEAL_DARK : '#475569', outline: 'none', cursor: 'pointer' }}>
+          <option value="">Todos los profesores</option>
+          {profesoresDisponibles.map(([id, nombre]) => <option key={id} value={id}>{nombre}</option>)}
+        </select>
       </div>
 
       {!cargando && Object.keys(totalesPorSede).length > 0 && (
@@ -1930,7 +1949,7 @@ function ReporteUtilidadPlanes({ onVolver }: { onVolver: () => void }) {
             <thead>
               <tr style={{ background: TEAL_LIGHT }}>
                 <th style={thS}>Cliente</th>
-                <th style={thS}>Instrumento</th>
+                <th style={thS}>Fecha inicio</th>
                 <th style={thS}>Profesor</th>
                 <th style={thS}>Sede</th>
                 <th style={thS}>Clases dadas</th>
@@ -1943,7 +1962,7 @@ function ReporteUtilidadPlanes({ onVolver }: { onVolver: () => void }) {
               {filtrados.map(d => (
                 <tr key={d.contrato_id}>
                   <td style={{ ...tdS, fontWeight: 600 }}>{d.cliente}</td>
-                  <td style={tdS}>{d.instrumento}</td>
+                  <td style={tdS}>{d.fechaInicio}</td>
                   <td style={tdS}>{d.profesor}</td>
                   <td style={tdS}>{d.sede_nombre}</td>
                   <td style={{ ...tdS, textAlign: 'center' }}>{d.clasesDadas}</td>
