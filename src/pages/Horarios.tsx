@@ -410,11 +410,19 @@ async function verificarConflictosEnMemoria(
       .eq('salon_id', salonId).neq('estado', 'cancelada').gte('fecha', fechaMin).lte('fecha', fechaMax),
     profId ? supabase.from('clases').select('id, fecha, hora, duracion_min, contratos(clientes(nombre))')
       .eq('profesor_id', profId).neq('estado', 'cancelada').gte('fecha', fechaMin).lte('fecha', fechaMax) : Promise.resolve({ data: [] }),
-    profId ? supabase.from('talleres').select('id, nombre, hora, duracion_min, dia_semana')
+    profId ? supabase.from('talleres').select('id, nombre, hora, duracion_min, dia_semana, fecha_unica, fecha_fin_vacacional')
       .eq('profesor_id', profId) : Promise.resolve({ data: [] }),
     supabase.from('talleres').select('id, nombre, salon_id, hora, duracion_min, dia_semana, fecha_unica, fecha_fin_vacacional')
       .eq('salon_id', salonId).neq('estado', 'archivado')
   ])
+
+  const idsTalleresProfesor = (talleresProfesor || []).map((t: any) => t.id)
+  const { data: sesionesTalleresProfesor } = idsTalleresProfesor.length
+    ? await supabase.from('taller_sesiones').select('taller_id, fecha, hora, salon_id, estado')
+        .in('taller_id', idsTalleresProfesor).gte('fecha', fechaMin).lte('fecha', fechaMax)
+    : { data: [] }
+  const sesionesTallerProfesorMap: Record<string, any> = {}
+  ;(sesionesTalleresProfesor || []).forEach((s: any) => { sesionesTallerProfesorMap[`${s.taller_id}-${s.fecha}`] = s })
 
   const idsTalleresSalon = (talleresSalon || []).map((t: any) => t.id)
   const { data: sesionesTalleresSalon } = idsTalleresSalon.length
@@ -484,8 +492,20 @@ async function verificarConflictosEnMemoria(
       // Verificar profesor en talleres
       const diaSemana = DIAS_LARGO[parseFechaLocal(fecha).getDay()]
       for (const t of (talleresProfesor || [])) {
-        if ((t as any).dia_semana !== diaSemana) continue
-        const tI = horaAMinutos(((t as any).hora || '').substring(0, 5))
+        const sesion = sesionesTallerProfesorMap[`${t.id}-${fecha}`]
+        let ocupa = false
+        let horaEf = (t as any).hora?.substring(0, 5)
+        if (sesion) {
+          if (sesion.estado === 'cancelada') continue
+          ocupa = true
+          horaEf = sesion.hora ? sesion.hora.substring(0, 5) : horaEf
+        } else {
+          ocupa = (t as any).fecha_fin_vacacional
+            ? (fecha >= (t as any).fecha_unica && fecha <= (t as any).fecha_fin_vacacional && ![0, 6].includes(parseFechaLocal(fecha).getDay()))
+            : (t as any).dia_semana === diaSemana
+        }
+        if (!ocupa) continue
+        const tI = horaAMinutos(horaEf || '00:00')
         const tF = tI + ((t as any).duracion_min || 60)
         if (inicio < tF && fin > tI) {
           conflictos[fecha] = `Profesor tiene taller "${(t as any).nombre}" ese día`
