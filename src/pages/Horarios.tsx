@@ -1029,13 +1029,22 @@ if (err) setError('Error: ' + err.message)
         }
         
         if (alcance === 'futuras' && claseEditando.patron_id && idsClasesFuturas) {
+      // Hora/duración/profesor/salón sí se aplican a todas las futuras.
+      // El estado NO se copia a todas — "Confirmada" o "Dada" solo tiene sentido para la clase que se está editando ahora mismo.
+      // La excepción es "Cancelada": ahí sí tiene sentido cancelar toda la serie futura de una vez.
+      const payloadFuturas: any = { hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId }
+      if (editEstado === 'cancelada') payloadFuturas.estado = editEstado
       const { error } = await supabase.from('clases')
-        .update({ hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado })
+        .update(payloadFuturas)
         .in('id', idsClasesFuturas)
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
+      if (editEstado !== 'cancelada' && editEstado !== claseEditando.estado) {
+        // Solo la clase que se estaba editando cambia de estado individualmente
+        await supabase.from('clases').update({ estado: editEstado }).eq('id', claseEditando.id)
+      }
       if (editEstado !== claseEditando.estado) {
         auditar('cambiar_estado_clase', 'clases', claseEditando.id, {
-          de: claseEditando.estado, a: editEstado, alcance: 'futuras', cantidad: idsClasesFuturas.length
+          de: claseEditando.estado, a: editEstado, alcance: editEstado === 'cancelada' ? 'futuras' : 'solo_esta_clase', cantidad: editEstado === 'cancelada' ? idsClasesFuturas.length : 1
         })
       }
     } else {
