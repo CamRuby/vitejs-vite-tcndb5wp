@@ -1691,7 +1691,9 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
               <div>
                 <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>🎸 {tallerViendo.nombre}</h3>
                 <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
-                  {sesionActual?.profesor_id && sesionActual.profesor_id !== tallerViendo?.profesor_id ? `${profesores.find((p: any) => p.id === sesionActual.profesor_id)?.nombre || tallerViendo.profesores?.nombre} (reemplazo)` : tallerViendo.profesores?.nombre} · {tallerViendo.salones?.nombre} · {tallerViendo.dia_semana} {tallerViendo.hora?.substring(0, 5)}
+                  {sesionActual?.profesor_id && sesionActual.profesor_id !== tallerViendo?.profesor_id ? `${profesores.find((p: any) => p.id === sesionActual.profesor_id)?.nombre || tallerViendo.profesores?.nombre} (reemplazo)` : tallerViendo.profesores?.nombre}
+                  {' · '}{sesionActual?.salon_id && sesionActual.salon_id !== tallerViendo?.salon_id ? `${todosSalones.find((s: any) => s.id === sesionActual.salon_id)?.nombre || tallerViendo.salones?.nombre} (cambio de salón)` : tallerViendo.salones?.nombre}
+                  {' · '}{tallerViendo.dia_semana} {sesionActual?.hora && sesionActual.hora.substring(0,5) !== tallerViendo.hora?.substring(0,5) ? `${sesionActual.hora.substring(0,5)} (cambio de hora)` : tallerViendo.hora?.substring(0, 5)}
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '6px' }}>
@@ -1812,7 +1814,9 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                         {todosSalones.filter((s: any) => s.sede_id === tallerViendo?.salones?.sede_id).map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                       </select>
                     </div>
-                    {(sesionFechaOverride !== fechaSesionViendo || sesionHoraOverride !== (tallerViendo?.hora?.substring(0,5) || '') || sesionSalonOverride !== (tallerViendo?.salon_id || '')) ? (
+                    {(sesionFechaOverride !== fechaSesionViendo
+                      || sesionHoraOverride !== (sesionActual?.hora?.substring(0,5) || tallerViendo?.hora?.substring(0,5) || '')
+                      || sesionSalonOverride !== (sesionActual?.salon_id || tallerViendo?.salon_id || '')) ? (
                       <button onClick={async (e) => {
                         e.stopPropagation()
                         if (sesionActual?.id) {
