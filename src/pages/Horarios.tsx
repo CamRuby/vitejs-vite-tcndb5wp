@@ -230,13 +230,10 @@ export default function Horarios() {
         const esNormalEsteDia = (t as any).fecha_fin_vacacional
           ? col.fecha >= (t as any).fecha_unica && col.fecha <= (t as any).fecha_fin_vacacional && ![0,6].includes(new Date(col.fecha + 'T12:00:00').getDay())
           : parseFechaLocal(col.fecha).getDay() === DIA_NUM[t.dia_semana]
+        // Si no es su día normal Y tampoco hay una excepción que lo traiga a este día, no ocupa nada aquí.
         if (!esNormalEsteDia && !tieneExcepcion) return
-        if (esNormalEsteDia && tieneExcepcion) {
-          // Excepción mueve el taller a otro día — no generar skip para el día normal
-          const horaExc = sesionesHoraMap[`${t.id}-${col.fecha}`] || t.hora.substring(0,5)
-          const salonExc = sesionesSalonMap[`${t.id}-${col.fecha}`] || t.salon_id
-          if (horaExc !== t.hora.substring(0,5) || salonExc !== t.salon_id) return
-        }
+        // En cualquier otro caso (día normal sin cambios, día normal con hora/salón movidos, o excepción que trae
+        // el taller a un día que no es el suyo), reservamos el espacio combinado en la hora/salón EFECTIVOS reales.
         const tInicio = horaAMinutos(horaEfectiva)
         for (let i = 1; i < numSlots; i++) {
           const min = tInicio + i * 15
