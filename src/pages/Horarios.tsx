@@ -397,7 +397,7 @@ setCargando(false)
   }
 async function verificarConflictosEnMemoria(
   salonId: string, profId: string,
-  fechas: string[], hora: string, durMin: number, excluirId?: string
+  fechas: string[], hora: string, durMin: number, excluirIds?: string[]
 ): Promise<Record<string, string>> {
   const fechaMin = fechas[0]
   const fechaMax = fechas[fechas.length - 1]
@@ -436,7 +436,7 @@ async function verificarConflictosEnMemoria(
   for (const fecha of fechas) {
     // Verificar salón
     for (const c of (clasesSalon || [])) {
-      if (c.fecha !== fecha || (excluirId && c.id === excluirId)) continue
+      if (c.fecha !== fecha || (excluirIds && excluirIds.includes(c.id))) continue
       const cI = horaAMinutos((c.hora || '').substring(0, 5))
       const cF = cI + ((c as any).duracion_min || 60)
       if (inicio < cF && fin > cI) {
@@ -476,7 +476,7 @@ async function verificarConflictosEnMemoria(
     // Verificar profesor en clases
     if (profId) {
       for (const c of (clasesProfesor || [])) {
-        if (c.fecha !== fecha || (excluirId && c.id === excluirId)) continue
+        if (c.fecha !== fecha || (excluirIds && excluirIds.includes(c.id))) continue
         const cI = horaAMinutos((c.hora || '').substring(0, 5))
         const cF = cI + ((c as any).duracion_min || 60)
         if (inicio < cF && fin > cI) {
@@ -1017,7 +1017,7 @@ if (err) setError('Error: ' + err.message)
 
     const conflictos = await verificarConflictosEnMemoria(
       editSalonId, editProfesorId,
-      fechasAVerificar, editHora, parseInt(editDuracion), claseEditando.id
+      fechasAVerificar, editHora, parseInt(editDuracion), idsClasesFuturas ?? [claseEditando.id]
     )
     const fechaConChoque = fechasAVerificar.find(f => conflictos[f])
     if (fechaConChoque) {
