@@ -239,7 +239,16 @@ export default function Horarios() {
           const min = tInicio + i * 15
           const hh = Math.floor(min / 60)
           const mm = min % 60
-          skip.add(`${salonEfectivo}-${col.fecha}-${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`)
+          const slotHora = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`
+          // No bloquear si hay una clase regular que empieza exactamente en ese slot
+          const hayClaseAhi = clases.some((c: any) =>
+            c.salones?.id === salonEfectivo &&
+            c.fecha === col.fecha &&
+            c.hora?.substring(0, 5) === slotHora
+          )
+          if (!hayClaseAhi) {
+            skip.add(`${salonEfectivo}-${col.fecha}-${slotHora}`)
+          }
         }
       })
     })
@@ -422,10 +431,17 @@ async function verificarConflictosEnMemoria(
   ;(sesionesTalleresProfesor || []).forEach((s: any) => { sesionesTallerProfesorMap[`${s.taller_id}-${s.fecha}`] = s })
 
   const idsTalleresSalon = (talleresSalon || []).map((t: any) => t.id)
-  const { data: sesionesTalleresSalon } = idsTalleresSalon.length
-    ? await supabase.from('taller_sesiones').select('taller_id, fecha, hora, salon_id, estado')
-        .in('taller_id', idsTalleresSalon).gte('fecha', fechaMin).lte('fecha', fechaMax)
-    : { data: [] }
+  const [{ data: sesionesTalleresSalon }, { data: sesionesMovidasASalon }] = await Promise.all([
+    idsTalleresSalon.length
+      ? supabase.from('taller_sesiones').select('taller_id, fecha, hora, salon_id, estado')
+          .in('taller_id', idsTalleresSalon).gte('fecha', fechaMin).lte('fecha', fechaMax)
+      : Promise.resolve({ data: [] }),
+    // Sesiones de talleres con salón base DIFERENTE que fueron movidas a este salón
+    supabase.from('taller_sesiones')
+      .select('taller_id, fecha, hora, salon_id, estado, talleres(id, nombre, duracion_min)')
+      .eq('salon_id', salonId).neq('estado', 'cancelada')
+      .gte('fecha', fechaMin).lte('fecha', fechaMax)
+  ])
   const sesionesTallerMap: Record<string, any> = {}
   ;(sesionesTalleresSalon || []).forEach((s: any) => { sesionesTallerMap[`${s.taller_id}-${s.fecha}`] = s })
 
@@ -468,6 +484,22 @@ async function verificarConflictosEnMemoria(
       const tF = tI + ((t as any).duracion_min || 60)
       if (inicio < tF && fin > tI) {
         conflictos[fecha] = `Choca con el taller "${(t as any).nombre}" en ese salón`
+        break
+      }
+    }
+    if (conflictos[fecha]) continue
+
+    // Verificar talleres cuya sesión fue movida a este salón (salón base distinto)
+    for (const sesion of (sesionesMovidasASalon || [])) {
+      if (sesion.fecha !== fecha) continue
+      // Si ya fue cubierto por talleresSalon (mismo salón base), saltar
+      if (idsTalleresSalon.includes(sesion.taller_id)) continue
+      const horaEf = (sesion.hora || '').substring(0, 5)
+      const durMin2 = (sesion as any).talleres?.duracion_min || 60
+      const tI = horaAMinutos(horaEf)
+      const tF = tI + durMin2
+      if (inicio < tF && fin > tI) {
+        conflictos[fecha] = `Choca con el taller "${(sesion as any).talleres?.nombre || 'un taller'}" (movido a este salón)`
         break
       }
     }
@@ -1349,9 +1381,24 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                   const cs = getClasesSlot(col.salon.id, hora, col.fecha)
                   const taller = getTallerSlot(col.salon.id, hora, col.fecha)
                   const mainClass = cs[0]
-                  const rowSpan = taller
+                  const rowSpanBase = taller
                     ? Math.max(1, Math.round((taller.duracion_min || 60) / 15))
                     : mainClass && mainClass.estado !== 'cancelada' ? Math.max(1, Math.round((mainClass.duracion_min || 60) / 15)) : 1
+                  // Si hay taller, recortar rowSpan si una clase regular empieza en un slot intermedio
+                  let rowSpan = rowSpanBase
+                  if (taller && rowSpanBase > 1) {
+                    const tallerInicio = horaAMinutos(hora)
+                    for (let i = 1; i < rowSpanBase; i++) {
+                      const min = tallerInicio + i * 15
+                      const hh = Math.floor(min / 60)
+                      const mm = min % 60
+                      const slotHora = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`
+                      if (getClasesSlot(col.salon.id, slotHora, col.fecha).length > 0) {
+                        rowSpan = i
+                        break
+                      }
+                    }
+                  }
                   const esCeldaPasada = esPasado(col.fecha)
                   return (
                     <td key={cellKey}
