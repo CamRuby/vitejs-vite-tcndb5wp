@@ -252,7 +252,7 @@ export default function ProfesorApp() {
       supabase.from('talleres')
         .select('id, nombre, dia_semana, hora, duracion_min, fecha_unica, fecha_fin_vacacional, salones(nombre, sedes(nombre))')
         .eq('profesor_id', profesor.id),
-      supabase.from('profesor_apoyo_concierto')
+      supabase.from('profesor_pagos_adicionales')
         .select('valor').eq('profesor_id', profesor.id).eq('mes', mesStr)
     ])
     setApoyoConcierto((apoyo.data || []).reduce((s: number, a: any) => s + Number(a.valor || 0), 0))
@@ -454,8 +454,8 @@ export default function ProfesorApp() {
         return (b.hora || '').localeCompare(a.hora || '')
       })
     setClases(merged)
-    // Cargar apoyo a concierto del mes del historial
-    const { data: apoyoData } = await supabase.from('profesor_apoyo_concierto')
+    // Cargar pagos adicionales del mes del historial
+    const { data: apoyoData } = await supabase.from('profesor_pagos_adicionales')
       .select('valor').eq('profesor_id', profesor.id).eq('mes', mes)
     setApoyoConcierto((apoyoData || []).reduce((s: number, a: any) => s + Number(a.valor || 0), 0))
     setCargandoClases(false)
