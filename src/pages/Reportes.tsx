@@ -1087,6 +1087,7 @@ interface ProfesorHonorario {
   totalClases: number; totalMinutos: number; totalHonorario: number
   detalle: any[]
   aprobado: boolean; pagado: boolean; revisado: boolean; apoyoConcierto: number; apoyoPorSede: Record<string, number>
+  apoyoRegistros: { concepto: string; descripcion: string | null; sede_id: string | null; valor: number }[]
 }
 
 function formatTiempo(min: number) {
@@ -1201,7 +1202,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
           .or('estado.eq.dada,cancelado_por_academia.eq.false'),
         supabase.from('talleres').select('id, nombre, hora, duracion_min, profesor_id, salones(sede_id, sedes(nombre))'),
         supabase.from('honorarios_estado').select('profesor_id, aprobado, pagado, revisado').eq('mes', mes),
-        supabase.from('profesor_apoyo_concierto').select('profesor_id, sede_id, valor').eq('mes', mes),
+        supabase.from('profesor_pagos_adicionales').select('profesor_id, sede_id, concepto, descripcion, valor').eq('mes', mes),
       ])
       if (errP || errT || errC || errTa || errE || errAp) throw (errP || errT || errC || errTa || errE || errAp)
 
@@ -1267,13 +1268,17 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       const estadoMap: Record<string, { aprobado: boolean; pagado: boolean; revisado: boolean }> = {}
       ;(estados || []).forEach((e: any) => { estadoMap[e.profesor_id] = { aprobado: !!e.aprobado, pagado: !!e.pagado, revisado: !!e.revisado } })
 
-      // Apoyo a concierto: puede haber varios registros por profesor en el mes (uno por sede).
+      // Pagos adicionales: puede haber varios registros por profesor en el mes.
       const apoyoTotalPorProfesor: Record<string, number> = {}
       const apoyoPorProfesorYSede: Record<string, Record<string, number>> = {}
+      const apoyoRegistrosPorProfesor: Record<string, { concepto: string; descripcion: string | null; sede_id: string | null; valor: number }[]> = {}
       ;(apoyos || []).forEach((a: any) => {
         apoyoTotalPorProfesor[a.profesor_id] = (apoyoTotalPorProfesor[a.profesor_id] || 0) + Number(a.valor || 0)
         if (!apoyoPorProfesorYSede[a.profesor_id]) apoyoPorProfesorYSede[a.profesor_id] = {}
-        apoyoPorProfesorYSede[a.profesor_id][a.sede_id] = (apoyoPorProfesorYSede[a.profesor_id][a.sede_id] || 0) + Number(a.valor || 0)
+        const sedeKey = a.sede_id || 'sin_sede'
+        apoyoPorProfesorYSede[a.profesor_id][sedeKey] = (apoyoPorProfesorYSede[a.profesor_id][sedeKey] || 0) + Number(a.valor || 0)
+        if (!apoyoRegistrosPorProfesor[a.profesor_id]) apoyoRegistrosPorProfesor[a.profesor_id] = []
+        apoyoRegistrosPorProfesor[a.profesor_id].push({ concepto: a.concepto || 'Pago adicional', descripcion: a.descripcion || null, sede_id: a.sede_id || null, valor: Number(a.valor || 0) })
       })
 
       const mapa: Record<string, ProfesorHonorario> = {}
@@ -1291,6 +1296,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
             revisado: estadoMap[profId]?.revisado || false,
             apoyoConcierto: apoyoTotalPorProfesor[profId] || 0,
             apoyoPorSede: apoyoPorProfesorYSede[profId] || {},
+            apoyoRegistros: apoyoRegistrosPorProfesor[profId] || [],
           }
         }
         return mapa[profId]
@@ -1445,13 +1451,13 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
           { text: 'Por concepto de:', fontSize: 10, alignment: 'center', margin: [0, 0, 0, 8] },
           { text: `Clases dictadas (${resumenClases}${tallerStr}) individual en modalidad presencial durante el periodo comprendido entre el `, fontSize: 10, alignment: 'center', margin: [0, 0, 0, 4] },
           { text: `${primerDia} al ${ultimoDiaLabel} del año ${anio}.`, fontSize: 10, bold: true, alignment: 'center', margin: [0, 0, 0, 16] },
-          ...(apoyoVal > 0 ? [{
+          ...(g.apoyoRegistros && g.apoyoRegistros.length > 0 ? [{
             table: {
               widths: ['*', 80],
-              body: [[
-                { text: 'Apoyo a concierto', fontSize: 9, bold: true, color: '#7c3aed' },
-                { text: `$${apoyoVal.toLocaleString('es-CO')}`, fontSize: 9, bold: true, alignment: 'right', color: '#7c3aed' }
-              ]]
+              body: g.apoyoRegistros.map((r: any) => [
+                { text: r.descripcion ? `${r.concepto} — ${r.descripcion}` : r.concepto, fontSize: 9, bold: true, color: '#7c3aed' },
+                { text: `$${r.valor.toLocaleString('es-CO')}`, fontSize: 9, bold: true, alignment: 'right', color: '#7c3aed' }
+              ])
             },
             layout: { hLineWidth: () => 0.5, vLineWidth: () => 0, hLineColor: () => '#e0e0e0', paddingLeft: () => 5, paddingRight: () => 5, paddingTop: () => 6, paddingBottom: () => 6 },
             margin: [0, 0, 0, 12]
