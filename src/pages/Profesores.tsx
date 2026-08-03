@@ -80,15 +80,17 @@ export default function Profesores() {
   const [reseteandoPassword, setReseteandoPassword] = useState(false)
   const [revocandoAcceso, setRevocandoAcceso] = useState(false)
   const [confirmarRevocar, setConfirmarRevocar] = useState(false)
-  // Apoyo a concierto
+  // Pagos adicionales
   const [apoyoMes, setApoyoMes] = useState(() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}` })
   const [apoyoSede, setApoyoSede] = useState('')
   const [apoyoValor, setApoyoValor] = useState('')
+  const [pagoConcepto, setPagoConcepto] = useState('Apoyo a concierto')
+  const [pagoDescripcion, setPagoDescripcion] = useState('')
   const [apoyoGuardando, setApoyoGuardando] = useState(false)
   const [apoyoOk, setApoyoOk] = useState('')
   const [apoyoErr, setApoyoErr] = useState('')
   const [apoyoConciertoTotal, setApoyoConciertoTotal] = useState(0)
-  const [apoyoRegistrosMes, setApoyoRegistrosMes] = useState<{ id: string; sede_id: string; sede_nombre: string; valor: number }[]>([])
+  const [apoyoRegistrosMes, setApoyoRegistrosMes] = useState<{ id: string; sede_id: string | null; sede_nombre: string; concepto: string; descripcion: string | null; valor: number }[]>([])
   const [sedesLista, setSedesLista] = useState<{ id: string; nombre: string }[]>([])
   const [borrandoApoyo, setBorrandoApoyo] = useState<string | null>(null)
 
@@ -161,29 +163,35 @@ export default function Profesores() {
   }
 
   async function cargarApoyo(profId: string, mes: string) {
-    const { data } = await supabase.from('profesor_apoyo_concierto')
-      .select('id, sede_id, valor, sedes(nombre)').eq('profesor_id', profId).eq('mes', mes)
-    const registros = (data || []).map((r: any) => ({ id: r.id, sede_id: r.sede_id, sede_nombre: r.sedes?.nombre || '—', valor: Number(r.valor) }))
+    const { data } = await supabase.from('profesor_pagos_adicionales')
+      .select('id, sede_id, concepto, descripcion, valor, sedes(nombre)').eq('profesor_id', profId).eq('mes', mes).order('created_at')
+    const registros = (data || []).map((r: any) => ({ id: r.id, sede_id: r.sede_id || null, sede_nombre: r.sedes?.nombre || '—', concepto: r.concepto || '', descripcion: r.descripcion || null, valor: Number(r.valor) }))
     setApoyoRegistrosMes(registros)
-    setApoyoSede(''); setApoyoValor('')
+    setApoyoSede(''); setApoyoValor(''); setPagoConcepto('Apoyo a concierto'); setPagoDescripcion('')
   }
 
   async function guardarApoyo() {
     if (!prof?.id) return
-    if (!apoyoSede) { setApoyoErr('Selecciona una sede'); return }
     if (!apoyoValor || Number(apoyoValor) <= 0) { setApoyoErr('Ingresa un valor mayor a 0'); return }
     setApoyoGuardando(true); setApoyoOk(''); setApoyoErr('')
     const valor = parseInt(apoyoValor)
-    const { error } = await supabase.from('profesor_apoyo_concierto')
-      .upsert({ profesor_id: prof.id, sede_id: apoyoSede, mes: apoyoMes, valor }, { onConflict: 'profesor_id,sede_id,mes' })
+    const payload: any = {
+      profesor_id: prof.id,
+      mes: apoyoMes,
+      concepto: pagoConcepto,
+      valor,
+      descripcion: pagoDescripcion.trim() || null,
+      sede_id: apoyoSede || null,
+    }
+    const { error } = await supabase.from('profesor_pagos_adicionales').insert(payload)
     if (error) setApoyoErr('Error al guardar: ' + error.message)
-    else { setApoyoOk('✓ Guardado'); setApoyoSede(''); setApoyoValor(''); await cargarApoyo(prof.id, apoyoMes) }
+    else { setApoyoOk('✓ Guardado'); await cargarApoyo(prof.id, apoyoMes) }
     setApoyoGuardando(false)
   }
 
   async function borrarApoyo(id: string) {
     setBorrandoApoyo(id)
-    const { error } = await supabase.from('profesor_apoyo_concierto').delete().eq('id', id)
+    const { error } = await supabase.from('profesor_pagos_adicionales').delete().eq('id', id)
     if (!error && prof?.id) await cargarApoyo(prof.id, apoyoMes)
     setBorrandoApoyo(null)
   }
@@ -301,8 +309,8 @@ export default function Profesores() {
       )
     }
     setClases(result)
-    // Cargar apoyo a concierto del mes (suma de todas las sedes)
-    const { data: apoyosMes } = await supabase.from('profesor_apoyo_concierto')
+    // Cargar pagos adicionales del mes (suma total)
+    const { data: apoyosMes } = await supabase.from('profesor_pagos_adicionales')
       .select('valor').eq('profesor_id', p.id).eq('mes', mes)
     setApoyoConciertoTotal((apoyosMes || []).reduce((s: number, a: any) => s + Number(a.valor || 0), 0))
   }
@@ -558,7 +566,7 @@ const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
                 </div>
               </div>
               {!editando
-                ? <button onClick={() => { setEditando(true); setApoyoOk(''); setApoyoErr(''); if (prof?.id) cargarApoyo(prof.id, apoyoMes) }} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px' }}>✏️ Editar</button>
+                ? <button onClick={() => { setEditando(true); setApoyoOk(''); setApoyoErr(''); setPagoConcepto('Apoyo a concierto'); setPagoDescripcion(''); if (prof?.id) cargarApoyo(prof.id, apoyoMes) }} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px' }}>✏️ Editar</button>
                 : <div style={{ display: 'flex', gap: '8px' }}>
                     <button type="button" onClick={guardar} disabled={guardando} style={{ background: 'rgba(255,255,255,0.9)', border: 'none', color: TEAL, borderRadius: '8px', padding: '7px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
                       {guardando ? '...' : '✓ Guardar'}
@@ -654,10 +662,10 @@ const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
                 </div>
               </div>
 
-              {/* Apoyo a concierto */}
+              {/* Pagos adicionales */}
               <div style={{ background: 'white', borderRadius: '14px', border: '1px solid #eef2f7', overflow: 'hidden' }}>
                 <div style={{ background: TEAL_LIGHT, padding: '12px 18px', borderBottom: '1px solid #eef2f7' }}>
-                  <p style={{ margin: 0, fontWeight: '700', fontSize: '13px', color: TEAL }}>🎵 Apoyo a concierto</p>
+                  <p style={{ margin: 0, fontWeight: '700', fontSize: '13px', color: TEAL }}>💳 Pagos adicionales</p>
                 </div>
                 <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <div>
@@ -671,7 +679,11 @@ const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {apoyoRegistrosMes.map(r => (
                         <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', borderRadius: '8px', padding: '6px 10px' }}>
-                          <span style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>{r.sede_nombre}</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                            <span style={{ fontSize: '12px', color: '#475569', fontWeight: '600' }}>{r.concepto}</span>
+                            {r.sede_nombre !== '—' && <span style={{ fontSize: '11px', color: '#94a3b8' }}>{r.sede_nombre}</span>}
+                            {r.descripcion && <span style={{ fontSize: '11px', color: '#94a3b8' }}>{r.descripcion}</span>}
+                          </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ fontSize: '12px', fontWeight: '700', color: '#7c3aed' }}>${r.valor.toLocaleString()}</span>
                             <button onClick={() => borrarApoyo(r.id)} disabled={borrandoApoyo === r.id}
@@ -687,9 +699,20 @@ const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
 
                   <div style={{ borderTop: apoyoRegistrosMes.length > 0 ? '1px solid #eef2f7' : 'none', paddingTop: apoyoRegistrosMes.length > 0 ? '10px' : '0', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div>
-                      <label style={lS}>Sede</label>
+                      <label style={lS}>Categoría</label>
+                      <select value={pagoConcepto} onChange={e => { setPagoConcepto(e.target.value); setApoyoOk(''); setApoyoErr('') }} style={fS}>
+                        {['Apoyo a concierto', 'Alquiler instrumento', 'Transporte', 'Otro'].map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={lS}>Descripción (opcional)</label>
+                      <input type="text" value={pagoDescripcion} onChange={e => { setPagoDescripcion(e.target.value); setApoyoOk('') }}
+                        placeholder="Ej: Clarinete marzo" style={fS} />
+                    </div>
+                    <div>
+                      <label style={lS}>Sede (opcional)</label>
                       <select value={apoyoSede} onChange={e => { setApoyoSede(e.target.value); setApoyoOk(''); setApoyoErr('') }} style={fS}>
-                        <option value="">Seleccionar sede...</option>
+                        <option value="">Sin sede específica</option>
                         {sedesLista.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                       </select>
                     </div>
@@ -700,7 +723,7 @@ const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
                     </div>
                     <button onClick={guardarApoyo} disabled={apoyoGuardando}
                       style={{ padding: '8px', background: apoyoGuardando ? '#cbd5e1' : TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
-                      {apoyoGuardando ? 'Guardando...' : '+ Agregar apoyo'}
+                      {apoyoGuardando ? 'Guardando...' : '+ Agregar pago'}
                     </button>
                     {apoyoOk && <p style={{ margin: 0, color: '#166534', fontSize: '12px', fontWeight: '600' }}>{apoyoOk}</p>}
                     {apoyoErr && <p style={{ margin: 0, color: '#dc2626', fontSize: '12px' }}>{apoyoErr}</p>}
@@ -863,7 +886,7 @@ const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
                   <p style={{ margin: '2px 0 0', fontSize: '12px', color: TEAL }}>
                     Honorarios ({dadas.length} dadas{canceladasTarde.length > 0 ? ` + ${canceladasTarde.length} tarde` : ''})
                   </p>
-                  {apoyoConciertoTotal > 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#7c3aed', fontWeight: '600' }}>Incl. concierto ${apoyoConciertoTotal.toLocaleString()}</p>}
+                  {apoyoConciertoTotal > 0 && <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#7c3aed', fontWeight: '600' }}>Incl. pagos adicionales ${apoyoConciertoTotal.toLocaleString()}</p>}
                 </div>
               </div>
 
