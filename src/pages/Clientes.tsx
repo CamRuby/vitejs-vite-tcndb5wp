@@ -859,7 +859,7 @@ await cargarDatosCliente(cliente)
       }
     }
     setPlanes(prev => prev.map(p => p.id === planId ? { ...p, estado: nuevoEstado } : p))
-    auditar('cambiar_estado_plan', 'contratos', planId, { estado: nuevoEstado })
+    auditar('cambiar_estado_plan', 'contratos', planId, { cliente: clienteSeleccionado?.nombre || '—', estado: nuevoEstado })
     const { error } = await supabase.from('contratos').update({ estado: nuevoEstado }).eq('id', planId)
     if (error) { alert('Error: ' + error.message); await cargarDatosCliente(clienteSeleccionado) }
     cargarVista(vistaActual)
@@ -919,7 +919,7 @@ await cargarDatosCliente(cliente)
       valor_pagado: inscripcion.valor_pagado, estado: 'activo'
     })
     if (error) { alert('Error al renovar: ' + error.message); return }
-    auditar('archivar_inscripcion_taller', 'taller_inscripciones', inscripcion.id, { cliente_id: clienteSeleccionado?.id })
+    auditar('archivar_inscripcion_taller', 'taller_inscripciones', inscripcion.id, { cliente: clienteSeleccionado?.nombre || '—' })
     await supabase.from('taller_inscripciones').update({ estado: 'archivado' }).eq('id', inscripcion.id)
     await cargarDatosCliente(clienteSeleccionado)
   }
@@ -1221,7 +1221,7 @@ await cargarDatosCliente(cliente)
       const { error } = await supabase.from('contratos').update(registro).eq('id', planId)
       if (error) { alert('Error al actualizar plan: ' + error.message); return }
     } else {
-      auditar('crear_plan', 'contratos', undefined, { cliente_id: clienteSeleccionado?.id })
+      auditar('crear_plan', 'contratos', undefined, { cliente: clienteSeleccionado?.nombre || '—' })
             const { data: nuevoPlan, error } = await supabase.from('contratos').insert(registro).select().single()
       if (error) { alert('Error al crear plan: ' + error.message); return }
       // Siempre migrar clases futuras programadas/confirmadas al nuevo plan.
