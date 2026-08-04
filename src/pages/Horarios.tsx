@@ -1010,7 +1010,11 @@ async function verificarConflictosEnMemoria(
         [slotSeleccionado.fecha], slotSeleccionado.hora, parseInt(duracion)
       )
       if (conflictos[slotSeleccionado.fecha]) { setError(conflictos[slotSeleccionado.fecha]); setGuardando(false); return }
-      auditar('crear_clase', 'clases', undefined, { fecha: slotSeleccionado.fecha, profesor_id: profesorId })
+      auditar('crear_clase', 'clases', undefined, {
+        fecha: slotSeleccionado.fecha, hora: slotSeleccionado.hora,
+        cliente: (clienteSeleccionado as any)?.nombre || '—',
+        profesor: profesores.find((p: any) => p.id === profesorId)?.nombre || '—'
+      })
       const { error: err } = await supabase.from('clases').insert({
         contrato_id: (contratoSeleccionado as any).id, salon_id: slotSeleccionado.salon.id,
         profesor_id: profesorId, fecha: slotSeleccionado.fecha, hora: slotSeleccionado.hora + ':00',
@@ -1093,7 +1097,12 @@ if (err) setError('Error: ' + err.message)
       }
       if (editEstado !== claseEditando.estado) {
         auditar('cambiar_estado_clase', 'clases', claseEditando.id, {
-          de: claseEditando.estado, a: editEstado, alcance: editEstado === 'cancelada' ? 'futuras' : 'solo_esta_clase', cantidad: editEstado === 'cancelada' ? idsClasesFuturas.length : 1
+          cliente: (claseEditando as any).contratos?.clientes?.nombre || '—',
+          profesor: (claseEditando as any).profesores?.nombre || '—',
+          fecha: claseEditando.fecha,
+          de: claseEditando.estado, a: editEstado,
+          alcance: editEstado === 'cancelada' ? 'futuras' : 'solo_esta_clase',
+          cantidad: editEstado === 'cancelada' ? idsClasesFuturas.length : 1
         })
       }
     } else {
@@ -1131,6 +1140,9 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
       if (editEstado !== claseEditando.estado) {
         auditar('cambiar_estado_clase', 'clases', claseEditando.id, {
+          cliente: (claseEditando as any).contratos?.clientes?.nombre || '—',
+          profesor: (claseEditando as any).profesores?.nombre || '—',
+          fecha: claseEditando.fecha,
           de: claseEditando.estado, a: editEstado, motivo: updatePayload.motivo_cancelacion || null
         })
       }
@@ -1168,7 +1180,11 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
     if (alcance === 'futuras' && claseEditando.patron_id) {
       await supabase.from('clases').delete().eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
    } else {
-      auditar('borrar_clase', 'clases', claseEditando.id, { fecha: claseEditando.fecha })
+      auditar('borrar_clase', 'clases', claseEditando.id, {
+        fecha: claseEditando.fecha, hora: (claseEditando.hora || '').substring(0, 5),
+        cliente: (claseEditando as any).contratos?.clientes?.nombre || '—',
+        profesor: (claseEditando as any).profesores?.nombre || '—'
+      })
       await supabase.from('clases').delete().eq('id', claseEditando.id)
   if ((editEstado === 'confirmada' || editEstado === 'dada') && claseEditando.contratos?.id) {
         const { data: ctWA } = await supabase.from('contratos').select('conteo_whatsapp').eq('id', claseEditando.contratos.id).single()
@@ -2119,6 +2135,8 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                                   cancelado_tarde: false
                                 }).eq('id', claseEditando.id)
                                 auditar('cambiar_estado_clase', 'clases', claseEditando.id, {
+                                  cliente: (claseEditando as any).contratos?.clientes?.nombre || '—',
+                                  fecha: claseEditando.fecha,
                                   de: 'cancelada', a: 'confirmada', motivo: 'reasignación de profesor'
                                 })
                                 setClaseEditando((prev: any) => ({ ...prev, profesor_id: nuevoProf, estado: 'confirmada', cancelado_por_academia: null, cancelado_tarde: false }))
