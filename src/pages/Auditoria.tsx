@@ -13,18 +13,81 @@ const LABELS: Record<string, string> = {
   registrar_abono:            '💰 Abono plan',
   registrar_abono_taller:     '💰 Abono taller',
   archivar_inscripcion_taller:'📦 Archivar inscripción taller',
+  crear_clase:                '➕ Crear clase',
   editar_clase:               '📅 Editar clase',
+  cambiar_estado_clase:       '🔄 Cambiar estado clase',
   borrar_clase:               '🗑 Borrar clase',
   editar_honorario:           '💵 Editar honorario',
   crear_taller:               '🎸 Crear taller',
+  crear_taller_vacacional:    '🎸 Crear taller vacacional',
   sesion_taller_confirmada:   '✅ Confirmar sesión taller',
   sesion_taller_dada:         '✓ Sesión taller dada',
   sesion_taller_cancelada:    '✗ Sesión taller cancelada',
-  inicio_sesion:               '🔑 Inicio de sesión',
+  inicio_sesion:              '🔑 Inicio de sesión',
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  cliente: 'Cliente', cliente_id: 'Cliente',
+  profesor: 'Profesor', profesor_id: 'Profesor',
+  fecha: 'Fecha', hora: 'Hora',
+  de: 'De', a: 'A', motivo: 'Motivo', estado: 'Estado', nombre: 'Nombre',
+  monto: 'Monto', metodo: 'Método', alcance: 'Alcance', cantidad: 'Cantidad',
+  desde: 'Desde', hasta: 'Hasta', obs_admin: 'Obs. admin', honorario_valor: 'Honorario',
+}
+
+function isUUID(s: string) {
+  return typeof s === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+}
+
+function resolverValor(k: string, v: any, nombres: Record<string, string>): string | null {
+  if (v === null || v === undefined) return null
+  const vs = String(v)
+  // Si es un UUID, intentar resolver con el mapa de nombres
+  if (isUUID(vs)) return nombres[vs] || null
+  return vs
+}
+
+function renderDetalle(detalle: Record<string, any> | null, nombres: Record<string, string>): string {
+  if (!detalle) return '—'
+  const parts: string[] = []
+  for (const [k, v] of Object.entries(detalle)) {
+    const resolved = resolverValor(k, v, nombres)
+    if (resolved === null) continue
+    const label = FIELD_LABELS[k] || k
+    parts.push(`${label}: ${resolved}`)
+  }
+  return parts.length > 0 ? parts.join(' · ') : '—'
+}
+
+function resumenLegible(r: any, nombres: Record<string, string>): string {
+  const d = r.detalle || {}
+
+  const clienteRaw = d.cliente || d.cliente_id
+  const profesorRaw = d.profesor || d.profesor_id
+
+  const cliente = clienteRaw ? (isUUID(String(clienteRaw)) ? nombres[clienteRaw] || null : clienteRaw) : null
+  const profesor = profesorRaw ? (isUUID(String(profesorRaw)) ? nombres[profesorRaw] || null : profesorRaw) : null
+  const fecha = d.fecha || null
+  const hora = d.hora || null
+  const nombre = d.nombre && !isUUID(String(d.nombre)) ? d.nombre : null
+
+  if (cliente || profesor) {
+    const partes: string[] = []
+    if (cliente) partes.push(cliente)
+    if (profesor) partes.push(`(${profesor})`)
+    if (fecha) partes.push(fecha + (hora ? ` ${hora}` : ''))
+    if (d.de && d.a) partes.push(`${d.de} → ${d.a}`)
+    else if (d.estado) partes.push(d.estado)
+    return partes.join(' · ')
+  }
+  if (nombre) return nombre
+  if (fecha) return fecha
+  return '—'
 }
 
 export default function Auditoria() {
   const [registros, setRegistros] = useState<any[]>([])
+  const [nombres, setNombres] = useState<Record<string, string>>({})
   const [cargando, setCargando]   = useState(true)
   const [filtroUser, setFiltroUser] = useState('')
   const [filtroAccion, setFiltroAccion] = useState('')
@@ -41,7 +104,30 @@ export default function Auditoria() {
     if (filtroUser) q = q.ilike('usuario_email', `%${filtroUser}%`)
     if (filtroAccion) q = q.eq('accion', filtroAccion)
     const { data } = await q
-    setRegistros(data || [])
+    const rows = data || []
+    setRegistros(rows)
+
+    // Recolectar todos los UUIDs de profesor_id y cliente_id en detalle
+    const profIds = new Set<string>()
+    const clienteIds = new Set<string>()
+    for (const r of rows) {
+      const d = r.detalle || {}
+      if (d.profesor_id && isUUID(d.profesor_id)) profIds.add(d.profesor_id)
+      if (d.cliente_id && isUUID(d.cliente_id)) clienteIds.add(d.cliente_id)
+    }
+
+    const mapa: Record<string, string> = {}
+    const [profRes, clienteRes] = await Promise.all([
+      profIds.size > 0
+        ? supabase.from('profesores').select('id, nombre').in('id', [...profIds])
+        : Promise.resolve({ data: [] }),
+      clienteIds.size > 0
+        ? supabase.from('clientes').select('id, nombre').in('id', [...clienteIds])
+        : Promise.resolve({ data: [] }),
+    ])
+    for (const p of profRes.data || []) mapa[p.id] = p.nombre
+    for (const c of clienteRes.data || []) mapa[c.id] = c.nombre
+    setNombres(mapa)
     setCargando(false)
   }
 
@@ -85,7 +171,7 @@ export default function Auditoria() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ background: TEAL_LIGHT }}>
             <tr>
-              {['Fecha y hora', 'Usuario', 'Acción', 'Entidad', 'Detalle'].map(h => (
+              {['Fecha y hora', 'Usuario', 'Acción', 'Resumen', 'Detalle'].map(h => (
                 <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: TEAL, fontWeight: '700' }}>{h}</th>
               ))}
             </tr>
@@ -106,13 +192,11 @@ export default function Auditoria() {
                     {LABELS[r.accion] || r.accion}
                   </span>
                 </td>
-                <td style={{ padding: '11px 16px', fontSize: '13px', color: '#555' }}>{r.entidad || '—'}</td>
-                <td style={{ padding: '11px 16px', fontSize: '12px', color: '#666', maxWidth: '300px' }}>
-                  {r.detalle ? Object.entries(r.detalle).map(([k, v]) => (
-                    <span key={k} style={{ display: 'inline-block', marginRight: '8px', marginBottom: '2px' }}>
-                      <span style={{ color: '#aaa' }}>{k}:</span> {String(v)}
-                    </span>
-                  )) : '—'}
+                <td style={{ padding: '11px 16px', fontSize: '13px', fontWeight: '600', color: '#1a1a1a' }}>
+                  {resumenLegible(r, nombres)}
+                </td>
+                <td style={{ padding: '11px 16px', fontSize: '11px', color: '#888', maxWidth: '260px' }}>
+                  {renderDetalle(r.detalle, nombres)}
                 </td>
               </tr>
             ))}
