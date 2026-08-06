@@ -417,7 +417,7 @@ async function verificarConflictosEnMemoria(
     profId ? supabase.from('clases').select('id, fecha, hora, duracion_min, contratos(clientes(nombre))')
       .eq('profesor_id', profId).neq('estado', 'cancelada').gte('fecha', fechaMin).lte('fecha', fechaMax) : Promise.resolve({ data: [] }),
     profId ? supabase.from('talleres').select('id, nombre, hora, duracion_min, dia_semana, fecha_unica, fecha_fin_vacacional')
-      .eq('profesor_id', profId) : Promise.resolve({ data: [] }),
+      .eq('profesor_id', profId).neq('estado', 'archivado') : Promise.resolve({ data: [] }),
     supabase.from('talleres').select('id, nombre, salon_id, hora, duracion_min, dia_semana, fecha_unica, fecha_fin_vacacional')
       .eq('salon_id', salonId).neq('estado', 'archivado')
   ])
