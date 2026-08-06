@@ -1051,14 +1051,17 @@ if (err) setError('Error: ' + err.message)
       fechasAVerificar = clasesFuturas.map((c: any) => c.fecha)
     }
 
-    const conflictos = await verificarConflictosEnMemoria(
-      editSalonId, editProfesorId,
-      fechasAVerificar, editHora, parseInt(editDuracion), idsClasesFuturas ?? [claseEditando.id]
-    )
-    const fechaConChoque = fechasAVerificar.find(f => conflictos[f])
-    if (fechaConChoque) {
-      setEditError(`${conflictos[fechaConChoque]} (fecha: ${fechaConChoque})`)
-      setEditGuardando(false); return
+    // Al cancelar no tiene sentido validar conflictos de horario
+    if (editEstado !== 'cancelada') {
+      const conflictos = await verificarConflictosEnMemoria(
+        editSalonId, editProfesorId,
+        fechasAVerificar, editHora, parseInt(editDuracion), idsClasesFuturas ?? [claseEditando.id]
+      )
+      const fechaConChoque = fechasAVerificar.find(f => conflictos[f])
+      if (fechaConChoque) {
+        setEditError(`${conflictos[fechaConChoque]} (fecha: ${fechaConChoque})`)
+        setEditGuardando(false); return
+      }
     }
 
     let numeroPlan: number | undefined = undefined
