@@ -1221,7 +1221,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       let sesiones: any[] = []
       if (tallerIds.length > 0) {
         const { data: s } = await supabase.from('taller_sesiones')
-          .select('id, fecha, observaciones, honorario_valor, taller_id')
+          .select('id, fecha, observaciones, honorario_valor, taller_id, profesor_id')
           .eq('estado', 'dada')
           .gte('fecha', fechaInicio).lte('fecha', fechaFin)
           .in('taller_id', tallerIds)
@@ -1237,7 +1237,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
           nombreTaller: t?.nombre, salones: t?.salones, observaciones: s.observaciones,
           contratos: null, cancelado_por_academia: false, es_cortesia: false,
           honorario_valor: s.honorario_valor ?? null, modalidad: 'taller',
-          profesor_id: t?.profesor_id || null, contrato_id: null,
+          profesor_id: s.profesor_id || t?.profesor_id || null, contrato_id: null,
         }
       })
 
