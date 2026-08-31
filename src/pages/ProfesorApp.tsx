@@ -407,6 +407,19 @@ export default function ProfesorApp() {
         .order('fecha', { ascending: false })
       tallerSesiones = ts || []
     }
+    // También incluir sesiones de talleres ajenos donde este profesor fue sustituto
+    const { data: sesionesComoSustituto } = await supabase
+      .from('taller_sesiones')
+      .select('id, fecha, estado, observaciones, honorario_valor, taller_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))')
+      .eq('estado', 'dada')
+      .eq('profesor_id', profesor.id)
+      .gte('fecha', fi).lte('fecha', ff)
+      .order('fecha', { ascending: false })
+    // Fusionar evitando duplicados (por si el taller base también es de este profesor)
+    const idsYaCargados = new Set(tallerSesiones.map((s: any) => s.id))
+    for (const s of (sesionesComoSustituto || [])) {
+      if (!idsYaCargados.has(s.id)) tallerSesiones.push(s)
+    }
     const tallerClases = tallerSesiones.map((s: any) => ({
       id: `taller-sesion-${s.id}`,
       fecha: s.fecha,
