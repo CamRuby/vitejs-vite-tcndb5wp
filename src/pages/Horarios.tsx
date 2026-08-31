@@ -140,6 +140,7 @@ export default function Horarios() {
   const [sesionesEstadoMap, setSesionesEstadoMap] = useState<Record<string, string>>({})
   const [sesionesHoraMap, setSesionesHoraMap] = useState<Record<string, string>>({})
   const [sesionesSalonMap, setSesionesSalonMap] = useState<Record<string, string>>({})
+  const [sesionesProfesorMap, setSesionesProfesorMap] = useState<Record<string, string>>({})
   const [sesionFechaOverride, setSesionFechaOverride] = useState('')
   const [sesionHoraOverride, setSesionHoraOverride] = useState('')
   const [sesionSalonOverride, setSesionSalonOverride] = useState('')
@@ -380,7 +381,7 @@ setCargando(false)
       const [{ data: ins }, { data: sesiones }] = await Promise.all([
         supabase.from('taller_inscripciones').select('taller_id, mes, fecha_inicio, fecha_fin')
           .in('taller_id', data.map((t: any) => t.id)).eq('estado', 'activo'),
-        supabase.from('taller_sesiones').select('taller_id, fecha, estado, hora, salon_id')
+        supabase.from('taller_sesiones').select('taller_id, fecha, estado, hora, salon_id, profesor_id')
           .in('taller_id', data.map((t: any) => t.id))
       ])
       const conteo: Record<string, number> = {}
@@ -394,14 +395,17 @@ setCargando(false)
       const sMap: Record<string, string> = {}
       const horaMap: Record<string, string> = {}
       const salonMap: Record<string, string> = {}
+      const profMap: Record<string, string> = {}
       ;(sesiones || []).forEach((s: any) => {
         sMap[`${s.taller_id}-${s.fecha}`] = s.estado
         if (s.hora) horaMap[`${s.taller_id}-${s.fecha}`] = s.hora.substring(0,5)
         if (s.salon_id) salonMap[`${s.taller_id}-${s.fecha}`] = s.salon_id
+        if (s.profesor_id) profMap[`${s.taller_id}-${s.fecha}`] = s.profesor_id
       })
       setSesionesEstadoMap(sMap)
       setSesionesHoraMap(horaMap)
       setSesionesSalonMap(salonMap)
+      setSesionesProfesorMap(profMap)
     }
   }
 async function verificarConflictosEnMemoria(
@@ -1454,7 +1458,14 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                                 {inscritosPorTaller[taller.id] || 0} 👤
                               </span>
                             </div>
-                            {vista === 'dia' && <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '1px' }}>{taller.profesores?.nombre}</div>}
+                            {vista === 'dia' && <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '1px' }}>{(() => {
+                              const profIdSesion = sesionesProfesorMap[`${taller.id}-${fecha}`]
+                              if (profIdSesion && profIdSesion !== taller.profesor_id) {
+                                const profSesion = profesores.find((p: any) => p.id === profIdSesion)
+                                return profSesion ? profSesion.nombre : taller.profesores?.nombre
+                              }
+                              return taller.profesores?.nombre
+                            })()}</div>}
                           </div>
                         })()}
 
@@ -1754,7 +1765,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
               <div>
                 <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>🎸 {tallerViendo.nombre}</h3>
                 <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>
-                  {sesionActual?.profesor_id && sesionActual.profesor_id !== tallerViendo?.profesor_id ? `${profesores.find((p: any) => p.id === sesionActual.profesor_id)?.nombre || tallerViendo.profesores?.nombre} (reemplazo)` : tallerViendo.profesores?.nombre}
+                  {sesionActual?.profesor_id && sesionActual.profesor_id !== tallerViendo?.profesor_id ? (profesores.find((p: any) => p.id === sesionActual.profesor_id)?.nombre || tallerViendo.profesores?.nombre) : tallerViendo.profesores?.nombre}
                   {' · '}{sesionActual?.salon_id && sesionActual.salon_id !== tallerViendo?.salon_id ? `${todosSalones.find((s: any) => s.id === sesionActual.salon_id)?.nombre || tallerViendo.salones?.nombre} (cambio de salón)` : tallerViendo.salones?.nombre}
                   {' · '}{tallerViendo.dia_semana} {sesionActual?.hora && sesionActual.hora.substring(0,5) !== tallerViendo.hora?.substring(0,5) ? `${sesionActual.hora.substring(0,5)} (cambio de hora)` : tallerViendo.hora?.substring(0, 5)}
                 </p>
