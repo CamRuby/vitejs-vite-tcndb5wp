@@ -610,6 +610,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [borrando, setBorrando] = useState(false)
   const [expandirFicha, setExpandirFicha] = useState(false)
   const [filtroSede, setFiltroSede] = useState('')
+  const [filtroProfesor, setFiltroProfesor] = useState('')
   
   // ── Historial por plan: qué planes están expandidos ──
   const [planesExpandidos, setPlanesExpandidos] = useState<Set<string>>(new Set())
@@ -655,7 +656,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
       }
       setDatosVista((data || []).map((c: any) => ({ ...c, tiene_plan_activo: !!planesActivos[c.id] })))
     } else if (vista === 'activos') {
-      const planSelect2 = 'id, cliente_id, total_clases, clases_tomadas, duracion_min, valor_plan, fecha_inicio, estado, clientes(id, nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre), sedes(id, nombre)'
+      const planSelect2 = 'id, cliente_id, total_clases, clases_tomadas, duracion_min, valor_plan, fecha_inicio, estado, clientes(id, nombre, nombres, apellidos), instrumentos(nombre), profesores(id, nombre), sedes(id, nombre)'
       const { data } = await supabase.from('contratos').select(planSelect2).eq('estado', 'activo').order('clases_tomadas', { ascending: false })
       setDatosVista(data || [])
       const planIds = (data || []).map((p: any) => p.id)
@@ -1425,7 +1426,8 @@ await cargarDatosCliente(cliente)
               {!cargandoVista && vistaActual === 'activos' && (() => {
                 let datos = [...datosVista]
                 if (filtroSede) datos = datos.filter((p: any) => p.sedes?.id === filtroSede)
-                
+                if (filtroProfesor) datos = datos.filter((p: any) => p.profesores?.id === filtroProfesor)
+
                 datos.sort((a: any, b: any) => ((a.total_clases || 0) - (a.clases_tomadas || 0)) - ((b.total_clases || 0) - (b.clases_tomadas || 0)))
                 return (
                   <div>
@@ -1433,6 +1435,10 @@ await cargarDatosCliente(cliente)
                       <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)} style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px', background: 'white' }}>
                         <option value="">Todas las sedes</option>
                         {sedes.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                      </select>
+                      <select value={filtroProfesor} onChange={e => setFiltroProfesor(e.target.value)} style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '13px', background: 'white' }}>
+                        <option value="">Todos los profesores</option>
+                        {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                       </select>
 
                       <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#666' }}>{datos.length} planes</span>
