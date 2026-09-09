@@ -28,6 +28,17 @@ function iconoTipo(tipo: string): { emoji: string; color: string; bg: string; la
 const DIAS_L   = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
 const MESES_L  = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
+function opcionesMes(): { valor: string; etiqueta: string }[] {
+  const opciones = []
+  const hoy = new Date()
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1)
+    const valor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    opciones.push({ valor, etiqueta: `${MESES_L[d.getMonth()]} ${d.getFullYear()}` })
+  }
+  return opciones
+}
+
 export default function Inicio({ onNavegar, onNuevaNotificacion }: {
   onNavegar: (seccion: string) => void
   onNuevaNotificacion: () => void
@@ -40,11 +51,20 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
   const [planesSinIniciar, setPlanesSinIniciar] = useState<any[]>([])
   const [inasistenciasPendientes, setInasistenciasPendientes] = useState<any[]>([])
 
+  // ── Clientes nuevos ──
+  const [clientesNuevos, setClientesNuevos]           = useState<any[]>([])
+  const [cargandoNuevos, setCargandoNuevos]           = useState(false)
+  const [mesClientesNuevos, setMesClientesNuevos]     = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
+
   const hoy = new Date()
   const fechaHoy = fechaHoyLocal()
   const tituloFecha = `${DIAS_L[hoy.getDay()].charAt(0).toUpperCase() + DIAS_L[hoy.getDay()].slice(1)} ${hoy.getDate()} de ${MESES_L[hoy.getMonth()]}`
 
   useEffect(() => { cargarTodo() }, [])
+  useEffect(() => { cargarClientesNuevos(mesClientesNuevos) }, [mesClientesNuevos])
 
   async function cargarTodo() {
     setCargando(true)
@@ -54,7 +74,7 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
       cargarPlanesAlerta(),
       cargarPlanesPorRenovar(),
       cargarPlanesSinIniciar(),
-      cargarInasistenciasPendientes()
+      cargarInasistenciasPendientes(),
     ])
     setCargando(false)
   }
@@ -134,6 +154,22 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
       .order('fecha', { ascending: false })
       .limit(10)
     setInasistenciasPendientes(data || [])
+  }
+
+  async function cargarClientesNuevos(mes: string) {
+    setCargandoNuevos(true)
+    const [year, month] = mes.split('-').map(Number)
+    const ultimoDia = new Date(year, month, 0).getDate()
+    const desde = `${year}-${String(month).padStart(2, '0')}-01T00:00:00`
+    const hasta  = `${year}-${String(month).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}T23:59:59`
+    const { data } = await supabase
+      .from('clientes')
+      .select('id, nombre, nombres, apellidos, telefono, email, created_at')
+      .gte('created_at', desde)
+      .lte('created_at', hasta)
+      .order('created_at', { ascending: false })
+    setClientesNuevos(data || [])
+    setCargandoNuevos(false)
   }
 
   async function marcarLeida(id: string) {
@@ -372,6 +408,65 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
               ),
               'Programar clases'
             )}
+
+            {/* 6. Clientes nuevos */}
+            <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #bbf7d0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+              <div style={{ padding: '14px 20px', background: '#dcfce7', borderBottom: '1px solid #bbf7d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '15px', color: '#166534', fontWeight: '700' }}>🆕 Clientes nuevos</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#166534', opacity: 0.8 }}>
+                    {cargandoNuevos ? 'Cargando...' : `${clientesNuevos.length} registrado${clientesNuevos.length !== 1 ? 's' : ''}`}
+                  </p>
+                </div>
+                <select
+                  value={mesClientesNuevos}
+                  onChange={e => setMesClientesNuevos(e.target.value)}
+                  style={{ padding: '5px 10px', borderRadius: '8px', border: '1px solid #bbf7d0', fontSize: '12px', background: 'white', color: '#166534', fontWeight: '600', cursor: 'pointer', outline: 'none' }}>
+                  {opcionesMes().map(op => (
+                    <option key={op.valor} value={op.valor}>{op.etiqueta}</option>
+                  ))}
+                </select>
+              </div>
+
+              {cargandoNuevos ? (
+                <p style={{ textAlign: 'center', color: '#aaa', padding: '28px 20px', fontSize: '13px', margin: 0 }}>Cargando...</p>
+              ) : clientesNuevos.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#aaa', padding: '28px 20px', fontSize: '13px', margin: 0 }}>Sin clientes nuevos este mes</p>
+              ) : (
+                <>
+                  <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
+                    {clientesNuevos.map((c: any, i) => {
+                      const nombre = c.nombre || `${c.nombres || ''} ${c.apellidos || ''}`.trim() || '—'
+                      const fechaReg = new Date(c.created_at)
+                      const fechaStr = fechaReg.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })
+                      const horaStr  = fechaReg.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })
+                      return (
+                        <div key={c.id}
+                          onClick={() => onNavegar('clientes')}
+                          style={{ padding: '11px 20px', borderBottom: '1px solid #f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: i % 2 === 0 ? 'white' : '#fafbfc' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = '#dcfce7')}
+                          onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafbfc')}>
+                          <div style={{ textAlign: 'left', minWidth: 0 }}>
+                            <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: '600', color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</p>
+                            <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>{c.telefono || c.email || '—'}</p>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '10px' }}>
+                            <p style={{ margin: '0 0 1px', fontSize: '12px', fontWeight: '600', color: '#166534' }}>{fechaStr}</p>
+                            <p style={{ margin: 0, fontSize: '11px', color: '#aaa' }}>{horaStr}</p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div style={{ padding: '10px 20px', textAlign: 'center', borderTop: '1px solid #f8fafc' }}>
+                    <button onClick={() => onNavegar('clientes')}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: '#166534', fontWeight: '600' }}>
+                      Ver en clientes →
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
 
           </div>
         </>
