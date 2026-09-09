@@ -6,11 +6,16 @@ import ProfesorApp from './pages/ProfesorApp'
 const esProfesor = window.location.pathname.startsWith('/profesor')
 import AdminApp from './pages/AdminApp'
 const esAdmin = window.location.pathname.startsWith('/admin')
+import RegistroCliente from './pages/RegistroCliente'
+const esRegistro = window.location.pathname.startsWith('/registro')
+
 export default function App() {
   const [sesion, setSesion] = useState<any>(null)
   const [rol, setRol] = useState<string | null>(null)
   const [listo, setListo] = useState(false)
+
   useEffect(() => {
+    if (esRegistro) return // Ruta pública — sin autenticación requerida
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSesion(session)
       if (session?.user?.email) {
@@ -34,6 +39,10 @@ export default function App() {
     })
     return () => subscription.unsubscribe()
   }, [])
+
+  // ── Ruta pública: formulario de registro para nuevos clientes ──
+  if (esRegistro) return <RegistroCliente />
+
   if (!listo) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p>Cargando...</p>
