@@ -1196,7 +1196,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
         supabase.from('profesores').select('id, nombre, cc, ciudad, ciudad_cc, banco, tipo_cuenta, numero_cuenta'),
         supabase.from('profesor_tarifas').select('profesor_id, modalidad, duracion_min, taller_grupal, valor').eq('taller_grupal', false),
         supabase.from('clases_con_numero')
-          .select('id, fecha, hora, duracion_min, estado, modalidad, cancelado_por_academia, es_cortesia, observaciones, observaciones_admin, contrato_id, honorario_valor, profesor_id, contratos(cliente_id, clientes(nombre, nombres, apellidos), total_clases), salones(sede_id, sedes(nombre))')
+          .select('id, fecha, hora, duracion_min, estado, modalidad, cancelado_por_academia, es_cortesia, observaciones, observaciones_admin, contrato_id, honorario_valor, profesor_id, contratos(cliente_id, sede_id, sedes(nombre), clientes(nombre, nombres, apellidos), total_clases), salones(sede_id, sedes(nombre))')
           .gte('fecha', fechaInicio).lte('fecha', fechaFin)
           .in('estado', ['dada', 'cancelada'])
           .or('estado.eq.dada,cancelado_por_academia.eq.false'),
@@ -1316,8 +1316,9 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
         const hon = getHonorarioPDF(c, tarifasProf)
         const honorarioNum = hon === 'pendiente' ? 0 : hon
 
-        const sedeId = c.salones?.sede_id || null
-        const sedeNombre = c.salones?.sedes?.nombre || '—'
+        // Clases regulares: sede del plan (contratos.sede_id). Talleres: sede del salón (no tienen contrato).
+        const sedeId = c.contratos ? (c.contratos?.sede_id || null) : (c.salones?.sede_id || null)
+        const sedeNombre = c.contratos ? (c.contratos?.sedes?.nombre || '—') : (c.salones?.sedes?.nombre || '—')
         const key = sedeId || 'sin_sede'
         if (!g.porSede[key]) g.porSede[key] = { sede_nombre: sedeNombre, clases: 0, minutos: 0, honorario: 0 }
         g.porSede[key].clases += 1
