@@ -106,17 +106,18 @@ export default function RegistroCliente() {
 
   /* ── Formulario ── */
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#f8fafc', display: 'flex', justifyContent: 'center', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+      <div style={{ width: '100%', maxWidth: '520px', height: '100%', display: 'flex', flexDirection: 'column' }}>
 
-      {/* Encabezado */}
-      <div style={{ background: TEAL, padding: '28px 24px 36px', textAlign: 'center' }}>
-        <img src="/Logo_RubySalamanca.png" alt="Academia Ruby Salamanca"
-          style={{ height: '50px', objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.95, display: 'block', margin: '0 auto 14px' }} />
-        <h1 style={{ margin: '0 0 6px', color: 'white', fontSize: '21px', fontWeight: '700' }}>Formulario de matrícula</h1>
-        <p style={{ margin: 0, color: 'rgba(255,255,255,0.85)', fontSize: '14px' }}>Completa tus datos para registrarte</p>
-      </div>
+        {/* Encabezado */}
+        <div style={{ background: TEAL, padding: '28px 24px 36px', textAlign: 'center', flexShrink: 0 }}>
+          <img src="/Logo_RubySalamanca.png" alt="Academia Ruby Salamanca"
+            style={{ height: '50px', objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.95, display: 'block', margin: '0 auto 14px' }} />
+          <h1 style={{ margin: '0 0 6px', color: 'white', fontSize: '21px', fontWeight: '700' }}>Formulario de matrícula</h1>
+          <p style={{ margin: 0, color: 'rgba(255,255,255,0.85)', fontSize: '14px' }}>Completa tus datos para registrarte</p>
+        </div>
 
-      <div style={{ maxWidth: '520px', margin: '0 auto', padding: '28px 20px 60px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '28px 20px 60px' }}>
 
         {/* ── Datos personales ── */}
         <div style={{ marginBottom: '32px' }}>
@@ -260,6 +261,7 @@ export default function RegistroCliente() {
         <p style={{ textAlign: 'center', fontSize: '12px', color: '#bbb', marginTop: '16px', lineHeight: '1.5' }}>
           Academia Ruby Salamanca · Tus datos están seguros 🔒
         </p>
+        </div>
       </div>
     </div>
   )
