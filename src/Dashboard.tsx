@@ -128,7 +128,15 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
         ))}
       </nav>
 
-      {/* Footer: avatar + campana */}
+      {/* Footer: app profesor (solo admins) + avatar + campana */}
+      {rol === 'admin' && (
+        <div style={{ padding: '8px 16px' }}>
+          <button onClick={() => { window.location.href = '/profesor' }}
+            style={{ width: '100%', padding: '9px 16px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'rgba(255,255,255,0.85)', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            🎓 App Profesor
+          </button>
+        </div>
+      )}
       <div style={{ padding: '16px 24px', borderTop: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ position: 'relative' }}>
           <button onClick={() => setVerMenu(v => !v)}
