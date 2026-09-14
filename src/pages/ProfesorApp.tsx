@@ -96,7 +96,7 @@ const SELECT_HISTORIAL = [
   'salones(nombre, sedes(nombre))'
 ].join(', ')
 
-export default function ProfesorApp() {
+export default function ProfesorApp({ rol }: { rol?: string | null }) {
   const [sesion, setSesion]               = useState<any>(null)
   const [profesor, setProfesor]           = useState<any>(null)
   const [cargandoAuth, setCargandoAuth]   = useState(true)
@@ -1023,6 +1023,12 @@ clasesDadas.forEach(c => {
     style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'rgba(255,255,255,0.85)', padding:'4px 11px', borderRadius:'20px', cursor:'pointer', fontSize:'11px', fontWeight:'600', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'5px' }}>
     🔒 Cambiar contraseña
   </button>
+  {rol === 'admin' && (
+    <button onClick={() => { window.location.href = '/' }}
+      style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'rgba(255,255,255,0.85)', padding:'4px 11px', borderRadius:'20px', cursor:'pointer', fontSize:'11px', fontWeight:'600', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'5px' }}>
+      ⊞ Administración
+    </button>
+  )}
 </div>
               </div>
           <div style={{ display:'flex', gap:'3px' }}>
