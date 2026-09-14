@@ -134,6 +134,7 @@ export default function ProfesorApp({ rol }: { rol?: string | null }) {
   const [contrasenaError, setContrasenaError] = useState('')
   const [contrasenaExito, setContrasenaExito] = useState('')
   const [guardandoContrasena, setGuardandoContrasena] = useState(false)
+  const [rolInterno, setRolInterno] = useState<string | null>(rol || null)
 
   useEffect(() => {
     document.body.style.background = '#f8fafc'
@@ -169,10 +170,14 @@ export default function ProfesorApp({ rol }: { rol?: string | null }) {
   }, [vista, mes, profesor])
 
   async function buscarProfesor(email: string) {
-    const { data } = await supabase.from('profesores')
-      .select('id, nombre, ciudad, ciudad_cc, email, cc, banco, tipo_cuenta, numero_cuenta')
-      .ilike('email', email.trim()).single()
+    const [{ data }, { data: rolData }] = await Promise.all([
+      supabase.from('profesores')
+        .select('id, nombre, ciudad, ciudad_cc, email, cc, banco, tipo_cuenta, numero_cuenta')
+        .ilike('email', email.trim()).single(),
+      supabase.from('roles').select('rol').ilike('email', email.trim()).single()
+    ])
     setProfesor(data || null)
+    setRolInterno(rolData?.rol || null)
     setCargandoAuth(false)
   }
 
@@ -1023,7 +1028,7 @@ clasesDadas.forEach(c => {
     style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'rgba(255,255,255,0.85)', padding:'4px 11px', borderRadius:'20px', cursor:'pointer', fontSize:'11px', fontWeight:'600', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'5px' }}>
     🔒 Cambiar contraseña
   </button>
-  {rol === 'admin' && (
+  {rolInterno === 'admin' && (
     <button onClick={() => { window.location.href = '/' }}
       style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'rgba(255,255,255,0.85)', padding:'4px 11px', borderRadius:'20px', cursor:'pointer', fontSize:'11px', fontWeight:'600', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'5px' }}>
       ⊞ Administración
