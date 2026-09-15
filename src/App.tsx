@@ -15,6 +15,13 @@ export default function App() {
   const [listo, setListo] = useState(false)
 
   useEffect(() => {
+    // Ajustar theme-color según la ruta
+    const color = esProfesor ? '#1a8a8a' : '#1e293b'
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color)
+    document.body.style.background = color
+  }, [])
+
+  useEffect(() => {
     if (esRegistro) return // Ruta pública — sin autenticación requerida
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSesion(session)
