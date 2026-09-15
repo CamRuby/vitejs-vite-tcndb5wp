@@ -611,7 +611,7 @@ async function verificarConflictosEnMemoria(
       const { data: planes } = await supabase.from('contratos')
         .select('total_clases, duracion_min, sede_id, instrumento_id, profesor_id, cliente_id, valor')
         .eq('cliente_id', clienteSeleccionado.id)
-        .eq('estado', 'archivado')
+        .in('estado', ['archivado', 'completado'])
         .order('created_at', { ascending: false })
         .limit(1)
       if (!planes || planes.length === 0) {
