@@ -187,6 +187,7 @@ export default function Horarios() {
   const fechasSemana = getFechasSemana(fechaBase)
   const [conteoWhatsapp, setConteoWhatsapp] = useState<number | ''>('')
   const [editConteoWhatsapp, setEditConteoWhatsapp] = useState<number | ''>('')
+  const [renovando, setRenovando] = useState(false)
   const columns = useMemo(() => {
     if (vista === 'semana') {
       return fechasSemana.flatMap((fecha, i) =>
@@ -599,6 +600,42 @@ async function verificarConflictosEnMemoria(
       setProfesorId(ct.profesores?.id || '')
       calcularAvisosCrear(ct, ct.profesores?.id || '', String(ct.duracion_min || 60), slotSeleccionado?.salon?.sede_id || '')
       setConteoWhatsapp(ct.conteo_whatsapp != null ? ct.conteo_whatsapp + 1 : '')
+    }
+  }
+
+  async function renovarUltimoPlan() {
+    if (!clienteSeleccionado) return
+    setRenovando(true)
+    try {
+      // Buscar el último plan archivado
+      const { data: planes } = await supabase.from('contratos')
+        .select('total_clases, duracion_min, sede_id, instrumento_id, profesor_id, cliente_id, valor')
+        .eq('cliente_id', clienteSeleccionado.id)
+        .eq('estado', 'archivado')
+        .order('created_at', { ascending: false })
+        .limit(1)
+      if (!planes || planes.length === 0) {
+        alert('No se encontró ningún plan archivado para este cliente.')
+        setRenovando(false)
+        return
+      }
+      const ultimo = planes[0]
+      const { error } = await supabase.from('contratos').insert({
+        cliente_id: ultimo.cliente_id,
+        total_clases: ultimo.total_clases,
+        duracion_min: ultimo.duracion_min,
+        sede_id: ultimo.sede_id,
+        instrumento_id: ultimo.instrumento_id,
+        profesor_id: ultimo.profesor_id,
+        valor: ultimo.valor,
+        estado: 'activo',
+        clases_tomadas: 0,
+      })
+      if (error) { alert('Error al renovar el plan: ' + error.message); setRenovando(false); return }
+      // Refrescar contratos del cliente
+      await seleccionarCliente(clienteSeleccionado)
+    } finally {
+      setRenovando(false)
     }
   }
 
@@ -1572,6 +1609,12 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                     <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px' }}>
                       <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#991b1b' }}>🚫 Sin plan activo</p>
                       <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#7f1d1d' }}>Este cliente no tiene un plan activo. Crea el plan desde <strong>Clientes</strong> antes de asignar la clase.</p>
+                      <button
+                        onClick={renovarUltimoPlan}
+                        disabled={renovando}
+                        style={{ marginTop: '10px', padding: '7px 14px', background: renovando ? '#9ca3af' : '#991b1b', color: 'white', border: 'none', borderRadius: '7px', cursor: renovando ? 'not-allowed' : 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                        {renovando ? 'Renovando...' : '🔄 Renovar último plan'}
+                      </button>
                     </div>
                   )}
 
