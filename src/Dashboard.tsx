@@ -110,7 +110,8 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
     }}>
       <div style={{ padding: '0 24px 24px', borderBottom: '1px solid #334155' }}>
         <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca"
-          style={{ width: '100%', maxWidth: '152px', display: 'block', marginBottom: '8px' }} />
+          onClick={rol === 'admin' ? () => { window.location.href = '/profesor' } : undefined}
+          style={{ width: '100%', maxWidth: '152px', display: 'block', marginBottom: '8px', cursor: rol === 'admin' ? 'pointer' : 'default' }} />
       </div>
       <nav style={{ flex: 1, padding: '16px 0', overflowY: 'auto' }}>
         {MENU.map(item => (
@@ -128,15 +129,7 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
         ))}
       </nav>
 
-      {/* Footer: app profesor (solo admins) + avatar + campana */}
-      {rol === 'admin' && (
-        <div style={{ padding: '8px 16px' }}>
-          <button onClick={() => { window.location.href = '/profesor' }}
-            style={{ width: '100%', padding: '9px 16px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', color: 'rgba(255,255,255,0.85)', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            🎓 App Profesor
-          </button>
-        </div>
-      )}
+      {/* Footer: avatar + campana */}
       <div style={{ padding: '16px 24px', borderTop: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ position: 'relative' }}>
           <button onClick={() => setVerMenu(v => !v)}
