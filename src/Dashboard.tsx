@@ -110,8 +110,8 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
     }}>
       <div style={{ padding: '0 24px 24px', borderBottom: '1px solid #334155' }}>
         <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca"
-          onClick={rol === 'admin' ? () => { window.location.href = '/profesor' } : undefined}
-          style={{ width: '100%', maxWidth: '152px', display: 'block', marginBottom: '8px', cursor: rol === 'admin' ? 'pointer' : 'default' }} />
+          onClick={() => { window.location.href = '/profesor' }}
+          style={{ width: '100%', maxWidth: '152px', display: 'block', marginBottom: '8px', cursor: 'pointer' }} />
       </div>
       <nav style={{ flex: 1, padding: '16px 0', overflowY: 'auto' }}>
         {MENU.map(item => (
