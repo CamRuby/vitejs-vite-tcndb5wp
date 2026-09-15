@@ -192,7 +192,8 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
               <span style={{ display: 'block', width: '22px', height: '2px', background: 'white', borderRadius: '2px' }} />
             </button>
             <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca"
-              style={{ height: '28px', objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
+              onClick={() => { window.location.href = '/profesor' }}
+              style={{ height: '28px', objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.9, cursor: 'pointer' }} />
             <button onClick={abrirNotificaciones}
               style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
               <span style={{ fontSize: '20px' }}>🔔</span>
