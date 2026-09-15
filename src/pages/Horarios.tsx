@@ -608,26 +608,23 @@ async function verificarConflictosEnMemoria(
     setRenovando(true)
     try {
       // Buscar el último plan archivado
-      const { data: planes } = await supabase.from('contratos')
-        .select('total_clases, duracion_min, sede_id, instrumento_id, profesor_id, cliente_id, valor')
+      const { data: planes, error: errorBuscar } = await supabase.from('contratos')
+        .select('*')
         .eq('cliente_id', clienteSeleccionado.id)
-        .in('estado', ['archivado', 'completado'])
+        .neq('estado', 'activo')
         .order('created_at', { ascending: false })
         .limit(1)
+      if (errorBuscar) { alert('Error buscando plan: ' + errorBuscar.message); setRenovando(false); return }
       if (!planes || planes.length === 0) {
-        alert('No se encontró ningún plan archivado para este cliente.')
+        alert('No se encontró ningún plan anterior para este cliente.')
         setRenovando(false)
         return
       }
       const ultimo = planes[0]
+      // Copiar todos los campos relevantes del último plan
+      const { id: _id, created_at: _ca, clases_tomadas: _ct, estado: _est, ...camposCopiados } = ultimo
       const { error } = await supabase.from('contratos').insert({
-        cliente_id: ultimo.cliente_id,
-        total_clases: ultimo.total_clases,
-        duracion_min: ultimo.duracion_min,
-        sede_id: ultimo.sede_id,
-        instrumento_id: ultimo.instrumento_id,
-        profesor_id: ultimo.profesor_id,
-        valor: ultimo.valor,
+        ...camposCopiados,
         estado: 'activo',
         clases_tomadas: 0,
       })
