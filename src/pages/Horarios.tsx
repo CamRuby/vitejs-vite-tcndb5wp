@@ -612,15 +612,15 @@ async function verificarConflictosEnMemoria(
         .select('*')
         .eq('cliente_id', clienteSeleccionado.id)
         .neq('estado', 'activo')
-        .order('created_at', { ascending: false })
-        .limit(1)
       if (errorBuscar) { alert('Error buscando plan: ' + errorBuscar.message); setRenovando(false); return }
       if (!planes || planes.length === 0) {
         alert('No se encontró ningún plan anterior para este cliente.')
         setRenovando(false)
         return
       }
-      const ultimo = planes[0]
+      // Priorizar 'completado' (el recién terminado) sobre 'archivado'
+      const completado = planes.find((p: any) => p.estado === 'completado')
+      const ultimo = completado || planes[0]
       // Copiar todos los campos relevantes del último plan
       const { id: _id, created_at: _ca, clases_tomadas: _ct, estado: _est, ...camposCopiados } = ultimo
       const { error } = await supabase.from('contratos').insert({
