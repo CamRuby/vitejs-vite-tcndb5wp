@@ -1015,7 +1015,8 @@ clasesDadas.forEach(c => {
         <div style={{ background:TEAL, padding:'18px 20px 0', flexShrink:0 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
             <img src="/Logo_RubySalamanca.png" alt="Ruby Salamanca"
-              style={{ height:'36px', objectFit:'contain', filter:'brightness(0) invert(1)', opacity:0.9 }} />
+              onClick={rolInterno === 'admin' ? () => { window.location.href = '/' } : undefined}
+              style={{ height:'36px', objectFit:'contain', filter:'brightness(0) invert(1)', opacity:0.9, cursor: rolInterno === 'admin' ? 'pointer' : 'default' }} />
                 <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'5px' }}>
   <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
     <span style={{ color:'rgba(255,255,255,0.8)', fontSize:'13px', fontWeight:'600' }}>{profesor.nombre}</span>
@@ -1028,12 +1029,6 @@ clasesDadas.forEach(c => {
     style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'rgba(255,255,255,0.85)', padding:'4px 11px', borderRadius:'20px', cursor:'pointer', fontSize:'11px', fontWeight:'600', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'5px' }}>
     🔒 Cambiar contraseña
   </button>
-  {rolInterno === 'admin' && (
-    <button onClick={() => { window.location.href = '/' }}
-      style={{ background:'rgba(255,255,255,0.15)', border:'none', color:'rgba(255,255,255,0.85)', padding:'4px 11px', borderRadius:'20px', cursor:'pointer', fontSize:'11px', fontWeight:'600', fontFamily:'inherit', display:'flex', alignItems:'center', gap:'5px' }}>
-      ⊞ Administración
-    </button>
-  )}
 </div>
               </div>
           <div style={{ display:'flex', gap:'3px' }}>
