@@ -603,6 +603,33 @@ async function verificarConflictosEnMemoria(
     }
   }
 
+  async function renovarDesdeEdicion() {
+    const clienteId = claseEditando?.contratos?.clientes?.id
+    if (!clienteId) return
+    setRenovando(true)
+    try {
+      const { data: planes, error: errorBuscar } = await supabase.from('contratos')
+        .select('*')
+        .eq('cliente_id', clienteId)
+        .neq('estado', 'activo')
+      if (errorBuscar) { alert('Error buscando plan: ' + errorBuscar.message); return }
+      if (!planes || planes.length === 0) { alert('No se encontró ningún plan anterior para este cliente.'); return }
+      const completado = planes.find((p: any) => p.estado === 'completado')
+      const ultimo = completado || planes[0]
+      const { id: _id, created_at: _ca, clases_tomadas: _ct, estado: _est, ...camposCopiados } = ultimo
+      const { error } = await supabase.from('contratos').insert({
+        ...camposCopiados,
+        estado: 'activo',
+        clases_tomadas: 0,
+      })
+      if (error) { alert('Error al renovar el plan: ' + error.message); return }
+      setModalEditar(false)
+      cargarClases()
+    } finally {
+      setRenovando(false)
+    }
+  }
+
   async function renovarUltimoPlan() {
     if (!clienteSeleccionado) return
     setRenovando(true)
@@ -2243,7 +2270,10 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                           🚫 El plan está completo ({claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases)
                         </p>
                         <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#666' }}>Renueva el plan del cliente para continuar.</p>
-                        <button onClick={() => setPlanCompleto(false)} style={{ padding: '6px 14px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Entendido</button>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <button onClick={renovarDesdeEdicion} disabled={renovando} style={{ padding: '6px 14px', background: renovando ? '#9ca3af' : '#991b1b', color: 'white', border: 'none', borderRadius: '8px', cursor: renovando ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: '600' }}>{renovando ? 'Renovando...' : '🔄 Renovar último plan'}</button>
+                          <button onClick={() => setPlanCompleto(false)} style={{ padding: '6px 14px', background: 'white', color: '#333', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Entendido</button>
+                        </div>
                       </div>
                     )}
 
