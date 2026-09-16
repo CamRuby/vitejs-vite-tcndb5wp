@@ -617,12 +617,16 @@ async function verificarConflictosEnMemoria(
       const completado = planes.find((p: any) => p.estado === 'completado')
       const ultimo = completado || planes[0]
       const { id: _id, created_at: _ca, clases_tomadas: _ct, estado: _est, ...camposCopiados } = ultimo
-      const { error } = await supabase.from('contratos').insert({
+      const { data: nuevoContrato, error } = await supabase.from('contratos').insert({
         ...camposCopiados,
         estado: 'activo',
         clases_tomadas: 0,
-      })
-      if (error) { alert('Error al renovar el plan: ' + error.message); return }
+      }).select().single()
+      if (error || !nuevoContrato) { alert('Error al renovar el plan: ' + (error?.message || '')); return }
+      // Reasignar la clase actual al nuevo plan
+      if (claseEditando?.id) {
+        await supabase.from('clases').update({ contrato_id: nuevoContrato.id }).eq('id', claseEditando.id)
+      }
       setModalEditar(false)
       cargarClases()
     } finally {
