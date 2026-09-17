@@ -2232,7 +2232,19 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                               if (est === 'confirmada' && editEstado !== 'confirmada') {
                                 const tomadas = claseEditando.contratos?.clases_tomadas ?? 0
                                 const total = claseEditando.contratos?.total_clases ?? 0
-                                if (total > 0 && tomadas >= total) { setPlanCompleto(true); setConfirmarDada(false) }
+                                const durPlan = claseEditando.contratos?.duracion_min || claseEditando.duracion_min || 60
+                                // Contar fracciones de clases ya confirmadas de este contrato (excluir la actual)
+                                const { data: otrasConfirmadas } = await supabase.from('clases')
+                                  .select('duracion_min')
+                                  .eq('contrato_id', claseEditando.contratos.id)
+                                  .eq('estado', 'confirmada')
+                                  .neq('id', claseEditando.id)
+                                const fraccionesConfirmadas = (otrasConfirmadas || []).reduce((acc: number, c: any) => {
+                                  return parseFloat((acc + (c.duracion_min || durPlan) / durPlan).toFixed(4))
+                                }, 0)
+                                const fraccionEstaClase = parseFloat(((claseEditando.duracion_min || durPlan) / durPlan).toFixed(4))
+                                const totalConEstaClase = parseFloat((tomadas + fraccionesConfirmadas + fraccionEstaClase).toFixed(4))
+                                if (total > 0 && totalConEstaClase > total) { setPlanCompleto(true); setConfirmarDada(false) }
                                else {
                                 setEditEstado('confirmada'); setPlanCompleto(false)
                                 const [{ data: ctWA }, { data: todasClases }] = await Promise.all([
@@ -2244,7 +2256,6 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                                     .order('hora', { ascending: true })
                                 ])
                                 setEditConteoWhatsapp(ctWA?.conteo_whatsapp != null ? ctWA.conteo_whatsapp + 1 : '')
-                                const durPlan = claseEditando.contratos?.duracion_min || claseEditando.duracion_min || 60
                                 const numeracion = calcularNumeracion(todasClases || [], durPlan)
                                 const maxNumeracion = numeracion.size > 0 ? Math.max(...numeracion.values()) : 0
                                 const fraccion = parseFloat(((claseEditando.duracion_min || durPlan) / durPlan).toFixed(4))
@@ -2271,7 +2282,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                     {planCompleto && (
                       <div style={{ marginTop: '10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px' }}>
                         <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#991b1b', fontWeight: '700' }}>
-                          🚫 El plan está completo ({claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases)
+                          🚫 Esta clase supera el límite del plan ({claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases usadas). Si es doble clase, crea dos clases separadas: una en este plan y otra en el plan renovado.
                         </p>
                         <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#666' }}>Renueva el plan del cliente para continuar.</p>
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
