@@ -1246,14 +1246,24 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
       await supabase.from('contratos').update(updateContrato).eq('id', claseEditando.contratos.id)    
     }
     if (alcance === 'futuras' && claseEditando.patron_id) {
-      await supabase.from('clases').delete().eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
+      // Obtener IDs de clases futuras para limpiar bot_estados antes de borrar
+      const { data: clasesFuturas } = await supabase.from('clases').select('id')
+        .eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
+      if (clasesFuturas?.length) {
+        await supabase.from('bot_estados').delete().in('clase_id', clasesFuturas.map((c: any) => c.id))
+      }
+      const { error: errFuturas } = await supabase.from('clases').delete().eq('patron_id', claseEditando.patron_id).gte('fecha', claseEditando.fecha)
+      if (errFuturas) { setEditError('Error al borrar: ' + errFuturas.message); setEditGuardando(false); return }
    } else {
       auditar('borrar_clase', 'clases', claseEditando.id, {
         fecha: claseEditando.fecha, hora: (claseEditando.hora || '').substring(0, 5),
         cliente: (claseEditando as any).contratos?.clientes?.nombre || '—',
         profesor: (claseEditando as any).profesores?.nombre || '—'
       })
-      await supabase.from('clases').delete().eq('id', claseEditando.id)
+      // Eliminar registros relacionados que puedan bloquear el borrado
+      await supabase.from('bot_estados').delete().eq('clase_id', claseEditando.id)
+      const { error: errBorrar } = await supabase.from('clases').delete().eq('id', claseEditando.id)
+      if (errBorrar) { setEditError('Error al borrar: ' + errBorrar.message); setEditGuardando(false); return }
   if ((editEstado === 'confirmada' || editEstado === 'dada') && claseEditando.contratos?.id) {
         const { data: ctWA } = await supabase.from('contratos').select('conteo_whatsapp').eq('id', claseEditando.contratos.id).single()
         if (ctWA?.conteo_whatsapp != null) {
