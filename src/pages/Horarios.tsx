@@ -604,26 +604,32 @@ async function verificarConflictosEnMemoria(
   }
 
   async function renovarDesdeEdicion() {
-    const clienteId = claseEditando?.contratos?.clientes?.id
-    if (!clienteId) return
+    const planActualId = claseEditando?.contratos?.id
+    if (!planActualId) return
     setRenovando(true)
     try {
-      const { data: planes, error: errorBuscar } = await supabase.from('contratos')
-        .select('*')
-        .eq('cliente_id', clienteId)
-        .neq('estado', 'activo')
-      if (errorBuscar) { alert('Error buscando plan: ' + errorBuscar.message); return }
-      if (!planes || planes.length === 0) { alert('No se encontró ningún plan anterior para este cliente.'); return }
-      const completado = planes.find((p: any) => p.estado === 'completado')
-      const ultimo = completado || planes[0]
-      const { id: _id, created_at: _ca, clases_tomadas: _ct, estado: _est, ...camposCopiados } = ultimo
+      // Leer el plan actual fresco de BD para copiar sus campos
+      const { data: planActual, error: errorBuscar } = await supabase.from('contratos')
+        .select('*').eq('id', planActualId).single()
+      if (errorBuscar || !planActual) { alert('Error buscando plan: ' + errorBuscar?.message); return }
+      const { id: _id, created_at: _ca, clases_tomadas: _ct, estado: _est,
+              fecha_inicio: _fi, fecha_fin: _ff, updated_at: _ua, ...camposCopiados } = planActual
+      const hoy = new Date().toISOString().slice(0, 10)
+      // Crear nuevo plan
       const { data: nuevoContrato, error } = await supabase.from('contratos').insert({
         ...camposCopiados,
         estado: 'activo',
         clases_tomadas: 0,
+        fecha_inicio: hoy,
+        fecha_fin: null,
       }).select().single()
       if (error || !nuevoContrato) { alert('Error al renovar el plan: ' + (error?.message || '')); return }
-      // Reasignar la clase actual al nuevo plan
+      // Archivar el plan viejo
+      await supabase.from('contratos').update({ estado: 'archivado' }).eq('id', planActualId)
+      // Mover todas las clases programadas del plan viejo al nuevo
+      await supabase.from('clases').update({ contrato_id: nuevoContrato.id })
+        .eq('contrato_id', planActualId).eq('estado', 'programada')
+      // Mover la clase actual (puede ser confirmada) al nuevo plan
       if (claseEditando?.id) {
         await supabase.from('clases').update({ contrato_id: nuevoContrato.id }).eq('id', claseEditando.id)
       }
@@ -638,7 +644,7 @@ async function verificarConflictosEnMemoria(
     if (!clienteSeleccionado) return
     setRenovando(true)
     try {
-      // Buscar el último plan archivado
+      // Buscar el plan completado (o el más reciente no-activo)
       const { data: planes, error: errorBuscar } = await supabase.from('contratos')
         .select('*')
         .eq('cliente_id', clienteSeleccionado.id)
@@ -652,14 +658,23 @@ async function verificarConflictosEnMemoria(
       // Priorizar 'completado' (el recién terminado) sobre 'archivado'
       const completado = planes.find((p: any) => p.estado === 'completado')
       const ultimo = completado || planes[0]
-      // Copiar todos los campos relevantes del último plan
-      const { id: _id, created_at: _ca, clases_tomadas: _ct, estado: _est, ...camposCopiados } = ultimo
-      const { error } = await supabase.from('contratos').insert({
+      const { id: oldPlanId, created_at: _ca, clases_tomadas: _ct, estado: _est,
+              fecha_inicio: _fi, fecha_fin: _ff, updated_at: _ua, ...camposCopiados } = ultimo
+      const hoy = new Date().toISOString().slice(0, 10)
+      // Crear nuevo plan y obtener su ID
+      const { data: nuevoContrato, error } = await supabase.from('contratos').insert({
         ...camposCopiados,
         estado: 'activo',
         clases_tomadas: 0,
-      })
-      if (error) { alert('Error al renovar el plan: ' + error.message); setRenovando(false); return }
+        fecha_inicio: hoy,
+        fecha_fin: null,
+      }).select().single()
+      if (error || !nuevoContrato) { alert('Error al renovar el plan: ' + error?.message); setRenovando(false); return }
+      // Archivar el plan viejo
+      await supabase.from('contratos').update({ estado: 'archivado' }).eq('id', oldPlanId)
+      // Mover todas las clases programadas del plan viejo al nuevo
+      await supabase.from('clases').update({ contrato_id: nuevoContrato.id })
+        .eq('contrato_id', oldPlanId).eq('estado', 'programada')
       // Refrescar contratos del cliente
       await seleccionarCliente(clienteSeleccionado)
     } finally {
