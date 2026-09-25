@@ -922,12 +922,15 @@ await cargarDatosCliente(cliente)
     const desde = inscripcion.fecha_fin
       ? new Date(new Date(inscripcion.fecha_fin + 'T12:00:00').getTime() + 86400000)
       : new Date()
-    const fechaInicio = proximaSesionTaller(taller?.dia_semana || 'lunes', desde)
-    const fechaFin = calcularFechaFin(fechaInicio, taller?.dia_semana)
+    // fecha_inicio = día siguiente al vencimiento (no el próximo día de clase)
+    const fechaInicio = desde.toISOString().split('T')[0]
+    const fechaFin = calcularFechaFin(fechaInicio, taller?.dia_semana, inscripcion.num_sesiones || 4)
     const mes = fechaInicio.substring(0, 7) + '-01'
     const { error } = await supabase.from('taller_inscripciones').insert({
       taller_id: inscripcion.taller_id, cliente_id: clienteSeleccionado.id,
       mes, fecha_inicio: fechaInicio, fecha_fin: fechaFin,
+      num_sesiones: inscripcion.num_sesiones,
+      valor_plan: inscripcion.valor_plan,
       valor_pagado: inscripcion.valor_pagado, estado: 'activo'
     })
     if (error) { alert('Error al renovar: ' + error.message); return }
@@ -1942,7 +1945,7 @@ await cargarDatosCliente(cliente)
                   {esVencida ? (
                     <>
                       <span style={{ fontSize: '12px', color: '#c2410c', fontWeight: '500' }}>Inscripción vencida — ¿qué deseas hacer?</span>
-                      <button onClick={() => renovarInscripcionTaller(ins)} style={{ marginLeft: 'auto', padding: '5px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>🔄 Renovar al mes actual</button>
+                      <button onClick={() => renovarInscripcionTaller(ins)} style={{ marginLeft: 'auto', padding: '5px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>🔄 Renovar taller</button>
                       <button onClick={() => cambiarEstadoInscripcion(ins.id, 'archivado')} style={{ padding: '5px 14px', background: '#f1f5f9', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>📁 Finalizar</button>
                     </>
                   ) : (
