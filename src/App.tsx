@@ -40,22 +40,13 @@ export default function App() {
       }
       setListo(true)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (_event === 'SIGNED_OUT') {
         setSesion(null)
         setRol(null)
       }
       if (_event === 'SIGNED_IN') {
-        setSesion(session)
-        // ── FIX: cargar el rol al iniciar sesión con magic link ──
-        if (session?.user?.email) {
-          const { data } = await supabase
-            .from('roles')
-            .select('rol')
-            .eq('email', session.user.email)
-            .single()
-          setRol(data?.rol || 'sin_rol')
-        }
+        setSesion(session) // el rol se carga en el useEffect de abajo
       }
       if (_event === 'PASSWORD_RECOVERY') {
         setSesion(session)
@@ -64,6 +55,17 @@ export default function App() {
     })
     return () => subscription.unsubscribe()
   }, [])
+
+  // ── Cargar rol cada vez que la sesión cambia (magic link, refresh, etc.) ──
+  useEffect(() => {
+    if (!sesion?.user?.email) return
+    supabase
+      .from('roles')
+      .select('rol')
+      .eq('email', sesion.user.email)
+      .single()
+      .then(({ data }) => setRol(data?.rol || 'sin_rol'))
+  }, [sesion])
 
   // ── Ruta pública: formulario de registro para nuevos clientes ──
   if (esRegistro) return <RegistroCliente />
@@ -113,7 +115,8 @@ export default function App() {
     </div>
   )
 
-  if (!listo) return (
+  // Esperar hasta que listo=true, y si hay sesión, también a que el rol cargue
+  if (!listo || (sesion && !rol)) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <p>Cargando...</p>
     </div>
@@ -145,16 +148,10 @@ export default function App() {
       </div>
     )
   }
-  // ── FIX SEGURIDAD: /admin requiere verificar rol antes de renderizar ──
+  // ── FIX SEGURIDAD: /admin solo para rol 'admin' ──
+  // (si llegamos aquí, listo=true y rol ya está cargado)
   if (esAdmin) {
-    // Esperar a que el rol cargue (puede ser null si entró por magic link)
-    if (!rol) return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p>Cargando...</p>
-      </div>
-    )
     if (rol === 'admin') return <AdminApp />
-    // Cualquier otro rol: acceso denegado
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
         <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>Sin acceso.</p>
