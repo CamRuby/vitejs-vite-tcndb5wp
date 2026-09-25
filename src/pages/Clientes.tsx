@@ -575,6 +575,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [inscripcionExpandida, setInscripcionExpandida] = useState<string | null>(null)
   const [editandoFechaFinId, setEditandoFechaFinId] = useState<string | null>(null)
   const [nuevaFechaFin, setNuevaFechaFin] = useState('')
+  const [editandoFechaInicioId, setEditandoFechaInicioId] = useState<string | null>(null)
+  const [nuevaFechaInicio, setNuevaFechaInicio] = useState('')
   const [modalHistorialTalleres, setModalHistorialTalleres] = useState(false)
   const [modo, setModo] = useState('lista')
   const [cargando, setCargando] = useState(false)
@@ -904,6 +906,15 @@ await cargarDatosCliente(cliente)
     setInscripcionesTalleres(prev => prev.map(i => i.id === inscripcionId ? { ...i, fecha_fin: nuevaFechaFin } : i))
     setEditandoFechaFinId(null)
     setNuevaFechaFin('')
+  }
+
+  async function guardarNuevaFechaInicio(inscripcionId: string) {
+    if (!nuevaFechaInicio) return
+    const { error } = await supabase.from('taller_inscripciones').update({ fecha_inicio: nuevaFechaInicio }).eq('id', inscripcionId)
+    if (error) { alert('Error: ' + error.message); return }
+    setInscripcionesTalleres(prev => prev.map(i => i.id === inscripcionId ? { ...i, fecha_inicio: nuevaFechaInicio } : i))
+    setEditandoFechaInicioId(null)
+    setNuevaFechaInicio('')
   }
 
   async function renovarInscripcionTaller(inscripcion: any) {
@@ -1887,6 +1898,8 @@ await cargarDatosCliente(cliente)
                     <p style={{ margin: '0 0 2px', fontSize: '13px', color: '#666' }}>🏫 {ins.talleres?.salones?.nombre} — {ins.talleres?.salones?.sedes?.nombre}</p>
                     <p style={{ margin: 0, fontSize: '13px', color: '#666', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       📅 {ins.fecha_inicio || mesLabel} → {ins.fecha_fin || '—'} · {ins.num_sesiones || 4} sesiones · {ins.talleres?.dia_semana}
+                      <button onClick={() => { setEditandoFechaInicioId(ins.id); setNuevaFechaInicio(ins.fecha_inicio || '') }}
+                        style={{ padding: '1px 8px', background: '#f1f5f9', color: '#666', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontSize: '11px' }}>✏️ Editar fecha inicio</button>
                       <button onClick={() => { setEditandoFechaFinId(ins.id); setNuevaFechaFin(ins.fecha_fin || '') }}
                         style={{ padding: '1px 8px', background: '#f1f5f9', color: '#666', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontSize: '11px' }}>✏️ Editar fecha fin</button>
                     </p>
@@ -1896,6 +1909,14 @@ await cargarDatosCliente(cliente)
                           style={{ padding: '5px 8px', border: `1px solid ${TEAL_MID}`, borderRadius: '6px', fontSize: '12px' }} />
                         <button onClick={() => guardarNuevaFechaFin(ins.id)} style={{ padding: '5px 12px', background: TEAL, color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Guardar</button>
                         <button onClick={() => { setEditandoFechaFinId(null); setNuevaFechaFin('') }} style={{ padding: '5px 12px', background: 'white', color: '#666', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>Cancelar</button>
+                      </div>
+                    )}
+                    {editandoFechaInicioId === ins.id && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                        <input type="date" value={nuevaFechaInicio} onChange={e => setNuevaFechaInicio(e.target.value)}
+                          style={{ padding: '5px 8px', border: `1px solid ${TEAL_MID}`, borderRadius: '6px', fontSize: '12px' }} />
+                        <button onClick={() => guardarNuevaFechaInicio(ins.id)} style={{ padding: '5px 12px', background: TEAL, color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Guardar</button>
+                        <button onClick={() => { setEditandoFechaInicioId(null); setNuevaFechaInicio('') }} style={{ padding: '5px 12px', background: 'white', color: '#666', border: '1px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontSize: '12px' }}>Cancelar</button>
                       </div>
                     )}
                   </div>
