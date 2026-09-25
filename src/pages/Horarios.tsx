@@ -790,16 +790,7 @@ async function verificarConflictosEnMemoria(
       ;(asis || []).forEach((a: any) => { map[a.inscripcion_id] = a.asistio })
       setAsistenciasSesion(map)
       setConfirmacionesSesion(new Set((confs || []).map((c: any) => c.inscripcion_id)))
-      // For dada sessions: override inscData with actual attendees from asistencias
-      if (sesion.estado === 'dada' && asis && asis.length > 0) {
-        const asisIds = new Set(asis.filter((a: any) => a.asistio).map((a: any) => a.inscripcion_id))
-        // Load full inscrito data for those who attended
-        const { data: inscDada } = await supabase
-          .from('taller_inscripciones')
-          .select('id, clientes(nombre, telefono)')
-          .in('id', [...asisIds])
-        if (inscDada && inscDada.length > 0) inscData = inscDada
-      }
+      // Para sesiones 'dada': mostramos todos los inscritos del período para poder registrar asistencias adicionales
     }
     setInscritosDelTaller(inscData)
     setSesionFechaOverride(fechaCol)
@@ -2037,12 +2028,14 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                               </div>
                               {/* In confirmada/dada: show confirmed badge + toggle confirmation + attendance checkbox */}
                               {sesionActual?.estado === 'dada' && (
-                                <span style={{ marginRight: '8px', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: '700',
-                                  background: asistio === true ? '#dcfce7' : '#f1f5f9',
-                                  color: asistio === true ? '#166534' : '#94a3b8',
-                                  border: `1px solid ${asistio === true ? '#bbf7d0' : '#e2e8f0'}` }}>
+                                <button onClick={() => toggleAsistenciaSesion(sesionId, ins.id, asistio === true ? null : true)}
+                                  disabled={guardandoAsistencia}
+                                  style={{ marginRight: '8px', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: '700', cursor: 'pointer',
+                                    background: asistio === true ? '#dcfce7' : '#f1f5f9',
+                                    color: asistio === true ? '#166534' : '#94a3b8',
+                                    border: `1px solid ${asistio === true ? '#bbf7d0' : '#e2e8f0'}` }}>
                                   {asistio === true ? '✓ Asistió' : '✗ No asistió'}
-                                </span>
+                                </button>
                               )}
                               {sesionActual?.estado === 'confirmada' && (
                                 <span onClick={() => toggleConfirmacion(ins.id)}
