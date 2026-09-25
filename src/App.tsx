@@ -40,13 +40,22 @@ export default function App() {
       }
       setListo(true)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (_event === 'SIGNED_OUT') {
         setSesion(null)
         setRol(null)
       }
       if (_event === 'SIGNED_IN') {
         setSesion(session)
+        // ── FIX: cargar el rol al iniciar sesión con magic link ──
+        if (session?.user?.email) {
+          const { data } = await supabase
+            .from('roles')
+            .select('rol')
+            .eq('email', session.user.email)
+            .single()
+          setRol(data?.rol || 'sin_rol')
+        }
       }
       if (_event === 'PASSWORD_RECOVERY') {
         setSesion(session)
@@ -136,7 +145,27 @@ export default function App() {
       </div>
     )
   }
-  if (esAdmin) return <AdminApp />
+  // ── FIX SEGURIDAD: /admin requiere verificar rol antes de renderizar ──
+  if (esAdmin) {
+    // Esperar a que el rol cargue (puede ser null si entró por magic link)
+    if (!rol) return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p>Cargando...</p>
+      </div>
+    )
+    if (rol === 'admin') return <AdminApp />
+    // Cualquier otro rol: acceso denegado
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
+        <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>Sin acceso.</p>
+        <p style={{ fontSize: '14px', color: '#9ca3af' }}>Solo los administradores pueden acceder aquí.</p>
+        <button onClick={() => supabase.auth.signOut()}
+          style={{ padding: '10px 24px', background: '#1a8a8a', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
+          Cerrar sesión
+        </button>
+      </div>
+    )
+  }
   if (rol === 'profesor') return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
       <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>No tienes acceso a esta sección.</p>
