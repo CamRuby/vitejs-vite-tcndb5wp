@@ -1025,7 +1025,7 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
       </div>
       {mensajeGuardado && <div style={{ background: mensajeGuardado.startsWith('✅') ? '#f0fdf4' : '#fffbeb', border: `1px solid ${mensajeGuardado.startsWith('✅') ? '#bbf7d0' : '#fde68a'}`, borderRadius: '8px', padding: '10px 16px', marginBottom: '16px', fontSize: '14px', color: mensajeGuardado.startsWith('✅') ? '#166534' : '#92400e' }}>{mensajeGuardado}</div>}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        {[{ label: 'Total planes activos', valor: datos.length, color: TEAL }, { label: 'Al día', valor: datos.filter(d => d.diferencia === 0).length, color: '#16a34a' }, { label: 'Pendiente', valor: datos.filter(d => d.diferencia > 0).length, color: '#d97706' }].map(t => (
+        {[{ label: 'Planes con clases en el mes', valor: datos.length, color: TEAL }, { label: 'Al día', valor: datos.filter(d => d.diferencia === 0).length, color: '#16a34a' }, { label: 'Pendiente', valor: datos.filter(d => d.diferencia > 0).length, color: '#d97706' }].map(t => (
           <div key={t.label} style={{ background: '#fff', border: `1.5px solid ${TEAL_MID}`, borderRadius: '10px', padding: '14px 20px', minWidth: '140px', flex: '1' }}>
             <div style={{ fontSize: '24px', fontWeight: 800, color: t.color }}>{cargando ? '…' : t.valor}</div>
             <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>{t.label}</div>
@@ -1033,6 +1033,10 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
         ))}
       </div>
       <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: TEAL_LIGHT, border: `1.5px solid ${TEAL_MID}`, borderRadius: '20px', padding: '5px 14px' }}>
+          <span style={{ fontSize: '13px', fontWeight: 600, color: TEAL_DARK }}>📅 Mes:</span>
+          <input type="month" value={mes} onChange={e => setMes(e.target.value)} style={{ border: 'none', background: 'transparent', fontSize: '13px', fontWeight: 600, color: TEAL_DARK, outline: 'none', cursor: 'pointer' }} />
+        </div>
         {([{ key: 'todos', label: '📋 Todos' }, { key: 'al_dia', label: '✅ Al día' }, { key: 'pendiente', label: '⏳ Pendiente' }, { key: 'con_wa', label: '💬 Con conteo WA' }] as const).map(f => (
           <button key={f.key} onClick={() => setFiltro(f.key)} style={{ padding: '7px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', background: filtro === f.key ? TEAL : '#fff', color: filtro === f.key ? '#fff' : TEAL_DARK, border: `1.5px solid ${filtro === f.key ? TEAL : TEAL_MID}` }}>{f.label}</button>
         ))}
