@@ -909,6 +909,7 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
   const [sedesDisponibles, setSedesDisponibles] = useState<Sede2[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [mes, setMes] = useState(mesActual())
   const [filtro, setFiltro] = useState<'todos' | 'al_dia' | 'pendiente' | 'con_wa'>('todos')
   const [sedeFiltro, setSedeFiltro] = useState('todas')
   const [busqueda, setBusqueda] = useState('')
@@ -917,19 +918,29 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
   const [guardando, setGuardando] = useState(false)
   const [mensajeGuardado, setMensajeGuardado] = useState<string | null>(null)
 
-  useEffect(() => { cargarDatos() }, [])
+  useEffect(() => { cargarDatos() }, [mes])
 
   async function cargarDatos() {
     setCargando(true); setError(null)
     try {
-      const [{ data, error: err }, { data: instr }, { data: sedesData }] = await Promise.all([
+      const fechaInicio = `${mes}-01`
+      const [anio, mesNum] = mes.split('-')
+      const ultimoDia = new Date(parseInt(anio), parseInt(mesNum), 0).getDate()
+      const fechaFin = `${mes}-${String(ultimoDia).padStart(2,'0')}`
+
+      const [{ data, error: err }, { data: instr }, { data: sedesData }, { data: clasesMes }] = await Promise.all([
         supabase.from('contratos').select(`id, cliente_id, sede_id, instrumento_id, total_clases, duracion_min, clases_tomadas, conteo_whatsapp, clientes(nombres, apellidos, grupo_whatsapp), sedes(nombre), instrumentos(id, nombre)`).eq('estado', 'activo'),
         supabase.from('instrumentos').select('id, nombre').order('nombre'),
-        supabase.from('sedes').select('id, nombre').order('nombre')
+        supabase.from('sedes').select('id, nombre').order('nombre'),
+        supabase.from('clases').select('contrato_id').gte('fecha', fechaInicio).lte('fecha', fechaFin)
       ])
       if (err) throw err
+
+      // Solo planes que tuvieron al menos una clase en el mes seleccionado
+      const contratosConClases = new Set((clasesMes || []).map((c: any) => c.contrato_id).filter(Boolean))
+
       setInstrumentos(instr || []); setSedesDisponibles(sedesData || [])
-      const filas: PlanActivo[] = (data || []).map((row: any) => {
+      const filas: PlanActivo[] = (data || []).filter((row: any) => contratosConClases.has(row.id)).map((row: any) => {
         const tomadas = Number(row.clases_tomadas ?? 0)
         const whatsapp = row.conteo_whatsapp !== null ? Number(row.conteo_whatsapp) : null
         const nombre = row.clientes?.nombre || `${row.clientes?.nombres ?? ''} ${row.clientes?.apellidos ?? ''}`.trim()
