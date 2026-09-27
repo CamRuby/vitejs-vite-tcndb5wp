@@ -2003,6 +2003,11 @@ function ReporteUtilidadPlanes({ onVolver }: { onVolver: () => void }) {
   )
 }
 
+interface ResumenHistorico {
+  totalClientes: number; sumContratadas: number; sumRecibidas: number; sumInasistencias: number
+  sumValorContratado: number; sumValorPagado: number; sumPlanesSinValor: number; sumPlanesConSaldo: number
+}
+
 interface ClienteHistorico {
   id: string; nombre: string
   diasDesdeUltimaClase: number | null; ultimaFechaClase: string | null; fechaUltimoPago: string | null
@@ -2022,15 +2027,22 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
   const [filtroProfesor, setFiltroProfesor] = useState('')
   const [filtroConSaldo, setFiltroConSaldo] = useState(false)
   const [clientes, setClientes] = useState<ClienteHistorico[]>([])
+  const [resumen, setResumen] = useState<ResumenHistorico | null>(null)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [clienteExpandido, setClienteExpandido] = useState<string | null>(null)
 
   useEffect(() => { cargarSedes() }, [])
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (filtroSede) cargarProfesores(); else { setProfesores([]); setFiltroProfesor('') } }, [filtroSede])
+  useEffect(() => {
+    if (filtroSede) cargarProfesores()
+    else { setProfesores([]); setFiltroProfesor('') }
+  }, [filtroSede])
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (filtroSede && filtroProfesor) cargarDatos(); else setClientes([]) }, [filtroSede, filtroProfesor])
+  useEffect(() => {
+    if (filtroSede && filtroProfesor) cargarDatos()
+    else { setClientes([]); setResumen(null) }
+  }, [filtroSede, filtroProfesor])
 
   async function cargarSedes() {
     const { data } = await supabase.from('sedes').select('id, nombre').order('nombre')
@@ -2039,81 +2051,107 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
 
   async function cargarProfesores() {
     setFiltroProfesor(''); setProfesores([])
+    // 1. Contratos en esta sede
     const { data: contSedeData } = await supabase.from('contratos').select('id').eq('sede_id', filtroSede)
     const contIds = (contSedeData || []).map((c: any) => c.id)
     if (contIds.length === 0) return
-    const { data: clasesData } = await supabase.from('clases').select('profesor_id, profesores(id, nombre)').in('contrato_id', contIds)
-    const profsMap: Record<string, string> = {}
-    ;(clasesData || []).forEach((c: any) => { if (c.profesor_id && c.profesores?.nombre) profsMap[c.profesor_id] = c.profesores.nombre })
-    setProfesores(Object.entries(profsMap).map(([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre)))
+    // 2. Ids de profesores que dieron clases en esos contratos
+    const { data: clasesData } = await supabase.from('clases').select('profesor_id').in('contrato_id', contIds)
+    const profIdsSet = new Set<string>()
+    ;(clasesData || []).forEach((c: any) => { if (c.profesor_id) profIdsSet.add(c.profesor_id) })
+    const profIds = Array.from(profIdsSet)
+    if (profIds.length === 0) return
+    // 3. Nombres de esos profesores
+    const { data: profData } = await supabase.from('profesores').select('id, nombre').in('id', profIds)
+    setProfesores((profData || []).sort((a: any, b: any) => a.nombre.localeCompare(b.nombre)))
   }
 
   async function cargarDatos() {
-    setCargando(true); setError(null); setClientes([])
+    setCargando(true); setError(null); setClientes([]); setResumen(null)
     try {
       // 1. Contratos en esta sede
-      const { data: contSedeData } = await supabase.from('contratos').select('id, cliente_id').eq('sede_id', filtroSede)
+      const { data: contSedeData, error: e1 } = await supabase
+        .from('contratos').select('id, cliente_id').eq('sede_id', filtroSede)
+      if (e1) throw e1
       const contIdToClient: Record<string, string> = {}
       ;(contSedeData || []).forEach((c: any) => { contIdToClient[c.id] = c.cliente_id })
       const contIdArr = Object.keys(contIdToClient)
       if (contIdArr.length === 0) { setClientes([]); setCargando(false); return }
 
-      // 2. Clientes con al menos una clase con este profesor
-      const { data: clasesProfeData } = await supabase.from('clases').select('contrato_id').eq('profesor_id', filtroProfesor).in('contrato_id', contIdArr)
+      // 2. Clientes con al menos una clase con este profesor en esta sede
+      const { data: clasesProfeData, error: e2 } = await supabase
+        .from('clases').select('contrato_id')
+        .eq('profesor_id', filtroProfesor)
+        .in('contrato_id', contIdArr)
+      if (e2) throw e2
       const clienteIdsSet = new Set<string>()
-      ;(clasesProfeData || []).forEach((c: any) => { const cid = contIdToClient[c.contrato_id]; if (cid) clienteIdsSet.add(cid) })
+      ;(clasesProfeData || []).forEach((c: any) => {
+        const cid = contIdToClient[c.contrato_id]; if (cid) clienteIdsSet.add(cid)
+      })
       const clienteIdsArr = Array.from(clienteIdsSet)
       if (clienteIdsArr.length === 0) { setClientes([]); setCargando(false); return }
 
-      // 3. Todos los contratos de esos clientes
-      const { data: contratosData } = await supabase.from('contratos')
+      // 3. Todos los contratos de esos clientes (sin join de instrumento que puede fallar)
+      const { data: contratosData, error: e3 } = await supabase
+        .from('contratos')
         .select('id, cliente_id, sede_id, estado, fecha_inicio, fecha_fin, total_clases, duracion_min, valor_plan, instrumento, clientes(nombre), sedes(nombre)')
         .in('cliente_id', clienteIdsArr)
         .order('fecha_inicio', { ascending: false })
+      if (e3) throw e3
 
       // 4. Todas las clases de esos contratos
       const allContIds = (contratosData || []).map((c: any) => c.id)
       let todasClases: any[] = []
       if (allContIds.length > 0) {
-        const { data: clasesAll } = await supabase.from('clases')
+        const { data: clasesAll, error: e4 } = await supabase
+          .from('clases')
           .select('id, contrato_id, profesor_id, fecha, estado, cancelado_por_academia')
           .in('contrato_id', allContIds)
           .order('fecha', { ascending: false })
+        if (e4) throw e4
         todasClases = clasesAll || []
       }
 
       // 5. Talleres de esos clientes
-      const { data: talleresData } = await supabase.from('taller_inscripciones')
+      const { data: talleresData, error: e5 } = await supabase
+        .from('taller_inscripciones')
         .select('id, cliente_id, taller_id, fecha_inicio, fecha_fin, num_sesiones, valor_plan, total_pagado, estado, talleres(nombre, profesor_id)')
         .in('cliente_id', clienteIdsArr)
         .order('fecha_inicio', { ascending: false })
+      if (e5) throw e5
 
       // 6. Pagos de contratos
       let pagosContratos: any[] = []
       if (allContIds.length > 0) {
-        const { data: pgData } = await supabase.from('pagos')
-          .select('id, contrato_id, inscripcion_id, fecha, monto')
+        const { data: pgData, error: e6 } = await supabase
+          .from('pagos').select('id, contrato_id, inscripcion_id, fecha, monto')
           .in('contrato_id', allContIds)
           .order('fecha', { ascending: false })
+        if (e6) throw e6
         pagosContratos = pgData || []
       }
 
-      // 7. Pagos de inscripciones
+      // 7. Pagos de inscripciones taller
       const inscIds = (talleresData || []).map((i: any) => i.id)
       let pagosInscripciones: any[] = []
       if (inscIds.length > 0) {
-        const { data: pgInsData } = await supabase.from('pagos')
-          .select('id, contrato_id, inscripcion_id, fecha, monto')
+        const { data: pgInsData, error: e7 } = await supabase
+          .from('pagos').select('id, contrato_id, inscripcion_id, fecha, monto')
           .in('inscripcion_id', inscIds)
           .order('fecha', { ascending: false })
+        if (e7) throw e7
         pagosInscripciones = pgInsData || []
       }
 
       // Construir mapas
       const pagosPorContrato: Record<string, any[]> = {}
-      pagosContratos.forEach((p: any) => { if (p.contrato_id) { if (!pagosPorContrato[p.contrato_id]) pagosPorContrato[p.contrato_id] = []; pagosPorContrato[p.contrato_id].push(p) } })
+      pagosContratos.forEach((p: any) => {
+        if (p.contrato_id) { if (!pagosPorContrato[p.contrato_id]) pagosPorContrato[p.contrato_id] = []; pagosPorContrato[p.contrato_id].push(p) }
+      })
       const pagosPorInscripcion: Record<string, any[]> = {}
-      pagosInscripciones.forEach((p: any) => { if (p.inscripcion_id) { if (!pagosPorInscripcion[p.inscripcion_id]) pagosPorInscripcion[p.inscripcion_id] = []; pagosPorInscripcion[p.inscripcion_id].push(p) } })
+      pagosInscripciones.forEach((p: any) => {
+        if (p.inscripcion_id) { if (!pagosPorInscripcion[p.inscripcion_id]) pagosPorInscripcion[p.inscripcion_id] = []; pagosPorInscripcion[p.inscripcion_id].push(p) }
+      })
       const clasesPorContrato: Record<string, any[]> = {}
       todasClases.forEach((c: any) => { if (!clasesPorContrato[c.contrato_id]) clasesPorContrato[c.contrato_id] = []; clasesPorContrato[c.contrato_id].push(c) })
       const contratosPorCliente: Record<string, any[]> = {}
@@ -2129,35 +2167,28 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
         const todasClasesCliente = contratos.flatMap((c: any) => clasesPorContrato[c.id] || [])
         const clasesRecibidas = todasClasesCliente.filter((c: any) => c.estado === 'dada')
 
-        // Última clase
         const fechasClases = clasesRecibidas.map((c: any) => c.fecha).sort().reverse()
         const ultimaFechaClase = fechasClases[0] || null
         const diasDesdeUltimaClase = ultimaFechaClase
-          ? Math.floor((hoy.getTime() - new Date(ultimaFechaClase + 'T12:00:00').getTime()) / 86400000)
-          : null
+          ? Math.floor((hoy.getTime() - new Date(ultimaFechaClase + 'T12:00:00').getTime()) / 86400000) : null
 
-        // Último pago
         const todosPagos = [
           ...contratos.flatMap((c: any) => pagosPorContrato[c.id] || []),
           ...inscripciones.flatMap((i: any) => pagosPorInscripcion[i.id] || []),
         ]
         const fechaUltimoPago = todosPagos.map((p: any) => p.fecha).sort().reverse()[0] || null
 
-        // Conteos (todo el historial)
         const totalClasesContratadas = contratos.reduce((s: number, c: any) => s + Number(c.total_clases || 0), 0)
         const totalClasesRecibidas = clasesRecibidas.length
         const totalInasistencias = todasClasesCliente.filter((c: any) => c.estado === 'cancelada' && !c.cancelado_por_academia).length
 
-        // Último plan (el primero del arreglo ya ordenado desc)
         const ultimoPlan = contratos[0]
         const clasesUltimoPlan = ultimoPlan ? (clasesPorContrato[ultimoPlan.id] || []).filter((c: any) => c.estado === 'dada').length : 0
         const totalClasesUltimoPlan = ultimoPlan ? Number(ultimoPlan.total_clases || 0) : 0
 
-        // % clases con el profesor
         const clasesConProfesor = clasesRecibidas.filter((c: any) => c.profesor_id === filtroProfesor).length
         const pctProfesor = totalClasesRecibidas > 0 ? Math.round((clasesConProfesor / totalClasesRecibidas) * 100) : 0
 
-        // Financiero — solo planes desde CORTE
         const contratosPostCorte = contratos.filter((c: any) => (c.fecha_inicio || '') >= CORTE)
         const valorTotalContratado = contratosPostCorte.reduce((s: number, c: any) => s + Number(c.valor_plan || 0), 0)
         const valorTotalPagado = contratosPostCorte.reduce((s: number, c: any) =>
@@ -2180,12 +2211,25 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
         }
       })
 
-      // Ordenar: más días sin clase primero
       resultado.sort((a, b) => (b.diasDesdeUltimaClase ?? -1) - (a.diasDesdeUltimaClase ?? -1))
+
+      // Calcular resumen global (todos los clientes, antes del filtro con saldo)
+      const resumenCalc: ResumenHistorico = {
+        totalClientes: resultado.length,
+        sumContratadas: resultado.reduce((s, c) => s + c.totalClasesContratadas, 0),
+        sumRecibidas: resultado.reduce((s, c) => s + c.totalClasesRecibidas, 0),
+        sumInasistencias: resultado.reduce((s, c) => s + c.totalInasistencias, 0),
+        sumValorContratado: resultado.reduce((s, c) => s + c.valorTotalContratado, 0),
+        sumValorPagado: resultado.reduce((s, c) => s + c.valorTotalPagado, 0),
+        sumPlanesSinValor: resultado.reduce((s, c) => s + c.planesSinValor, 0),
+        sumPlanesConSaldo: resultado.reduce((s, c) => s + c.planesConSaldo, 0),
+      }
+
       setClientes(resultado)
+      setResumen(resumenCalc)
     } catch (e) {
-      console.error(e)
-      setError('No se pudieron cargar los datos. Intenta de nuevo.')
+      console.error('cargarDatos error:', e)
+      setError('No se pudieron cargar los datos. Revisa la consola para detalles.')
     } finally { setCargando(false) }
   }
 
@@ -2195,6 +2239,9 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
 
   const thH = { padding: '10px 12px', textAlign: 'left' as const, fontSize: '11px', color: TEAL_DARK, fontWeight: 700, whiteSpace: 'nowrap' as const, background: TEAL_LIGHT, borderBottom: `1.5px solid ${TEAL_MID}` }
   const tdH = { padding: '10px 12px', fontSize: '13px', borderTop: '1px solid #f1f5f9', verticalAlign: 'middle' as const }
+
+  const sedeName = sedes.find(s => s.id === filtroSede)?.nombre || ''
+  const profName = profesores.find(p => p.id === filtroProfesor)?.nombre || ''
 
   return (
     <div style={{ padding: '24px 28px', maxWidth: '1420px', margin: '0 auto' }}>
@@ -2206,7 +2253,7 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
         </button>
         <div>
           <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: '0 0 2px' }}>📊 Histórico de planes y talleres</h2>
-          <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>Historial completo por cliente · Valores financieros desde 1 jun 2026</p>
+          <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>Por cliente · Valores financieros desde 1 jun 2026</p>
         </div>
       </div>
 
@@ -2221,7 +2268,7 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
         <select value={filtroProfesor} onChange={e => setFiltroProfesor(e.target.value)}
           disabled={!filtroSede || profesores.length === 0}
           style={{ padding: '7px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${filtroProfesor ? TEAL : TEAL_MID}`, background: filtroProfesor ? TEAL_LIGHT : 'white', color: filtroProfesor ? TEAL_DARK : '#475569', outline: 'none', cursor: filtroSede ? 'pointer' : 'default', opacity: !filtroSede ? 0.5 : 1 }}>
-          <option value="">{filtroSede ? (profesores.length > 0 ? '👩‍🏫 Seleccionar profesor' : 'Sin profesores en esta sede') : '— primero elige sede —'}</option>
+          <option value="">{filtroSede ? (profesores.length > 0 ? '👩‍🏫 Seleccionar profesor' : 'Sin profesores con clases aquí') : '— primero elige sede —'}</option>
           {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
         </select>
 
@@ -2248,14 +2295,45 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
         </div>
       )}
       {error && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '16px', color: '#b91c1c', fontSize: '14px' }}>{error}</div>
-      )}
-      {!cargando && !error && filtroProfesor && clientesFiltrados.length === 0 && clientes.length > 0 && (
-        <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
-          No hay clientes con saldo pendiente.
+        <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '16px', color: '#b91c1c', fontSize: '14px', marginBottom: '16px' }}>
+          {error}
         </div>
       )}
-      {!cargando && !error && filtroProfesor && clientes.length === 0 && !cargando && (
+
+      {/* ── Resumen global: mismos totales del grupo ── */}
+      {!cargando && resumen && filtroProfesor && (
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: TEAL_DARK, marginBottom: '10px' }}>
+            {sedeName} · {profName} · {resumen.totalClientes} cliente{resumen.totalClientes !== 1 ? 's' : ''}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '10px' }}>
+            {[
+              { label: 'Clases contratadas', valor: resumen.sumContratadas.toLocaleString('es-CO'), color: '#475569', bg: '#f8fafc' },
+              { label: 'Clases recibidas', valor: resumen.sumRecibidas.toLocaleString('es-CO'), color: '#16a34a', bg: '#f0fdf4' },
+              { label: 'Inasistencias', valor: resumen.sumInasistencias.toLocaleString('es-CO'), color: resumen.sumInasistencias > 0 ? '#dc2626' : '#aaa', bg: resumen.sumInasistencias > 0 ? '#fef2f2' : '#f8fafc' },
+              { label: 'Val. contratado*', valor: resumen.sumValorContratado > 0 ? `$${resumen.sumValorContratado.toLocaleString('es-CO')}` : '—', color: '#7c3aed', bg: '#faf5ff' },
+              { label: 'Total pagado*', valor: resumen.sumValorPagado > 0 ? `$${resumen.sumValorPagado.toLocaleString('es-CO')}` : '—', color: '#16a34a', bg: '#f0fdf4' },
+              { label: 'Saldo pendiente*', valor: (resumen.sumValorContratado - resumen.sumValorPagado) > 0 ? `$${(resumen.sumValorContratado - resumen.sumValorPagado).toLocaleString('es-CO')}` : '—', color: (resumen.sumValorContratado - resumen.sumValorPagado) > 0 ? '#dc2626' : '#aaa', bg: (resumen.sumValorContratado - resumen.sumValorPagado) > 0 ? '#fef2f2' : '#f8fafc' },
+              { label: 'Planes sin valor*', valor: String(resumen.sumPlanesSinValor), color: resumen.sumPlanesSinValor > 0 ? '#92400e' : '#aaa', bg: resumen.sumPlanesSinValor > 0 ? '#fef3c7' : '#f8fafc' },
+              { label: 'Planes con saldo*', valor: String(resumen.sumPlanesConSaldo), color: resumen.sumPlanesConSaldo > 0 ? '#991b1b' : '#aaa', bg: resumen.sumPlanesConSaldo > 0 ? '#fee2e2' : '#f8fafc' },
+            ].map(t => (
+              <div key={t.label} style={{ background: t.bg, border: `1px solid ${TEAL_MID}`, borderRadius: '10px', padding: '12px 14px' }}>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: t.color }}>{t.valor}</div>
+                <div style={{ fontSize: '10px', color: '#888', marginTop: '3px' }}>{t.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: '10px', color: '#bbb', marginTop: '6px' }}>* Solo planes con fecha de inicio ≥ 1 jun 2026</div>
+        </div>
+      )}
+
+      {/* Sin resultados */}
+      {!cargando && !error && filtroProfesor && clientesFiltrados.length === 0 && clientes.length > 0 && (
+        <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
+          No hay clientes con saldo pendiente en este filtro.
+        </div>
+      )}
+      {!cargando && !error && filtroProfesor && clientes.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
           No se encontraron clientes con clases de este profesor en esta sede.
         </div>
@@ -2265,7 +2343,8 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
       {!cargando && !error && clientesFiltrados.length > 0 && (
         <div>
           <div style={{ fontSize: '13px', color: '#888', marginBottom: '10px' }}>
-            {clientesFiltrados.length} cliente{clientesFiltrados.length !== 1 ? 's' : ''} · ordenados por tiempo sin clase (mayor primero)
+            {filtroConSaldo ? `${clientesFiltrados.length} de ${clientes.length} clientes (con saldo)` : `${clientesFiltrados.length} cliente${clientesFiltrados.length !== 1 ? 's' : ''}`}
+            {' · ordenados por tiempo sin clase (mayor primero)'}
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden', minWidth: '1100px' }}>
@@ -2279,10 +2358,10 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
                   <th style={{ ...thH, textAlign: 'center' }}>Recibidas</th>
                   <th style={{ ...thH, textAlign: 'center' }}>Inasist.</th>
                   <th style={{ ...thH, textAlign: 'center' }}>Último plan</th>
-                  <th style={{ ...thH, textAlign: 'right' }}>Val. contratado*</th>
+                  <th style={{ ...thH, textAlign: 'right' }}>Val. cont.*</th>
                   <th style={{ ...thH, textAlign: 'right' }}>Pagado*</th>
-                  <th style={{ ...thH, textAlign: 'center' }}>Sin valor*</th>
-                  <th style={{ ...thH, textAlign: 'center' }}>Con saldo*</th>
+                  <th style={{ ...thH, textAlign: 'center' }}>Sin val.*</th>
+                  <th style={{ ...thH, textAlign: 'center' }}>C/saldo*</th>
                   <th style={{ ...thH, textAlign: 'center' }}>% Profe</th>
                 </tr>
               </thead>
@@ -2351,6 +2430,38 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
                   }
                   return filas
                 })}
+                {/* Fila de totales */}
+                {resumen && clientesFiltrados.length > 1 && (
+                  <tr style={{ background: TEAL_LIGHT, borderTop: `2px solid ${TEAL_MID}`, fontWeight: 700 }}>
+                    <td style={{ ...tdH, color: TEAL_DARK, fontSize: '12px' }}>TOTALES ({clientesFiltrados.length} clientes)</td>
+                    <td style={tdH}></td>
+                    <td style={tdH}></td>
+                    <td style={tdH}></td>
+                    <td style={{ ...tdH, textAlign: 'center', color: '#475569' }}>
+                      {clientesFiltrados.reduce((s, c) => s + c.totalClasesContratadas, 0).toLocaleString('es-CO')}
+                    </td>
+                    <td style={{ ...tdH, textAlign: 'center', color: '#16a34a' }}>
+                      {clientesFiltrados.reduce((s, c) => s + c.totalClasesRecibidas, 0).toLocaleString('es-CO')}
+                    </td>
+                    <td style={{ ...tdH, textAlign: 'center', color: '#dc2626' }}>
+                      {clientesFiltrados.reduce((s, c) => s + c.totalInasistencias, 0).toLocaleString('es-CO')}
+                    </td>
+                    <td style={tdH}></td>
+                    <td style={{ ...tdH, textAlign: 'right', color: '#7c3aed', fontSize: '12px' }}>
+                      {(() => { const t = clientesFiltrados.reduce((s, c) => s + c.valorTotalContratado, 0); return t > 0 ? `$${t.toLocaleString('es-CO')}` : '—' })()}
+                    </td>
+                    <td style={{ ...tdH, textAlign: 'right', color: '#16a34a', fontSize: '12px' }}>
+                      {(() => { const t = clientesFiltrados.reduce((s, c) => s + c.valorTotalPagado, 0); return t > 0 ? `$${t.toLocaleString('es-CO')}` : '—' })()}
+                    </td>
+                    <td style={{ ...tdH, textAlign: 'center', color: '#92400e' }}>
+                      {clientesFiltrados.reduce((s, c) => s + c.planesSinValor, 0)}
+                    </td>
+                    <td style={{ ...tdH, textAlign: 'center', color: '#991b1b' }}>
+                      {clientesFiltrados.reduce((s, c) => s + c.planesConSaldo, 0)}
+                    </td>
+                    <td style={tdH}></td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -2369,7 +2480,6 @@ function DetalleHistorico({ contratos, inscripciones, clasesPorContrato, pagosPo
   const tallArchivados = inscripciones.filter((i: any) => i.estado === 'archivado')
   const tallOrdenados = [...tallActivos, ...tallArchivados]
 
-  // Totales
   const totalContratadas = contratos.reduce((s: number, c: any) => s + Number(c.total_clases || 0), 0)
   const totalRecibidas = contratos.reduce((s: number, c: any) => s + (clasesPorContrato[c.id] || []).filter((cl: any) => cl.estado === 'dada').length, 0)
   const totalInasist = contratos.reduce((s: number, c: any) => s + (clasesPorContrato[c.id] || []).filter((cl: any) => cl.estado === 'cancelada' && !cl.cancelado_por_academia).length, 0)
@@ -2477,7 +2587,7 @@ function DetalleHistorico({ contratos, inscripciones, clasesPorContrato, pagosPo
         </div>
       )}
 
-      {/* Totales */}
+      {/* Totales del cliente */}
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '12px' }}>
         {[
           { label: 'Clases contratadas', valor: String(totalContratadas), color: '#475569' },
