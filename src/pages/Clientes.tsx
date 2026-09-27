@@ -1938,6 +1938,14 @@ await cargarDatosCliente(cliente)
                       <p style={{ margin: '0 0 2px', fontSize: '11px', color: '#666', fontWeight: '600', textTransform: 'uppercase' }}>Saldo</p>
                       <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: saldoIns > 0 ? '#991b1b' : '#166534' }}>${saldoIns.toLocaleString('es-CO')}</p>
                     </div>
+                    {sesionesPorInscripcion[ins.id] && (
+                      <div>
+                        <p style={{ margin: '0 0 2px', fontSize: '11px', color: '#666', fontWeight: '600', textTransform: 'uppercase' }}>Clases recibidas</p>
+                        <p style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#1a1a1a' }}>
+                          {sesionesPorInscripcion[ins.id].filter((s: any) => s.asistencia?.asistio !== false).length} / {ins.num_sesiones || 4}
+                        </p>
+                      </div>
+                    )}
                     <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: cPagoIns.bg, color: cPagoIns.color }}>{estadoPagoIns}</span>
                     <button onClick={() => { setModalAbonoTaller({ ...ins, total_pagado: totalPagadoIns }); setAbonoError('') }}
                       style={{ marginLeft: 'auto', padding: '7px 14px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
@@ -1949,6 +1957,7 @@ await cargarDatosCliente(cliente)
                   {esVencida ? (
                     <>
                       <span style={{ fontSize: '12px', color: '#c2410c', fontWeight: '500' }}>Inscripción vencida — ¿qué deseas hacer?</span>
+                      <button onClick={() => cargarSesionesInscripcion(ins.id, ins.taller_id)} style={{ padding: '5px 14px', background: inscripcionExpandida === ins.id ? '#f3e8ff' : 'white', color: '#7c3aed', border: '1px solid #d8b4fe', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>{inscripcionExpandida === ins.id ? '▲ Ocultar sesiones' : '▼ Ver sesiones'}</button>
                       <button onClick={() => renovarInscripcionTaller(ins)} style={{ marginLeft: 'auto', padding: '5px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>🔄 Renovar taller</button>
                       <button onClick={() => cambiarEstadoInscripcion(ins.id, 'archivado')} style={{ padding: '5px 14px', background: '#f1f5f9', color: '#555', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>📁 Finalizar</button>
                     </>
