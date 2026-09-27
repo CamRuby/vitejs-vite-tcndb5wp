@@ -151,7 +151,7 @@ export default function App() {
   // ── FIX SEGURIDAD: /admin solo para rol 'admin' ──
   // (si llegamos aquí, listo=true y rol ya está cargado)
   if (esAdmin) {
-    if (rol === 'admin') return <AdminApp />
+    if (rol === 'admin' || rol === 'superadmin') return <AdminApp />
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', background: '#f8fafc' }}>
         <p style={{ fontSize: '18px', color: '#374151', fontWeight: '600' }}>Sin acceso.</p>
