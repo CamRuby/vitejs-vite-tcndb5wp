@@ -2094,7 +2094,7 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
       // 3. Todos los contratos de esos clientes (sin join de instrumento que puede fallar)
       const { data: contratosData, error: e3 } = await supabase
         .from('contratos')
-        .select('id, cliente_id, sede_id, estado, fecha_inicio, fecha_fin, total_clases, duracion_min, valor_plan, instrumento, clientes(nombre), sedes(nombre)')
+        .select('id, cliente_id, sede_id, estado, fecha_inicio, fecha_fin, total_clases, duracion_min, valor_plan, instrumento_id, instrumentos(nombre), clientes(nombre)')
         .in('cliente_id', clienteIdsArr)
         .order('fecha_inicio', { ascending: false })
       if (e3) throw e3
@@ -2527,7 +2527,7 @@ function DetalleHistorico({ contratos, inscripciones, clasesPorContrato, pagosPo
                   <tr key={c.id} style={{ background: c.estado === 'archivado' ? '#fafbfc' : 'white' }}>
                     <td style={tdD}>{estadoBadge(c.estado)}</td>
                     <td style={{ ...tdD, color: '#555' }}>{c.fecha_inicio || '—'}</td>
-                    <td style={{ ...tdD, fontWeight: 600, color: '#333' }}>{c.instrumento || '—'}</td>
+                    <td style={{ ...tdD, fontWeight: 600, color: '#333' }}>{c.instrumentos?.nombre || '—'}</td>
                     <td style={{ ...tdD, textAlign: 'center', color: '#555' }}>{c.duracion_min || '—'}</td>
                     <td style={{ ...tdD, textAlign: 'center', fontWeight: 600, color: '#475569' }}>{c.total_clases || '—'}</td>
                     <td style={{ ...tdD, textAlign: 'center', fontWeight: 700, color: '#16a34a' }}>{recibidas}</td>
