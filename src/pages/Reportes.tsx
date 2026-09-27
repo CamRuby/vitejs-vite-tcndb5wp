@@ -43,6 +43,7 @@ const REPORTES = [
   { id: 'control_pagos', icono: '💳', titulo: 'Control de pagos', descripcion: 'Seguimiento mensual de pagos, abonos y saldos por plan' },
   { id: 'clases_tomadas', icono: '📋', titulo: 'Clases tomadas por plan', descripcion: 'Planes activos con conteo de clases y verificación WhatsApp por sede' },
   { id: 'honorarios_profesores', icono: '👩‍🏫', titulo: 'Honorarios mensuales profesores', descripcion: 'Clases, tiempo y honorarios por profesor y sede, con totales mensuales' },
+  { id: 'historico_planes', icono: '📊', titulo: 'Histórico de planes y talleres', descripcion: 'Historial completo de planes y talleres por cliente, agrupado por profesor y sede' },
 ]
 
 export default function Reportes({ rol }: { rol?: string }) {
@@ -52,6 +53,7 @@ export default function Reportes({ rol }: { rol?: string }) {
   if (reporteActivo === 'control_pagos') return <ReporteControlPagos onVolver={() => setReporteActivo(null)} />
   if (reporteActivo === 'clases_tomadas') return <ReporteClasesTomadasPlaceholder onVolver={() => setReporteActivo(null)} />
   if (reporteActivo === 'honorarios_profesores') return <ReporteHonorariosProfesores onVolver={() => setReporteActivo(null)} />
+  if (reporteActivo === 'historico_planes') return <ReporteHistoricoPlanesTalleres onVolver={() => setReporteActivo(null)} />
 
   return (
     <div style={{ padding: '32px', maxWidth: '900px', margin: '0 auto' }}>
@@ -1997,6 +1999,501 @@ function ReporteUtilidadPlanes({ onVolver }: { onVolver: () => void }) {
           </table>
         </div>
       )}
+    </div>
+  )
+}
+
+interface ClienteHistorico {
+  id: string; nombre: string
+  diasDesdeUltimaClase: number | null; ultimaFechaClase: string | null; fechaUltimoPago: string | null
+  planesActivos: number; talleresActivos: number
+  totalClasesContratadas: number; totalClasesRecibidas: number; totalInasistencias: number
+  clasesUltimoPlan: number; totalClasesUltimoPlan: number; pctProfesor: number
+  valorTotalContratado: number; valorTotalPagado: number; planesSinValor: number; planesConSaldo: number
+  contratos: any[]; inscripciones: any[]
+  clasesPorContrato: Record<string, any[]>; pagosPorContrato: Record<string, any[]>; pagosPorInscripcion: Record<string, any[]>
+}
+
+function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) {
+  const CORTE = '2026-06-01'
+  const [sedes, setSedes] = useState<Sede[]>([])
+  const [profesores, setProfesores] = useState<{ id: string; nombre: string }[]>([])
+  const [filtroSede, setFiltroSede] = useState('')
+  const [filtroProfesor, setFiltroProfesor] = useState('')
+  const [filtroConSaldo, setFiltroConSaldo] = useState(false)
+  const [clientes, setClientes] = useState<ClienteHistorico[]>([])
+  const [cargando, setCargando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [clienteExpandido, setClienteExpandido] = useState<string | null>(null)
+
+  useEffect(() => { cargarSedes() }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (filtroSede) cargarProfesores(); else { setProfesores([]); setFiltroProfesor('') } }, [filtroSede])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (filtroSede && filtroProfesor) cargarDatos(); else setClientes([]) }, [filtroSede, filtroProfesor])
+
+  async function cargarSedes() {
+    const { data } = await supabase.from('sedes').select('id, nombre').order('nombre')
+    setSedes(data || [])
+  }
+
+  async function cargarProfesores() {
+    setFiltroProfesor(''); setProfesores([])
+    const { data: contSedeData } = await supabase.from('contratos').select('id').eq('sede_id', filtroSede)
+    const contIds = (contSedeData || []).map((c: any) => c.id)
+    if (contIds.length === 0) return
+    const { data: clasesData } = await supabase.from('clases').select('profesor_id, profesores(id, nombre)').in('contrato_id', contIds)
+    const profsMap: Record<string, string> = {}
+    ;(clasesData || []).forEach((c: any) => { if (c.profesor_id && c.profesores?.nombre) profsMap[c.profesor_id] = c.profesores.nombre })
+    setProfesores(Object.entries(profsMap).map(([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre)))
+  }
+
+  async function cargarDatos() {
+    setCargando(true); setError(null); setClientes([])
+    try {
+      // 1. Contratos en esta sede
+      const { data: contSedeData } = await supabase.from('contratos').select('id, cliente_id').eq('sede_id', filtroSede)
+      const contIdToClient: Record<string, string> = {}
+      ;(contSedeData || []).forEach((c: any) => { contIdToClient[c.id] = c.cliente_id })
+      const contIdArr = Object.keys(contIdToClient)
+      if (contIdArr.length === 0) { setClientes([]); setCargando(false); return }
+
+      // 2. Clientes con al menos una clase con este profesor
+      const { data: clasesProfeData } = await supabase.from('clases').select('contrato_id').eq('profesor_id', filtroProfesor).in('contrato_id', contIdArr)
+      const clienteIdsSet = new Set<string>()
+      ;(clasesProfeData || []).forEach((c: any) => { const cid = contIdToClient[c.contrato_id]; if (cid) clienteIdsSet.add(cid) })
+      const clienteIdsArr = Array.from(clienteIdsSet)
+      if (clienteIdsArr.length === 0) { setClientes([]); setCargando(false); return }
+
+      // 3. Todos los contratos de esos clientes
+      const { data: contratosData } = await supabase.from('contratos')
+        .select('id, cliente_id, sede_id, estado, fecha_inicio, fecha_fin, total_clases, duracion_min, valor_plan, instrumento, clientes(nombre), sedes(nombre)')
+        .in('cliente_id', clienteIdsArr)
+        .order('fecha_inicio', { ascending: false })
+
+      // 4. Todas las clases de esos contratos
+      const allContIds = (contratosData || []).map((c: any) => c.id)
+      let todasClases: any[] = []
+      if (allContIds.length > 0) {
+        const { data: clasesAll } = await supabase.from('clases')
+          .select('id, contrato_id, profesor_id, fecha, estado, cancelado_por_academia')
+          .in('contrato_id', allContIds)
+          .order('fecha', { ascending: false })
+        todasClases = clasesAll || []
+      }
+
+      // 5. Talleres de esos clientes
+      const { data: talleresData } = await supabase.from('taller_inscripciones')
+        .select('id, cliente_id, taller_id, fecha_inicio, fecha_fin, num_sesiones, valor_plan, total_pagado, estado, talleres(nombre, profesor_id)')
+        .in('cliente_id', clienteIdsArr)
+        .order('fecha_inicio', { ascending: false })
+
+      // 6. Pagos de contratos
+      let pagosContratos: any[] = []
+      if (allContIds.length > 0) {
+        const { data: pgData } = await supabase.from('pagos')
+          .select('id, contrato_id, inscripcion_id, fecha, monto')
+          .in('contrato_id', allContIds)
+          .order('fecha', { ascending: false })
+        pagosContratos = pgData || []
+      }
+
+      // 7. Pagos de inscripciones
+      const inscIds = (talleresData || []).map((i: any) => i.id)
+      let pagosInscripciones: any[] = []
+      if (inscIds.length > 0) {
+        const { data: pgInsData } = await supabase.from('pagos')
+          .select('id, contrato_id, inscripcion_id, fecha, monto')
+          .in('inscripcion_id', inscIds)
+          .order('fecha', { ascending: false })
+        pagosInscripciones = pgInsData || []
+      }
+
+      // Construir mapas
+      const pagosPorContrato: Record<string, any[]> = {}
+      pagosContratos.forEach((p: any) => { if (p.contrato_id) { if (!pagosPorContrato[p.contrato_id]) pagosPorContrato[p.contrato_id] = []; pagosPorContrato[p.contrato_id].push(p) } })
+      const pagosPorInscripcion: Record<string, any[]> = {}
+      pagosInscripciones.forEach((p: any) => { if (p.inscripcion_id) { if (!pagosPorInscripcion[p.inscripcion_id]) pagosPorInscripcion[p.inscripcion_id] = []; pagosPorInscripcion[p.inscripcion_id].push(p) } })
+      const clasesPorContrato: Record<string, any[]> = {}
+      todasClases.forEach((c: any) => { if (!clasesPorContrato[c.contrato_id]) clasesPorContrato[c.contrato_id] = []; clasesPorContrato[c.contrato_id].push(c) })
+      const contratosPorCliente: Record<string, any[]> = {}
+      ;(contratosData || []).forEach((c: any) => { if (!contratosPorCliente[c.cliente_id]) contratosPorCliente[c.cliente_id] = []; contratosPorCliente[c.cliente_id].push(c) })
+      const inscPorCliente: Record<string, any[]> = {}
+      ;(talleresData || []).forEach((i: any) => { if (!inscPorCliente[i.cliente_id]) inscPorCliente[i.cliente_id] = []; inscPorCliente[i.cliente_id].push(i) })
+
+      const hoy = new Date()
+      const resultado: ClienteHistorico[] = clienteIdsArr.map(clienteId => {
+        const contratos = contratosPorCliente[clienteId] || []
+        const inscripciones = inscPorCliente[clienteId] || []
+        const clienteNombre = contratos[0]?.clientes?.nombre || '—'
+        const todasClasesCliente = contratos.flatMap((c: any) => clasesPorContrato[c.id] || [])
+        const clasesRecibidas = todasClasesCliente.filter((c: any) => c.estado === 'dada')
+
+        // Última clase
+        const fechasClases = clasesRecibidas.map((c: any) => c.fecha).sort().reverse()
+        const ultimaFechaClase = fechasClases[0] || null
+        const diasDesdeUltimaClase = ultimaFechaClase
+          ? Math.floor((hoy.getTime() - new Date(ultimaFechaClase + 'T12:00:00').getTime()) / 86400000)
+          : null
+
+        // Último pago
+        const todosPagos = [
+          ...contratos.flatMap((c: any) => pagosPorContrato[c.id] || []),
+          ...inscripciones.flatMap((i: any) => pagosPorInscripcion[i.id] || []),
+        ]
+        const fechaUltimoPago = todosPagos.map((p: any) => p.fecha).sort().reverse()[0] || null
+
+        // Conteos (todo el historial)
+        const totalClasesContratadas = contratos.reduce((s: number, c: any) => s + Number(c.total_clases || 0), 0)
+        const totalClasesRecibidas = clasesRecibidas.length
+        const totalInasistencias = todasClasesCliente.filter((c: any) => c.estado === 'cancelada' && !c.cancelado_por_academia).length
+
+        // Último plan (el primero del arreglo ya ordenado desc)
+        const ultimoPlan = contratos[0]
+        const clasesUltimoPlan = ultimoPlan ? (clasesPorContrato[ultimoPlan.id] || []).filter((c: any) => c.estado === 'dada').length : 0
+        const totalClasesUltimoPlan = ultimoPlan ? Number(ultimoPlan.total_clases || 0) : 0
+
+        // % clases con el profesor
+        const clasesConProfesor = clasesRecibidas.filter((c: any) => c.profesor_id === filtroProfesor).length
+        const pctProfesor = totalClasesRecibidas > 0 ? Math.round((clasesConProfesor / totalClasesRecibidas) * 100) : 0
+
+        // Financiero — solo planes desde CORTE
+        const contratosPostCorte = contratos.filter((c: any) => (c.fecha_inicio || '') >= CORTE)
+        const valorTotalContratado = contratosPostCorte.reduce((s: number, c: any) => s + Number(c.valor_plan || 0), 0)
+        const valorTotalPagado = contratosPostCorte.reduce((s: number, c: any) =>
+          s + (pagosPorContrato[c.id] || []).reduce((ss: number, p: any) => ss + Number(p.monto), 0), 0)
+        const planesSinValor = contratosPostCorte.filter((c: any) => !c.valor_plan || Number(c.valor_plan) === 0).length
+        const planesConSaldo = contratosPostCorte.filter((c: any) => {
+          const vp = Number(c.valor_plan || 0); if (vp === 0) return false
+          const pagado = (pagosPorContrato[c.id] || []).reduce((s: number, p: any) => s + Number(p.monto), 0)
+          return pagado < vp
+        }).length
+
+        return {
+          id: clienteId, nombre: clienteNombre, diasDesdeUltimaClase, ultimaFechaClase, fechaUltimoPago,
+          planesActivos: contratos.filter((c: any) => c.estado === 'activo').length,
+          talleresActivos: inscripciones.filter((i: any) => i.estado === 'activo').length,
+          totalClasesContratadas, totalClasesRecibidas, totalInasistencias,
+          clasesUltimoPlan, totalClasesUltimoPlan, pctProfesor,
+          valorTotalContratado, valorTotalPagado, planesSinValor, planesConSaldo,
+          contratos, inscripciones, clasesPorContrato, pagosPorContrato, pagosPorInscripcion,
+        }
+      })
+
+      // Ordenar: más días sin clase primero
+      resultado.sort((a, b) => (b.diasDesdeUltimaClase ?? -1) - (a.diasDesdeUltimaClase ?? -1))
+      setClientes(resultado)
+    } catch (e) {
+      console.error(e)
+      setError('No se pudieron cargar los datos. Intenta de nuevo.')
+    } finally { setCargando(false) }
+  }
+
+  const clientesFiltrados = filtroConSaldo
+    ? clientes.filter(c => c.planesConSaldo > 0 || c.planesSinValor > 0)
+    : clientes
+
+  const thH = { padding: '10px 12px', textAlign: 'left' as const, fontSize: '11px', color: TEAL_DARK, fontWeight: 700, whiteSpace: 'nowrap' as const, background: TEAL_LIGHT, borderBottom: `1.5px solid ${TEAL_MID}` }
+  const tdH = { padding: '10px 12px', fontSize: '13px', borderTop: '1px solid #f1f5f9', verticalAlign: 'middle' as const }
+
+  return (
+    <div style={{ padding: '24px 28px', maxWidth: '1420px', margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+        <button onClick={onVolver}
+          style={{ background: TEAL_LIGHT, border: `1px solid ${TEAL_MID}`, borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '13px', color: TEAL_DARK, fontWeight: 600 }}>
+          ← Reportes
+        </button>
+        <div>
+          <h2 style={{ fontSize: '20px', fontWeight: 700, color: TEAL_DARK, margin: '0 0 2px' }}>📊 Histórico de planes y talleres</h2>
+          <p style={{ color: '#888', fontSize: '13px', margin: 0 }}>Historial completo por cliente · Valores financieros desde 1 jun 2026</p>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={filtroSede} onChange={e => setFiltroSede(e.target.value)}
+          style={{ padding: '7px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${filtroSede ? TEAL : TEAL_MID}`, background: filtroSede ? TEAL_LIGHT : 'white', color: filtroSede ? TEAL_DARK : '#475569', outline: 'none', cursor: 'pointer' }}>
+          <option value="">🏢 Seleccionar sede</option>
+          {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+        </select>
+
+        <select value={filtroProfesor} onChange={e => setFiltroProfesor(e.target.value)}
+          disabled={!filtroSede || profesores.length === 0}
+          style={{ padding: '7px 12px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${filtroProfesor ? TEAL : TEAL_MID}`, background: filtroProfesor ? TEAL_LIGHT : 'white', color: filtroProfesor ? TEAL_DARK : '#475569', outline: 'none', cursor: filtroSede ? 'pointer' : 'default', opacity: !filtroSede ? 0.5 : 1 }}>
+          <option value="">{filtroSede ? (profesores.length > 0 ? '👩‍🏫 Seleccionar profesor' : 'Sin profesores en esta sede') : '— primero elige sede —'}</option>
+          {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+        </select>
+
+        <button onClick={() => setFiltroConSaldo(!filtroConSaldo)}
+          style={{ padding: '7px 14px', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${filtroConSaldo ? '#dc2626' : '#e5e7eb'}`, background: filtroConSaldo ? '#fef2f2' : 'white', color: filtroConSaldo ? '#dc2626' : '#475569' }}>
+          ⚠ Con saldo{filtroConSaldo ? ' ✓' : ''}
+        </button>
+      </div>
+
+      {/* Estados vacíos */}
+      {!filtroSede && (
+        <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
+          Selecciona una sede para comenzar.
+        </div>
+      )}
+      {filtroSede && !filtroProfesor && !cargando && (
+        <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
+          {profesores.length > 0 ? 'Selecciona un profesor para ver sus clientes.' : 'No hay profesores con clases registradas en esta sede.'}
+        </div>
+      )}
+      {cargando && (
+        <div style={{ textAlign: 'center', padding: '60px', color: '#999', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
+          Cargando datos...
+        </div>
+      )}
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '10px', padding: '16px', color: '#b91c1c', fontSize: '14px' }}>{error}</div>
+      )}
+      {!cargando && !error && filtroProfesor && clientesFiltrados.length === 0 && clientes.length > 0 && (
+        <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
+          No hay clientes con saldo pendiente.
+        </div>
+      )}
+      {!cargando && !error && filtroProfesor && clientes.length === 0 && !cargando && (
+        <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
+          No se encontraron clientes con clases de este profesor en esta sede.
+        </div>
+      )}
+
+      {/* Tabla principal */}
+      {!cargando && !error && clientesFiltrados.length > 0 && (
+        <div>
+          <div style={{ fontSize: '13px', color: '#888', marginBottom: '10px' }}>
+            {clientesFiltrados.length} cliente{clientesFiltrados.length !== 1 ? 's' : ''} · ordenados por tiempo sin clase (mayor primero)
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden', minWidth: '1100px' }}>
+              <thead>
+                <tr>
+                  <th style={thH}>Cliente</th>
+                  <th style={{ ...thH, textAlign: 'center' }}>Días sin clase</th>
+                  <th style={{ ...thH, textAlign: 'center' }}>Últ. pago</th>
+                  <th style={{ ...thH, textAlign: 'center' }}>P/T activos</th>
+                  <th style={{ ...thH, textAlign: 'center' }}>Contratadas</th>
+                  <th style={{ ...thH, textAlign: 'center' }}>Recibidas</th>
+                  <th style={{ ...thH, textAlign: 'center' }}>Inasist.</th>
+                  <th style={{ ...thH, textAlign: 'center' }}>Último plan</th>
+                  <th style={{ ...thH, textAlign: 'right' }}>Val. contratado*</th>
+                  <th style={{ ...thH, textAlign: 'right' }}>Pagado*</th>
+                  <th style={{ ...thH, textAlign: 'center' }}>Sin valor*</th>
+                  <th style={{ ...thH, textAlign: 'center' }}>Con saldo*</th>
+                  <th style={{ ...thH, textAlign: 'center' }}>% Profe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clientesFiltrados.flatMap((c, idx) => {
+                  const filas = [
+                    <tr key={c.id}
+                      onClick={() => setClienteExpandido(clienteExpandido === c.id ? null : c.id)}
+                      style={{ cursor: 'pointer', background: clienteExpandido === c.id ? TEAL_LIGHT : idx % 2 === 0 ? 'white' : '#fafbfc' }}>
+                      <td style={{ ...tdH, fontWeight: 700, color: '#1a1a1a' }}>
+                        <span style={{ marginRight: '6px', fontSize: '10px', color: TEAL }}>{clienteExpandido === c.id ? '▲' : '▼'}</span>
+                        {c.nombre}
+                      </td>
+                      <td style={{ ...tdH, textAlign: 'center' }}>
+                        {c.diasDesdeUltimaClase !== null
+                          ? <span style={{ fontWeight: 700, color: c.diasDesdeUltimaClase > 30 ? '#dc2626' : c.diasDesdeUltimaClase > 14 ? '#d97706' : '#16a34a' }}>{c.diasDesdeUltimaClase}d</span>
+                          : <span style={{ color: '#aaa' }}>—</span>}
+                      </td>
+                      <td style={{ ...tdH, textAlign: 'center', fontSize: '12px', color: '#555' }}>{c.fechaUltimoPago || '—'}</td>
+                      <td style={{ ...tdH, textAlign: 'center' }}>
+                        <span style={{ fontSize: '12px', color: '#7c3aed', fontWeight: 600 }}>{c.planesActivos}P</span>
+                        {c.talleresActivos > 0 && <span style={{ fontSize: '12px', color: '#0ea5e9', fontWeight: 600, marginLeft: '6px' }}>{c.talleresActivos}T</span>}
+                      </td>
+                      <td style={{ ...tdH, textAlign: 'center', fontWeight: 600, color: '#475569' }}>{c.totalClasesContratadas}</td>
+                      <td style={{ ...tdH, textAlign: 'center', fontWeight: 700, color: '#16a34a' }}>{c.totalClasesRecibidas}</td>
+                      <td style={{ ...tdH, textAlign: 'center', color: c.totalInasistencias > 0 ? '#dc2626' : '#aaa', fontWeight: c.totalInasistencias > 0 ? 700 : 400 }}>{c.totalInasistencias}</td>
+                      <td style={{ ...tdH, textAlign: 'center', fontSize: '12px' }}>
+                        {c.totalClasesUltimoPlan > 0
+                          ? <span style={{ color: c.clasesUltimoPlan >= c.totalClasesUltimoPlan ? '#16a34a' : '#d97706', fontWeight: 700 }}>{c.clasesUltimoPlan}/{c.totalClasesUltimoPlan}</span>
+                          : <span style={{ color: '#aaa' }}>—</span>}
+                      </td>
+                      <td style={{ ...tdH, textAlign: 'right', color: '#7c3aed', fontWeight: 600, fontSize: '12px' }}>
+                        {c.valorTotalContratado > 0 ? `$${c.valorTotalContratado.toLocaleString('es-CO')}` : '—'}
+                      </td>
+                      <td style={{ ...tdH, textAlign: 'right', color: '#16a34a', fontWeight: 600, fontSize: '12px' }}>
+                        {c.valorTotalPagado > 0 ? `$${c.valorTotalPagado.toLocaleString('es-CO')}` : '—'}
+                      </td>
+                      <td style={{ ...tdH, textAlign: 'center' }}>
+                        {c.planesSinValor > 0
+                          ? <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, background: '#fef3c7', color: '#92400e' }}>{c.planesSinValor}</span>
+                          : <span style={{ color: '#aaa', fontSize: '12px' }}>0</span>}
+                      </td>
+                      <td style={{ ...tdH, textAlign: 'center' }}>
+                        {c.planesConSaldo > 0
+                          ? <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, background: '#fee2e2', color: '#991b1b' }}>{c.planesConSaldo}</span>
+                          : <span style={{ color: '#aaa', fontSize: '12px' }}>0</span>}
+                      </td>
+                      <td style={{ ...tdH, textAlign: 'center', fontWeight: 700, color: c.pctProfesor >= 80 ? '#16a34a' : c.pctProfesor >= 50 ? '#d97706' : '#dc2626' }}>{c.pctProfesor}%</td>
+                    </tr>
+                  ]
+                  if (clienteExpandido === c.id) {
+                    filas.push(
+                      <tr key={`${c.id}-det`}>
+                        <td colSpan={13} style={{ padding: '4px 16px 16px', background: '#f8fafc', borderTop: '1px solid #e5e7eb' }}>
+                          <DetalleHistorico
+                            contratos={c.contratos}
+                            inscripciones={c.inscripciones}
+                            clasesPorContrato={c.clasesPorContrato}
+                            pagosPorContrato={c.pagosPorContrato}
+                            pagosPorInscripcion={c.pagosPorInscripcion}
+                            CORTE={CORTE}
+                          />
+                        </td>
+                      </tr>
+                    )
+                  }
+                  return filas
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ fontSize: '11px', color: '#aaa', marginTop: '10px' }}>* Solo planes con fecha de inicio ≥ 1 jun 2026</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DetalleHistorico({ contratos, inscripciones, clasesPorContrato, pagosPorContrato, pagosPorInscripcion, CORTE }: any) {
+  const activos = contratos.filter((c: any) => c.estado !== 'archivado')
+  const archivados = contratos.filter((c: any) => c.estado === 'archivado')
+  const ordenados = [...activos, ...archivados]
+  const tallActivos = inscripciones.filter((i: any) => i.estado !== 'archivado')
+  const tallArchivados = inscripciones.filter((i: any) => i.estado === 'archivado')
+  const tallOrdenados = [...tallActivos, ...tallArchivados]
+
+  // Totales
+  const totalContratadas = contratos.reduce((s: number, c: any) => s + Number(c.total_clases || 0), 0)
+  const totalRecibidas = contratos.reduce((s: number, c: any) => s + (clasesPorContrato[c.id] || []).filter((cl: any) => cl.estado === 'dada').length, 0)
+  const totalInasist = contratos.reduce((s: number, c: any) => s + (clasesPorContrato[c.id] || []).filter((cl: any) => cl.estado === 'cancelada' && !cl.cancelado_por_academia).length, 0)
+  const postCorte = contratos.filter((c: any) => (c.fecha_inicio || '') >= CORTE)
+  const totalValorContr = postCorte.reduce((s: number, c: any) => s + Number(c.valor_plan || 0), 0)
+  const totalPagadoContr = postCorte.reduce((s: number, c: any) => s + (pagosPorContrato[c.id] || []).reduce((ss: number, p: any) => ss + Number(p.monto), 0), 0)
+
+  const thD = { padding: '8px 12px', textAlign: 'left' as const, fontSize: '11px', fontWeight: 700 }
+  const tdD = { padding: '8px 12px', fontSize: '12px', borderTop: '1px solid #f1f5f9', verticalAlign: 'middle' as const }
+
+  const estadoBadge = (estado: string) => (
+    <span style={{
+      padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700,
+      background: estado === 'activo' ? '#dcfce7' : estado === 'archivado' ? '#f1f5f9' : '#fef3c7',
+      color: estado === 'activo' ? '#166534' : estado === 'archivado' ? '#64748b' : '#92400e'
+    }}>{estado}</span>
+  )
+
+  return (
+    <div style={{ paddingTop: '12px' }}>
+      {/* Planes */}
+      <div style={{ marginBottom: '14px' }}>
+        <div style={{ fontWeight: 700, fontSize: '13px', color: TEAL_DARK, marginBottom: '8px' }}>
+          📋 Planes <span style={{ fontSize: '11px', fontWeight: 400, color: '#888' }}>({activos.length} activos · {archivados.length} archivados)</span>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: '10px', border: '1px solid #e5e7eb', minWidth: '750px' }}>
+            <thead>
+              <tr style={{ background: '#f0fdf4' }}>
+                {['Estado', 'Inicio', 'Instrumento', 'Min/clase', 'Contratadas', 'Recibidas', 'Inasist.', 'Valor', 'Pagado', 'Saldo'].map(h => (
+                  <th key={h} style={{ ...thD, color: '#166534' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ordenados.map((c: any) => {
+                const pagos = pagosPorContrato[c.id] || []
+                const clases = clasesPorContrato[c.id] || []
+                const recibidas = clases.filter((cl: any) => cl.estado === 'dada').length
+                const inasist = clases.filter((cl: any) => cl.estado === 'cancelada' && !cl.cancelado_por_academia).length
+                const pagado = pagos.reduce((s: number, p: any) => s + Number(p.monto), 0)
+                const valor = Number(c.valor_plan || 0)
+                const saldo = valor - pagado
+                return (
+                  <tr key={c.id} style={{ background: c.estado === 'archivado' ? '#fafbfc' : 'white' }}>
+                    <td style={tdD}>{estadoBadge(c.estado)}</td>
+                    <td style={{ ...tdD, color: '#555' }}>{c.fecha_inicio || '—'}</td>
+                    <td style={{ ...tdD, fontWeight: 600, color: '#333' }}>{c.instrumento || '—'}</td>
+                    <td style={{ ...tdD, textAlign: 'center', color: '#555' }}>{c.duracion_min || '—'}</td>
+                    <td style={{ ...tdD, textAlign: 'center', fontWeight: 600, color: '#475569' }}>{c.total_clases || '—'}</td>
+                    <td style={{ ...tdD, textAlign: 'center', fontWeight: 700, color: '#16a34a' }}>{recibidas}</td>
+                    <td style={{ ...tdD, textAlign: 'center', color: inasist > 0 ? '#dc2626' : '#aaa' }}>{inasist}</td>
+                    <td style={{ ...tdD, color: '#7c3aed', fontWeight: 600 }}>{valor > 0 ? `$${valor.toLocaleString('es-CO')}` : '—'}</td>
+                    <td style={{ ...tdD, color: '#16a34a', fontWeight: 600 }}>{pagado > 0 ? `$${pagado.toLocaleString('es-CO')}` : '—'}</td>
+                    <td style={{ ...tdD, fontWeight: 700, color: valor > 0 ? (saldo > 0 ? '#dc2626' : '#16a34a') : '#aaa' }}>
+                      {valor > 0 ? `$${saldo.toLocaleString('es-CO')}` : '—'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Talleres */}
+      {inscripciones.length > 0 && (
+        <div style={{ marginBottom: '14px' }}>
+          <div style={{ fontWeight: 700, fontSize: '13px', color: '#7c3aed', marginBottom: '8px' }}>
+            🎸 Talleres <span style={{ fontSize: '11px', fontWeight: 400, color: '#888' }}>({tallActivos.length} activos · {tallArchivados.length} archivados)</span>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: '10px', border: '1px solid #e5e7eb', minWidth: '580px' }}>
+              <thead>
+                <tr style={{ background: '#ede9fe' }}>
+                  {['Taller', 'Estado', 'Inicio', 'Fin', 'Sesiones', 'Valor', 'Pagado', 'Saldo'].map(h => (
+                    <th key={h} style={{ ...thD, color: '#7c3aed' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tallOrdenados.map((i: any) => {
+                  const pagos = pagosPorInscripcion[i.id] || []
+                  const pagado = pagos.reduce((s: number, p: any) => s + Number(p.monto), 0)
+                  const valor = Number(i.valor_plan || 0)
+                  const saldo = valor - pagado
+                  return (
+                    <tr key={i.id} style={{ background: i.estado === 'archivado' ? '#fafbfc' : 'white' }}>
+                      <td style={{ ...tdD, fontWeight: 600, color: '#333' }}>{i.talleres?.nombre || '—'}</td>
+                      <td style={tdD}>{estadoBadge(i.estado)}</td>
+                      <td style={{ ...tdD, color: '#555' }}>{i.fecha_inicio || '—'}</td>
+                      <td style={{ ...tdD, color: '#555' }}>{i.fecha_fin || '—'}</td>
+                      <td style={{ ...tdD, textAlign: 'center', fontWeight: 600 }}>{i.num_sesiones || '—'}</td>
+                      <td style={{ ...tdD, color: '#7c3aed', fontWeight: 600 }}>{valor > 0 ? `$${valor.toLocaleString('es-CO')}` : '—'}</td>
+                      <td style={{ ...tdD, color: '#16a34a', fontWeight: 600 }}>{pagado > 0 ? `$${pagado.toLocaleString('es-CO')}` : '—'}</td>
+                      <td style={{ ...tdD, fontWeight: 700, color: valor > 0 ? (saldo > 0 ? '#dc2626' : '#16a34a') : '#aaa' }}>
+                        {valor > 0 ? `$${saldo.toLocaleString('es-CO')}` : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Totales */}
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '12px' }}>
+        {[
+          { label: 'Clases contratadas', valor: String(totalContratadas), color: '#475569' },
+          { label: 'Clases recibidas', valor: String(totalRecibidas), color: '#16a34a' },
+          { label: 'Inasistencias', valor: String(totalInasist), color: totalInasist > 0 ? '#dc2626' : '#aaa' },
+          { label: 'Val. contratado*', valor: totalValorContr > 0 ? `$${totalValorContr.toLocaleString('es-CO')}` : '—', color: '#7c3aed' },
+          { label: 'Total pagado*', valor: totalPagadoContr > 0 ? `$${totalPagadoContr.toLocaleString('es-CO')}` : '—', color: '#16a34a' },
+          { label: 'Saldo pendiente*', valor: (totalValorContr - totalPagadoContr) > 0 ? `$${(totalValorContr - totalPagadoContr).toLocaleString('es-CO')}` : '—', color: (totalValorContr - totalPagadoContr) > 0 ? '#dc2626' : '#aaa' },
+        ].map(t => (
+          <div key={t.label} style={{ background: 'white', border: `1px solid ${TEAL_MID}`, borderRadius: '10px', padding: '10px 14px', minWidth: '130px' }}>
+            <div style={{ fontSize: '15px', fontWeight: 800, color: t.color }}>{t.valor}</div>
+            <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>{t.label}</div>
+          </div>
+        ))}
+        <div style={{ fontSize: '10px', color: '#bbb', alignSelf: 'flex-end', paddingBottom: '6px' }}>* desde jun 2026</div>
+      </div>
     </div>
   )
 }
