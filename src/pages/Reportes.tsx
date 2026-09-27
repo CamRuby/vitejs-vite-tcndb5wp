@@ -2040,7 +2040,7 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
   }, [filtroSede])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (filtroSede && filtroProfesor) cargarDatos()
+    if (filtroSede) cargarDatos()
     else { setClientes([]); setResumen(null) }
   }, [filtroSede, filtroProfesor])
 
@@ -2078,26 +2078,48 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
       const contIdArr = Object.keys(contIdToClient)
       if (contIdArr.length === 0) { setClientes([]); setCargando(false); return }
 
-      // 2. Clientes con al menos una clase con este profesor en esta sede
-      const { data: clasesProfeData, error: e2 } = await supabase
-        .from('clases').select('contrato_id')
-        .eq('profesor_id', filtroProfesor)
-        .in('contrato_id', contIdArr)
-      if (e2) throw e2
-      const clienteIdsSet = new Set<string>()
-      ;(clasesProfeData || []).forEach((c: any) => {
-        const cid = contIdToClient[c.contrato_id]; if (cid) clienteIdsSet.add(cid)
+      // Candidatos: clientes con algún contrato en esta sede
+      const candidateIds = [...new Set(Object.values(contIdToClient))] as string[]
+
+      // 2. Todos los contratos de los candidatos (todas las sedes) para:
+      //    a) detectar sede del último plan  b) datos completos del reporte
+      const BATCH = 40
+      const contratosAll: any[] = []
+      for (let bi = 0; bi < candidateIds.length; bi += BATCH) {
+        const { data: bd } = await supabase
+          .from('contratos')
+          .select('id, cliente_id, sede_id, estado, fecha_inicio, fecha_fin, total_clases, duracion_min, valor_plan, instrumento_id, instrumentos(nombre), clientes(nombre)')
+          .in('cliente_id', candidateIds.slice(bi, bi + BATCH))
+          .order('fecha_inicio', { ascending: false })
+        contratosAll.push(...(bd || []))
+      }
+
+      // Clientes cuyo ÚLTIMO contrato (más reciente) pertenece a esta sede
+      const clientesEnEstaSede = candidateIds.filter(cid => {
+        const cnts = contratosAll.filter((c: any) => c.cliente_id === cid)
+        return cnts.length > 0 && cnts[0].sede_id === filtroSede
       })
-      const clienteIdsArr = Array.from(clienteIdsSet)
+
+      // Si hay filtro de profesor: adicionalmente, clientes con ≥1 clase con ese profesor
+      let clienteIdsArr: string[]
+      if (filtroProfesor) {
+        const { data: clasesProfeData, error: ep } = await supabase
+          .from('clases').select('contrato_id')
+          .eq('profesor_id', filtroProfesor)
+          .in('contrato_id', contIdArr)
+        if (ep) throw ep
+        const clientesConProfe = new Set(
+          (clasesProfeData || []).map((c: any) => contIdToClient[c.contrato_id]).filter(Boolean)
+        )
+        clienteIdsArr = clientesEnEstaSede.filter(id => clientesConProfe.has(id))
+      } else {
+        clienteIdsArr = clientesEnEstaSede
+      }
       if (clienteIdsArr.length === 0) { setClientes([]); setCargando(false); return }
 
-      // 3. Todos los contratos de esos clientes (sin join de instrumento que puede fallar)
-      const { data: contratosData, error: e3 } = await supabase
-        .from('contratos')
-        .select('id, cliente_id, sede_id, estado, fecha_inicio, fecha_fin, total_clases, duracion_min, valor_plan, instrumento_id, instrumentos(nombre), clientes(nombre)')
-        .in('cliente_id', clienteIdsArr)
-        .order('fecha_inicio', { ascending: false })
-      if (e3) throw e3
+      // contratosData: ya cargados, filtrados al conjunto final de clientes
+      const clienteIdsSet2 = new Set(clienteIdsArr)
+      const contratosData = contratosAll.filter((c: any) => clienteIdsSet2.has(c.cliente_id))
 
       // 4. Todas las clases de esos contratos
       const allContIds = (contratosData || []).map((c: any) => c.id)
@@ -2211,7 +2233,7 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
         }
       })
 
-      resultado.sort((a, b) => (b.diasDesdeUltimaClase ?? -1) - (a.diasDesdeUltimaClase ?? -1))
+      resultado.sort((a, b) => (a.diasDesdeUltimaClase ?? Infinity) - (b.diasDesdeUltimaClase ?? Infinity))
 
       // Calcular resumen global (todos los clientes, antes del filtro con saldo)
       const resumenCalc: ResumenHistorico = {
@@ -2344,7 +2366,7 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
         <div>
           <div style={{ fontSize: '13px', color: '#888', marginBottom: '10px' }}>
             {filtroConSaldo ? `${clientesFiltrados.length} de ${clientes.length} clientes (con saldo)` : `${clientesFiltrados.length} cliente${clientesFiltrados.length !== 1 ? 's' : ''}`}
-            {' · ordenados por tiempo sin clase (mayor primero)'}
+            {' · ordenados por tiempo sin clase (menor primero — más reciente arriba)'}
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: '12px', border: '1px solid #e5e7eb', overflow: 'hidden', minWidth: '1100px' }}>
@@ -2353,7 +2375,7 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
                   <th style={thH}>Cliente</th>
                   <th style={{ ...thH, textAlign: 'center' }}>Días sin clase</th>
                   <th style={{ ...thH, textAlign: 'center' }}>Últ. pago</th>
-                  <th style={{ ...thH, textAlign: 'center' }}>P/T activos</th>
+                  <th style={{ ...thH, textAlign: 'center' }} title="P = Planes activos · T = Talleres activos">Planes/T activos</th>
                   <th style={{ ...thH, textAlign: 'center' }}>Contratadas</th>
                   <th style={{ ...thH, textAlign: 'center' }}>Recibidas</th>
                   <th style={{ ...thH, textAlign: 'center' }}>Inasist.</th>
