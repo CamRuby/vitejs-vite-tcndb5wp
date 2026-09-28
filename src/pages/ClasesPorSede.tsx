@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { confirmarClase } from '../utils/accionesClase'
+import { entraEnRevision, tieneSaldo, pagadoPorPlan } from '../utils/saldoPlan'
 
 const TEAL          = '#1a8a8a'
 const TEAL_LIGHT    = '#e8f5f5'
@@ -14,8 +15,6 @@ const TEAL_MID      = '#b2d8d8'
 const TALLER_COLOR  = '#7c3aed'
 const TALLER_BG     = '#f3e8ff'
 
-// Planes desde esta fecha se revisan para la "p" de saldo pendiente (igual que Reportes)
-const CORTE_PAGOS = '2026-06-01'
 // Orden fijo de sedes en pantalla
 const ORDEN_SEDES = ['rosales', 'chico', 'tunja']
 
@@ -158,21 +157,15 @@ export default function ClasesPorSede() {
     ])
 
     // Pagos de los planes que se revisan para la "p"
-    const contratosRevisar = [...new Set((cl || [])
+    const contratosRevisar = (cl || [])
       .map((c: any) => c.contratos)
-      .filter((ct: any) => ct?.id && (ct.fecha_inicio || '') >= CORTE_PAGOS)
-      .map((ct: any) => ct.id))]
-    const pagado: Record<string, number> = {}
-    if (contratosRevisar.length) {
-      const { data: pg } = await supabase.from('pagos').select('contrato_id, monto').in('contrato_id', contratosRevisar)
-      ;(pg || []).forEach((p: any) => { pagado[p.contrato_id] = (pagado[p.contrato_id] || 0) + Number(p.monto || 0) })
-    }
+      .filter((ct: any) => ct?.id && entraEnRevision(ct))
+      .map((ct: any) => ct.id)
+    const pagado = await pagadoPorPlan(contratosRevisar)
 
     const nuevas: Fila[] = (cl || []).map((c: any) => {
       const ct = c.contratos
       const cli = ct?.clientes
-      const revisa = ct?.id && (ct.fecha_inicio || '') >= CORTE_PAGOS
-      const valor = Number(ct?.valor_plan || 0)
       return {
         id: c.id,
         hora: (c.hora || '').substring(0, 5),
@@ -180,7 +173,7 @@ export default function ClasesPorSede() {
         profesor: c.profesores?.nombre || '—',
         estado: c.estado,
         esTaller: false,
-        saldo: !!revisa && (valor === 0 || (pagado[ct.id] || 0) < valor),
+        saldo: !!ct?.id && tieneSaldo(ct, pagado[ct.id] || 0),
         sedeId: c.salones?.sede_id || null,
       }
     })
