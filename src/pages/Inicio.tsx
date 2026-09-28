@@ -1,148 +1,33 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-
-const TEAL       = '#1a8a8a'
-const TEAL_LIGHT = '#e8f5f5'
-const TEAL_MID   = '#b2d8d8'
-
-function fechaHoyLocal(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-}
-
-function tiempoRelativo(fecha: string) {
-  const diff = Math.floor((Date.now() - new Date(fecha).getTime()) / 1000)
-  if (diff < 60)    return 'ahora'
-  if (diff < 3600)  return `hace ${Math.floor(diff/60)} min`
-  if (diff < 86400) return `hace ${Math.floor(diff/3600)} h`
-  return `hace ${Math.floor(diff/86400)} d`
-}
-
-function iconoTipo(tipo: string): { emoji: string; color: string; bg: string; label: string } {
-  if (tipo === 'cancelacion_tardia')   return { emoji: '⏰', color: '#dc2626', bg: '#fef2f2',  label: 'Cancelación tardía' }
-  if (tipo === 'cancelacion_a_tiempo') return { emoji: '✓',  color: '#166534', bg: '#f0fdf4',  label: 'Cancelación a tiempo' }
-  if (tipo === 'inasistencia')         return { emoji: '⚠️', color: '#c2410c', bg: '#fff7ed',  label: 'Inasistencia' }
-  return { emoji: '📌', color: '#1d4ed8', bg: '#eff6ff', label: 'Novedad' }
-}
+import ClasesPorSede from './ClasesPorSede'
+import SeccionInicio from './SeccionInicio'
+import ClientesNuevos from './ClientesNuevos'
+import PlanesSinPago from './PlanesSinPago'
 
 const DIAS_L   = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
 const MESES_L  = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
-function opcionesMes(): { valor: string; etiqueta: string }[] {
-  const opciones = []
-  const hoy = new Date()
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1)
-    const valor = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    opciones.push({ valor, etiqueta: `${MESES_L[d.getMonth()]} ${d.getFullYear()}` })
-  }
-  return opciones
-}
+// Secciones que se construirán más adelante
+const PROXIMAMENTE_A = ['Planes completados sin renovar']
+const PROXIMAMENTE_B = ['Clientes inactivos', 'Talleres']
 
-export default function Inicio({ onNavegar, onNuevaNotificacion }: {
+export default function Inicio({ onNavegar }: {
   onNavegar: (seccion: string) => void
-  onNuevaNotificacion: () => void
+  onNuevaNotificacion?: () => void
 }) {
-  const [cargando, setCargando]             = useState(true)
-  const [metricas, setMetricas]             = useState({ total: 0, confirmadas: 0, dadas: 0, novedades: 0 })
-  const [novedades, setNovedades]           = useState<any[]>([])
-  const [planesAlerta, setPlanesAlerta]     = useState<any[]>([])
-  const [planesPorRenovar, setPlanesPorRenovar] = useState<any[]>([])
-  const [planesSinIniciar, setPlanesSinIniciar] = useState<any[]>([])
+  const [esMovil, setEsMovil] = useState(() => window.innerWidth < 768)
   const [inasistenciasPendientes, setInasistenciasPendientes] = useState<any[]>([])
 
-  // ── Clientes nuevos ──
-  const [clientesNuevos, setClientesNuevos]           = useState<any[]>([])
-  const [cargandoNuevos, setCargandoNuevos]           = useState(false)
-  const [mesClientesNuevos, setMesClientesNuevos]     = useState(() => {
-    const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-  })
-
   const hoy = new Date()
-  const fechaHoy = fechaHoyLocal()
   const tituloFecha = `${DIAS_L[hoy.getDay()].charAt(0).toUpperCase() + DIAS_L[hoy.getDay()].slice(1)} ${hoy.getDate()} de ${MESES_L[hoy.getMonth()]}`
 
-  useEffect(() => { cargarTodo() }, [])
-  useEffect(() => { cargarClientesNuevos(mesClientesNuevos) }, [mesClientesNuevos])
-
-  async function cargarTodo() {
-    setCargando(true)
-    await Promise.all([
-      cargarMetricas(),
-      cargarNovedades(),
-      cargarPlanesAlerta(),
-      cargarPlanesPorRenovar(),
-      cargarPlanesSinIniciar(),
-      cargarInasistenciasPendientes(),
-    ])
-    setCargando(false)
-  }
-
-  async function cargarMetricas() {
-    const { data: clasesHoy } = await supabase
-      .from('clases').select('estado')
-      .eq('fecha', fechaHoy).neq('estado', 'cancelada')
-    const total       = (clasesHoy || []).length
-    const confirmadas = (clasesHoy || []).filter(c => c.estado === 'confirmada').length
-    const dadas       = (clasesHoy || []).filter(c => c.estado === 'dada').length
-    const { count: novedades } = await supabase
-      .from('notificaciones').select('*', { count: 'exact', head: true }).eq('leida', false)
-    setMetricas({ total, confirmadas, dadas, novedades: novedades || 0 })
-  }
-
-  async function cargarNovedades() {
-    const { data } = await supabase
-      .from('notificaciones').select('*')
-      .order('created_at', { ascending: false }).limit(5)
-    setNovedades(data || [])
-  }
-
-  async function cargarPlanesAlerta() {
-    const { data } = await supabase
-      .from('contratos')
-      .select('id, total_clases, clases_tomadas, cliente_id, clientes(nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre)')
-      .eq('estado', 'activo')
-    if (!data) return
-    const alertas = data.filter((p: any) => {
-      const restantes = (p.total_clases || 0) - (p.clases_tomadas || 0)
-      return restantes <= 2 && restantes > 0
-    }).slice(0, 5)
-    setPlanesAlerta(alertas)
-  }
-
-  async function cargarPlanesPorRenovar() {
-    const { data: completados } = await supabase
-      .from('contratos')
-      .select('id, total_clases, clases_tomadas, cliente_id, estado, clientes(nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre)')
-      .eq('estado', 'completado')
-      .order('fecha_inicio', { ascending: false })
-      .limit(10)
-    const { data: activos } = await supabase
-      .from('contratos')
-      .select('id, total_clases, clases_tomadas, cliente_id, estado, clientes(nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre)')
-      .eq('estado', 'activo')
-      .order('fecha_inicio', { ascending: false })
-      .limit(50)
-    const activosCompletos = (activos || []).filter((p: any) =>
-      p.total_clases > 0 && parseFloat((p.clases_tomadas || 0).toFixed(4)) >= parseFloat(p.total_clases.toFixed(4))
-    )
-    const todos = [...(completados || []), ...activosCompletos]
-    const vistos = new Set<string>()
-    const dedup = todos.filter((p: any) => { if (vistos.has(p.id)) return false; vistos.add(p.id); return true })
-    setPlanesPorRenovar(dedup.slice(0, 6))
-  }
-
-  async function cargarPlanesSinIniciar() {
-    const { data } = await supabase
-      .from('contratos')
-      .select('id, total_clases, clases_tomadas, fecha_inicio, cliente_id, clientes(nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre)')
-      .eq('estado', 'activo')
-      .eq('clases_tomadas', 0)
-      .order('fecha_inicio', { ascending: true })
-      .limit(6)
-    setPlanesSinIniciar(data || [])
-  }
+  useEffect(() => {
+    const h = () => setEsMovil(window.innerWidth < 768)
+    window.addEventListener('resize', h)
+    return () => window.removeEventListener('resize', h)
+  }, [])
+  useEffect(() => { cargarInasistenciasPendientes() }, [])
 
   async function cargarInasistenciasPendientes() {
     const { data } = await supabase
@@ -156,34 +41,6 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
     setInasistenciasPendientes(data || [])
   }
 
-  async function cargarClientesNuevos(mes: string) {
-    setCargandoNuevos(true)
-    const [year, month] = mes.split('-').map(Number)
-    const ultimoDia = new Date(year, month, 0).getDate()
-    const desde = `${year}-${String(month).padStart(2, '0')}-01T00:00:00`
-    const hasta  = `${year}-${String(month).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}T23:59:59`
-    const { data } = await supabase
-      .from('clientes')
-      .select('id, nombre, nombres, apellidos, telefono, email, created_at')
-      .gte('created_at', desde)
-      .lte('created_at', hasta)
-      .order('created_at', { ascending: false })
-    setClientesNuevos(data || [])
-    setCargandoNuevos(false)
-  }
-
-  async function marcarLeida(id: string) {
-    await supabase.from('notificaciones').update({ leida: true }).eq('id', id)
-    setNovedades(prev => prev.map(n => n.id === id ? { ...n, leida: true } : n))
-    setMetricas(prev => ({ ...prev, novedades: Math.max(0, prev.novedades - 1) }))
-    onNuevaNotificacion()
-  }
-
-  function nombreCliente(p: any) {
-    const cl = p.clientes || p.contratos?.clientes
-    return cl?.nombre || `${cl?.nombres || ''} ${cl?.apellidos || ''}`.trim() || '—'
-  }
-
   function formatHora(hora: string) {
     if (!hora) return '—'
     const [h, m] = hora.substring(0, 5).split(':').map(Number)
@@ -192,19 +49,8 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
     return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
   }
 
-  const tarjetaMetrica = (label: string, valor: number, color: string, bg: string) => (
-    <div style={{ background: bg, borderRadius: '14px', padding: '18px 20px', border: `1px solid ${color}33`, boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-      <p style={{ margin: '0 0 6px', fontSize: '11px', color, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.8px' }}>{label}</p>
-      <p style={{ margin: 0, fontSize: '34px', fontWeight: '800', color, lineHeight: 1 }}>{valor}</p>
-    </div>
-  )
-
   const CARD_COLORS = {
-    novedades:            { header: '#1d4ed8', headerBg: '#eff6ff',  border: '#bfdbfe' },
-    inasistencias:        { header: '#c2410c', headerBg: '#fff7ed',  border: '#fed7aa' },
-    proximasATerminar:    { header: '#854d0e', headerBg: '#fefce8',  border: '#fde68a' },
-    renovar:              { header: TEAL,      headerBg: TEAL_LIGHT,  border: TEAL_MID  },
-    sinIniciar:           { header: '#7c3aed', headerBg: '#f3e8ff',  border: '#d8b4fe' },
+    inasistencias: { header: '#c2410c', headerBg: '#fff7ed', border: '#fed7aa' },
   }
 
   function tarjetaLista(
@@ -218,11 +64,7 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
     onLink?: () => void
   ) {
     return (
-      <div style={{ background: 'white', borderRadius: '16px', border: `1px solid ${colores.border}`, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-        <div style={{ padding: '14px 20px', background: colores.headerBg, borderBottom: `1px solid ${colores.border}` }}>
-          <h3 style={{ margin: 0, fontSize: '15px', color: colores.header, fontWeight: '700' }}>{titulo}</h3>
-          <p style={{ margin: '2px 0 0', fontSize: '12px', color: colores.header, opacity: 0.75 }}>{subtitulo}</p>
-        </div>
+      <SeccionInicio titulo={titulo} subtitulo={subtitulo} cantidad={items.length} colores={colores} esMovil={esMovil}>
         {items.length === 0
           ? <p style={{ textAlign: 'center', color: '#aaa', padding: '28px 20px', fontSize: '13px', margin: 0 }}>{vacioMsg}</p>
           : <>
@@ -237,61 +79,32 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
               </div>
             </>
         }
-      </div>
+      </SeccionInicio>
     )
   }
 
-  return (
-    <div style={{ padding: '28px 32px', width: '100%', boxSizing: 'border-box' as const, maxWidth: '100%', overflowX: 'hidden' }}>
+  const proximamente = (titulo: string) => (
+    <div key={titulo} style={{ background: '#f8fafc', borderRadius: esMovil ? '14px' : '16px', border: '1px solid #e2e8f0', padding: '14px 16px',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+      <span style={{ fontSize: '15px', fontWeight: 700, color: '#94a3b8', textAlign: 'left' }}>{titulo}</span>
+      <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic', whiteSpace: 'nowrap' }}>Próximamente</span>
+    </div>
+  )
 
-      <div style={{ marginBottom: '24px' }}>
-        <h2 style={{ margin: 0, fontSize: '24px', color: '#1a1a1a', fontWeight: '700' }}>{tituloFecha}</h2>
-        <p style={{ margin: '4px 0 0', color: '#666', fontSize: '14px' }}>Resumen del día y novedades recientes</p>
+  return (
+    <div style={{ padding: esMovil ? '16px' : '28px 32px', width: '100%', boxSizing: 'border-box' as const, maxWidth: '100%', overflowX: 'hidden' }}>
+
+      <div style={{ marginBottom: esMovil ? '14px' : '20px' }}>
+        <h2 style={{ margin: 0, fontSize: esMovil ? '20px' : '24px', color: '#1a1a1a', fontWeight: '700' }}>{tituloFecha}</h2>
       </div>
 
-      {cargando ? (
-        <p style={{ color: '#aaa', fontSize: '14px' }}>Cargando...</p>
-      ) : (
-        <>
-          {/* Métricas */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '28px' }}>
-            {tarjetaMetrica('Clases hoy',   metricas.total,       '#1a1a1a', '#f8fafc')}
-            {tarjetaMetrica('Confirmadas',  metricas.confirmadas, '#166534', '#dcfce7')}
-            {tarjetaMetrica('Dadas',        metricas.dadas,       '#854d0e', '#fefce8')}
-            {tarjetaMetrica('Novedades',    metricas.novedades,   metricas.novedades > 0 ? '#991b1b' : '#94a3b8', metricas.novedades > 0 ? '#fee2e2' : '#f8fafc')}
-          </div>
+      {/* Clases del día por sede */}
+      <ClasesPorSede />
 
-          {/* Tarjetas — 3 columnas */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '18px' }}>
+      {/* Demás secciones */}
+      <div style={{ display: 'grid', gridTemplateColumns: esMovil ? '1fr' : 'repeat(3, minmax(0, 1fr))', gap: esMovil ? '10px' : '16px', alignItems: 'start' }}>
 
-            {/* 1. Novedades recientes */}
-            {tarjetaLista(
-              'Novedades recientes',
-              metricas.novedades > 0 ? `${metricas.novedades} sin leer` : 'Al día',
-              novedades,
-              'Sin novedades',
-              CARD_COLORS.novedades,
-              (n) => {
-                const { emoji, bg } = iconoTipo(n.tipo)
-                return (
-                  <div key={n.id}
-                    onClick={() => !n.leida && marcarLeida(n.id)}
-                    style={{ padding: '11px 20px', borderBottom: '1px solid #f8fafc', background: n.leida ? 'white' : '#eff6ff', display: 'flex', gap: '10px', alignItems: 'flex-start', cursor: n.leida ? 'default' : 'pointer' }}>
-                    <div style={{ width: '30px', height: '30px', borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', flexShrink: 0 }}>
-                      {emoji}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: '0 0 1px', fontSize: '13px', fontWeight: n.leida ? '400' : '600', color: '#1a1a1a', lineHeight: '1.4', textAlign: 'left' }}>{n.mensaje}</p>
-                      {n.detalle && <p style={{ margin: 0, fontSize: '12px', color: '#666', lineHeight: '1.4', textAlign: 'left' }}>{n.detalle}</p>}
-                    </div>
-                    <span style={{ fontSize: '11px', color: '#aaa', whiteSpace: 'nowrap', marginTop: '2px', flexShrink: 0 }}>{tiempoRelativo(n.created_at)}</span>
-                  </div>
-                )
-              },
-              'Ver todas las novedades'
-            )}
-
-            {/* 2. Inasistencias pendientes */}
+            {/* Inasistencias pendientes (sin cambios) */}
             {tarjetaLista(
               'Inasistencias pendientes',
               inasistenciasPendientes.length > 0 ? `${inasistenciasPendientes.length} por resolver` : 'Al día',
@@ -331,146 +144,14 @@ export default function Inicio({ onNavegar, onNuevaNotificacion }: {
               () => onNavegar('horarios')
             )}
 
-            {/* 3. Planes próximos a terminar */}
-            {tarjetaLista(
-              'Planes próximos a terminar',
-              '2 o menos clases restantes',
-              planesAlerta,
-              'Sin alertas por ahora',
-              CARD_COLORS.proximasATerminar,
-              (p) => {
-                const restantes = parseFloat(((p.total_clases || 0) - (p.clases_tomadas || 0)).toFixed(2))
-                return (
-                  <div key={p.id}
-                    onClick={() => onNavegar('clientes')}
-                    style={{ padding: '11px 20px', borderBottom: '1px solid #f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#fefce8')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
-                    <div style={{ textAlign: 'left' }}>
-                      <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: '600', color: '#1a1a1a', textAlign: 'left' }}>{nombreCliente(p)}</p>
-                      <p style={{ margin: 0, fontSize: '12px', color: '#666', textAlign: 'left' }}>{p.instrumentos?.nombre || '—'} · {p.profesores?.nombre || '—'}</p>
-                    </div>
-                    <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: restantes < 1 ? '#fee2e2' : '#fff7ed', color: restantes < 1 ? '#991b1b' : '#c2410c', flexShrink: 0, marginLeft: '10px' }}>
-                      {restantes} {restantes === 1 ? 'clase' : 'clases'}
-                    </span>
-                  </div>
-                )
-              },
-              'Ver todos los planes'
-            )}
+            <ClientesNuevos esMovil={esMovil} onNavegar={onNavegar} />
 
-            {/* 4. Por renovar */}
-            {tarjetaLista(
-              'Por renovar',
-              'Planes completados sin archivar',
-              planesPorRenovar,
-              'Sin planes pendientes de renovar',
-              CARD_COLORS.renovar,
-              (p) => (
-                <div key={p.id}
-                  onClick={() => onNavegar('clientes')}
-                  style={{ padding: '11px 20px', borderBottom: '1px solid #f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = TEAL_LIGHT)}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
-                  <div style={{ textAlign: 'left' }}>
-                    <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: '600', color: '#1a1a1a', textAlign: 'left' }}>{nombreCliente(p)}</p>
-                    <p style={{ margin: 0, fontSize: '12px', color: '#666', textAlign: 'left' }}>{p.instrumentos?.nombre || '—'} · {p.profesores?.nombre || '—'}</p>
-                  </div>
-                  <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: '#dcfce7', color: '#166534', flexShrink: 0, marginLeft: '10px' }}>
-                    ✓ {p.total_clases} clases
-                  </span>
-                </div>
-              ),
-              'Ver en clientes'
-            )}
+            {PROXIMAMENTE_A.map(proximamente)}
 
-            {/* 5. Sin iniciar */}
-            {tarjetaLista(
-              'Sin iniciar',
-              'Planes activos con 0 clases tomadas',
-              planesSinIniciar,
-              'Todos los planes tienen clases programadas',
-              CARD_COLORS.sinIniciar,
-              (p) => (
-                <div key={p.id}
-                  onClick={() => onNavegar('clientes')}
-                  style={{ padding: '11px 20px', borderBottom: '1px solid #f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#f3e8ff')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'white')}>
-                  <div style={{ textAlign: 'left' }}>
-                    <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: '600', color: '#1a1a1a', textAlign: 'left' }}>{nombreCliente(p)}</p>
-                    <p style={{ margin: 0, fontSize: '12px', color: '#666', textAlign: 'left' }}>{p.instrumentos?.nombre || '—'} · {p.profesores?.nombre || '—'}</p>
-                  </div>
-                  <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: '#f3e8ff', color: '#7c3aed', flexShrink: 0, marginLeft: '10px' }}>
-                    {p.total_clases} clases
-                  </span>
-                </div>
-              ),
-              'Programar clases'
-            )}
+            <PlanesSinPago esMovil={esMovil} />
 
-            {/* 6. Clientes nuevos */}
-            <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #bbf7d0', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-              <div style={{ padding: '14px 20px', background: '#dcfce7', borderBottom: '1px solid #bbf7d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '15px', color: '#166534', fontWeight: '700' }}>🆕 Clientes nuevos</h3>
-                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#166534', opacity: 0.8 }}>
-                    {cargandoNuevos ? 'Cargando...' : `${clientesNuevos.length} registrado${clientesNuevos.length !== 1 ? 's' : ''}`}
-                  </p>
-                </div>
-                <select
-                  value={mesClientesNuevos}
-                  onChange={e => setMesClientesNuevos(e.target.value)}
-                  style={{ padding: '5px 10px', borderRadius: '8px', border: '1px solid #bbf7d0', fontSize: '12px', background: 'white', color: '#166534', fontWeight: '600', cursor: 'pointer', outline: 'none' }}>
-                  {opcionesMes().map(op => (
-                    <option key={op.valor} value={op.valor}>{op.etiqueta}</option>
-                  ))}
-                </select>
-              </div>
-
-              {cargandoNuevos ? (
-                <p style={{ textAlign: 'center', color: '#aaa', padding: '28px 20px', fontSize: '13px', margin: 0 }}>Cargando...</p>
-              ) : clientesNuevos.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#aaa', padding: '28px 20px', fontSize: '13px', margin: 0 }}>Sin clientes nuevos este mes</p>
-              ) : (
-                <>
-                  <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
-                    {clientesNuevos.map((c: any, i) => {
-                      const nombre = c.nombre || `${c.nombres || ''} ${c.apellidos || ''}`.trim() || '—'
-                      const fechaReg = new Date(c.created_at)
-                      const fechaStr = fechaReg.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })
-                      const horaStr  = fechaReg.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })
-                      return (
-                        <div key={c.id}
-                          onClick={() => onNavegar('clientes')}
-                          style={{ padding: '11px 20px', borderBottom: '1px solid #f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: i % 2 === 0 ? 'white' : '#fafbfc' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = '#dcfce7')}
-                          onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'white' : '#fafbfc')}>
-                          <div style={{ textAlign: 'left', minWidth: 0 }}>
-                            <p style={{ margin: '0 0 2px', fontSize: '13px', fontWeight: '600', color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</p>
-                            <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>{c.telefono || c.email || '—'}</p>
-                          </div>
-                          <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '10px' }}>
-                            <p style={{ margin: '0 0 1px', fontSize: '12px', fontWeight: '600', color: '#166534' }}>{fechaStr}</p>
-                            <p style={{ margin: 0, fontSize: '11px', color: '#aaa' }}>{horaStr}</p>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                  <div style={{ padding: '10px 20px', textAlign: 'center', borderTop: '1px solid #f8fafc' }}>
-                    <button onClick={() => onNavegar('clientes')}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: '#166534', fontWeight: '600' }}>
-                      Ver en clientes →
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-
-          </div>
-        </>
-      )}
+            {PROXIMAMENTE_B.map(proximamente)}
+      </div>
     </div>
   )
 }
