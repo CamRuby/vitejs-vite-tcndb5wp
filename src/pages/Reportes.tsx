@@ -2026,6 +2026,7 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
   const [filtroSede, setFiltroSede] = useState('')
   const [filtroProfesor, setFiltroProfesor] = useState('')
   const [filtroConSaldo, setFiltroConSaldo] = useState(false)
+  const [filtroFecha, setFiltroFecha] = useState('')
   const [clientes, setClientes] = useState<ClienteHistorico[]>([])
   const [resumen, setResumen] = useState<ResumenHistorico | null>(null)
   const [cargando, setCargando] = useState(false)
@@ -2255,9 +2256,18 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
     } finally { setCargando(false) }
   }
 
-  const clientesFiltrados = filtroConSaldo
+  const clientesFiltradosBase = filtroConSaldo
     ? clientes.filter(c => c.planesConSaldo > 0 || c.planesSinValor > 0)
     : clientes
+
+  const clientesFiltrados = filtroFecha
+    ? clientesFiltradosBase.filter(c => {
+        const todasClasesCliente = c.contratos.flatMap((ct: any) => (c as any).clasesPorContrato?.[ct.id] || [])
+        return todasClasesCliente.some((cl: any) =>
+          cl.fecha === filtroFecha && (cl.estado === 'confirmada' || cl.estado === 'dada')
+        )
+      })
+    : clientesFiltradosBase
 
   const thH = { padding: '10px 12px', textAlign: 'left' as const, fontSize: '11px', color: TEAL_DARK, fontWeight: 700, whiteSpace: 'nowrap' as const, background: TEAL_LIGHT, borderBottom: `1.5px solid ${TEAL_MID}` }
   const tdH = { padding: '10px 12px', fontSize: '13px', borderTop: '1px solid #f1f5f9', verticalAlign: 'middle' as const }
@@ -2298,6 +2308,23 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
           style={{ padding: '7px 14px', borderRadius: '10px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', border: `1.5px solid ${filtroConSaldo ? '#dc2626' : '#e5e7eb'}`, background: filtroConSaldo ? '#fef2f2' : 'white', color: filtroConSaldo ? '#dc2626' : '#475569' }}>
           ⚠ Con saldo{filtroConSaldo ? ' ✓' : ''}
         </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>📅 Fecha:</span>
+          <input
+            type="date"
+            value={filtroFecha}
+            onChange={e => setFiltroFecha(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${filtroFecha ? TEAL : TEAL_MID}`, background: filtroFecha ? TEAL_LIGHT : 'white', color: filtroFecha ? TEAL_DARK : '#475569', outline: 'none', cursor: 'pointer' }}
+          />
+          {filtroFecha && (
+            <button onClick={() => setFiltroFecha('')}
+              title="Quitar filtro de fecha"
+              style={{ padding: '5px 8px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', border: `1px solid ${TEAL_MID}`, background: TEAL_LIGHT, color: TEAL_DARK }}>
+              ×
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Estados vacíos */}
@@ -2306,9 +2333,9 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
           Selecciona una sede para comenzar.
         </div>
       )}
-      {filtroSede && !filtroProfesor && !cargando && (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
-          {profesores.length > 0 ? 'Selecciona un profesor para ver sus clientes.' : 'No hay profesores con clases registradas en esta sede.'}
+      {filtroSede && filtroFecha && !cargando && clientesFiltrados.length === 0 && clientes.length > 0 && (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
+          No hay clientes con clase confirmada o dada el {filtroFecha}.
         </div>
       )}
       {cargando && (
@@ -2323,10 +2350,11 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
       )}
 
       {/* ── Resumen global: mismos totales del grupo ── */}
-      {!cargando && resumen && filtroProfesor && (
+      {!cargando && resumen && filtroSede && (
         <div style={{ marginBottom: '20px' }}>
           <div style={{ fontSize: '13px', fontWeight: 700, color: TEAL_DARK, marginBottom: '10px' }}>
-            {sedeName} · {profName} · {resumen.totalClientes} cliente{resumen.totalClientes !== 1 ? 's' : ''}
+            {sedeName}{profName ? ` · ${profName}` : ''} · {resumen.totalClientes} cliente{resumen.totalClientes !== 1 ? 's' : ''}
+            {filtroFecha && <span style={{ marginLeft: '8px', padding: '2px 8px', borderRadius: '6px', background: TEAL_LIGHT, color: TEAL_DARK, fontSize: '12px' }}>📅 {filtroFecha} · {clientesFiltrados.length} con clase</span>}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '10px' }}>
             {[
@@ -2350,14 +2378,14 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
       )}
 
       {/* Sin resultados */}
-      {!cargando && !error && filtroProfesor && clientesFiltrados.length === 0 && clientes.length > 0 && (
+      {!cargando && !error && filtroSede && clientesFiltrados.length === 0 && clientes.length > 0 && !filtroFecha && (
         <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
           No hay clientes con saldo pendiente en este filtro.
         </div>
       )}
-      {!cargando && !error && filtroProfesor && clientes.length === 0 && (
+      {!cargando && !error && filtroSede && clientes.length === 0 && (
         <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', background: 'white', borderRadius: '12px', border: `1px solid ${TEAL_MID}` }}>
-          No se encontraron clientes con clases de este profesor en esta sede.
+          No se encontraron clientes{filtroProfesor ? ' con clases de este profesor' : ''} en esta sede.
         </div>
       )}
 
@@ -2365,7 +2393,11 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
       {!cargando && !error && clientesFiltrados.length > 0 && (
         <div>
           <div style={{ fontSize: '13px', color: '#888', marginBottom: '10px' }}>
-            {filtroConSaldo ? `${clientesFiltrados.length} de ${clientes.length} clientes (con saldo)` : `${clientesFiltrados.length} cliente${clientesFiltrados.length !== 1 ? 's' : ''}`}
+            {filtroFecha
+              ? `${clientesFiltrados.length} de ${clientes.length} clientes — con clase el ${filtroFecha}`
+              : filtroConSaldo
+                ? `${clientesFiltrados.length} de ${clientes.length} clientes (con saldo)`
+                : `${clientesFiltrados.length} cliente${clientesFiltrados.length !== 1 ? 's' : ''}`}
             {' · ordenados por tiempo sin clase (menor primero — más reciente arriba)'}
           </div>
           <div style={{ overflowX: 'auto' }}>
