@@ -2104,13 +2104,18 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
       // Si hay filtro de profesor: adicionalmente, clientes con ≥1 clase con ese profesor
       let clienteIdsArr: string[]
       if (filtroProfesor) {
-        const { data: clasesProfeData, error: ep } = await supabase
-          .from('clases').select('contrato_id')
-          .eq('profesor_id', filtroProfesor)
-          .in('contrato_id', contIdArr)
-        if (ep) throw ep
+        let clasesProfeData: any[] = []
+        const PBATCH = 60
+        for (let pi = 0; pi < contIdArr.length; pi += PBATCH) {
+          const { data: pbatch, error: ep } = await supabase
+            .from('clases').select('contrato_id')
+            .eq('profesor_id', filtroProfesor)
+            .in('contrato_id', contIdArr.slice(pi, pi + PBATCH))
+          if (ep) throw ep
+          clasesProfeData.push(...(pbatch || []))
+        }
         const clientesConProfe = new Set(
-          (clasesProfeData || []).map((c: any) => contIdToClient[c.contrato_id]).filter(Boolean)
+          clasesProfeData.map((c: any) => contIdToClient[c.contrato_id]).filter(Boolean)
         )
         clienteIdsArr = clientesEnEstaSede.filter(id => clientesConProfe.has(id))
       } else {
@@ -2126,13 +2131,16 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
       const allContIds = (contratosData || []).map((c: any) => c.id)
       let todasClases: any[] = []
       if (allContIds.length > 0) {
-        const { data: clasesAll, error: e4 } = await supabase
-          .from('clases')
-          .select('id, contrato_id, profesor_id, fecha, estado, cancelado_por_academia')
-          .in('contrato_id', allContIds)
-          .order('fecha', { ascending: false })
-        if (e4) throw e4
-        todasClases = clasesAll || []
+        const CBATCH = 60
+        for (let ci = 0; ci < allContIds.length; ci += CBATCH) {
+          const { data: batchClases, error: e4 } = await supabase
+            .from('clases')
+            .select('id, contrato_id, profesor_id, fecha, estado, cancelado_por_academia')
+            .in('contrato_id', allContIds.slice(ci, ci + CBATCH))
+            .order('fecha', { ascending: false })
+          if (e4) throw e4
+          todasClases.push(...(batchClases || []))
+        }
       }
 
       // 5. Talleres de esos clientes
@@ -2231,6 +2239,7 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
           clasesUltimoPlan, totalClasesUltimoPlan, pctProfesor,
           valorTotalContratado, valorTotalPagado, planesSinValor, planesConSaldo,
           contratos, inscripciones, clasesPorContrato, pagosPorContrato, pagosPorInscripcion,
+          todasClasesArr: todasClasesCliente,
         }
       })
 
@@ -2260,14 +2269,18 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
     ? clientes.filter(c => c.planesConSaldo > 0 || c.planesSinValor > 0)
     : clientes
 
+  // When professor selected, exclude clients with 0% (means no classes with that professor loaded)
+  const clientesFiltradosConProfe = filtroProfesor
+    ? clientesFiltradosBase.filter(c => c.pctProfesor > 0)
+    : clientesFiltradosBase
+
   const clientesFiltrados = filtroFecha
-    ? clientesFiltradosBase.filter(c => {
-        const todasClasesCliente = c.contratos.flatMap((ct: any) => (c as any).clasesPorContrato?.[ct.id] || [])
-        return todasClasesCliente.some((cl: any) =>
-          cl.fecha === filtroFecha && (cl.estado === 'confirmada' || cl.estado === 'dada')
+    ? clientesFiltradosConProfe.filter(c => {
+        return ((c as any).todasClasesArr as any[]).some((cl: any) =>
+          cl.fecha?.slice(0, 10) === filtroFecha && (cl.estado === 'confirmada' || cl.estado === 'dada')
         )
       })
-    : clientesFiltradosBase
+    : clientesFiltradosConProfe
 
   const thH = { padding: '10px 12px', textAlign: 'left' as const, fontSize: '11px', color: TEAL_DARK, fontWeight: 700, whiteSpace: 'nowrap' as const, background: TEAL_LIGHT, borderBottom: `1.5px solid ${TEAL_MID}` }
   const tdH = { padding: '10px 12px', fontSize: '13px', borderTop: '1px solid #f1f5f9', verticalAlign: 'middle' as const }
@@ -2416,7 +2429,7 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
                   <th style={{ ...thH, textAlign: 'right' }}>Pagado*</th>
                   <th style={{ ...thH, textAlign: 'center' }}>Sin val.*</th>
                   <th style={{ ...thH, textAlign: 'center' }}>C/saldo*</th>
-                  <th style={{ ...thH, textAlign: 'center' }}>% Profe</th>
+                  {filtroProfesor && <th style={{ ...thH, textAlign: 'center' }}>% Profe</th>}
                 </tr>
               </thead>
               <tbody>
@@ -2463,13 +2476,13 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
                           ? <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 700, background: '#fee2e2', color: '#991b1b' }}>{c.planesConSaldo}</span>
                           : <span style={{ color: '#aaa', fontSize: '12px' }}>0</span>}
                       </td>
-                      <td style={{ ...tdH, textAlign: 'center', fontWeight: 700, color: c.pctProfesor >= 80 ? '#16a34a' : c.pctProfesor >= 50 ? '#d97706' : '#dc2626' }}>{c.pctProfesor}%</td>
+                      {filtroProfesor && <td style={{ ...tdH, textAlign: 'center', fontWeight: 700, color: c.pctProfesor >= 80 ? '#16a34a' : c.pctProfesor >= 50 ? '#d97706' : '#dc2626' }}>{c.pctProfesor}%</td>}
                     </tr>
                   ]
                   if (clienteExpandido === c.id) {
                     filas.push(
                       <tr key={`${c.id}-det`}>
-                        <td colSpan={13} style={{ padding: '4px 16px 16px', background: '#f8fafc', borderTop: '1px solid #e5e7eb' }}>
+                        <td colSpan={filtroProfesor ? 13 : 12} style={{ padding: '4px 16px 16px', background: '#f8fafc', borderTop: '1px solid #e5e7eb' }}>
                           <DetalleHistorico
                             contratos={c.contratos}
                             inscripciones={c.inscripciones}
@@ -2513,7 +2526,7 @@ function ReporteHistoricoPlanesTalleres({ onVolver }: { onVolver: () => void }) 
                     <td style={{ ...tdH, textAlign: 'center', color: '#991b1b' }}>
                       {clientesFiltrados.reduce((s, c) => s + c.planesConSaldo, 0)}
                     </td>
-                    <td style={tdH}></td>
+                    {filtroProfesor && <td style={tdH}></td>}
                   </tr>
                 )}
               </tbody>
