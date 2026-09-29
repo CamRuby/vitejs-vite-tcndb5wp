@@ -3,11 +3,13 @@
 // Entran: planes desde la fecha de corte, en cualquier estado, sin valor definido o con pagado < valor.
 // Orden: del plan más antiguo (fecha de inicio) al más nuevo. Un cliente con 2 planes aparece 2 veces.
 // Arriba: total adeudado de la sede.
+// Botón "Registrar pago" por plan (función única registrar_pago, auditada).
 
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import SeccionInicio from './SeccionInicio'
 import { CORTE_PAGOS, tieneSaldo, pagadoPorPlan, formatPesos } from '../utils/saldoPlan'
+import { registrarPago, METODOS_PAGO, hoyLocal } from '../utils/accionesPago'
 
 const COLORES = { header: '#991b1b', headerBg: '#fef2f2', border: '#fecaca' }
 const ORDEN_SEDES = ['rosales', 'chico', 'tunja']
@@ -33,10 +35,17 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
   const [sedeSel, setSedeSel]   = useState<string>('')
   const [cargando, setCargando] = useState(true)
 
+  // Registro de pago
+  const [aPagar, setAPagar]         = useState<Plan | null>(null)
+  const [form, setForm]             = useState({ valorPlan: '', monto: '', metodo: '', fecha: hoyLocal(), notas: '' })
+  const [guardando, setGuardando]   = useState(false)
+  const [errorPago, setErrorPago]   = useState('')
+  const [aviso, setAviso]           = useState('')
+
   useEffect(() => { cargar() }, [])
 
-  async function cargar() {
-    setCargando(true)
+  async function cargar(silencioso = false) {
+    if (!silencioso) setCargando(true)
     const { data: s } = await supabase.from('sedes').select('id, nombre')
     // Traer todos los planes desde el corte (por páginas de 1000)
     const todos: any[] = []
@@ -90,6 +99,46 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
       {e === 'completado' ? 'Completado' : e === 'archivado' ? 'Archivado' : e}
     </span>
   )
+  function abrirPago(p: Plan) {
+    setAPagar(p)
+    setErrorPago('')
+    setForm({
+      valorPlan: '',
+      monto: p.valor > 0 ? String(Math.max(p.valor - p.pagado, 0)) : '',
+      metodo: '',
+      fecha: hoyLocal(),
+      notas: '',
+    })
+  }
+
+  async function guardarPago() {
+    if (!aPagar) return
+    const sinValor = aPagar.valor === 0
+    const valorPlan = Number(form.valorPlan)
+    const monto = Number(form.monto)
+    if (sinValor && !(valorPlan > 0)) { setErrorPago('Ingresa el valor del plan.'); return }
+    if (!(monto > 0)) { setErrorPago('Ingresa un monto mayor a 0.'); return }
+    if (!form.metodo) { setErrorPago('Selecciona la cuenta del pago.'); return }
+    if (!form.fecha) { setErrorPago('Selecciona la fecha del pago.'); return }
+    setGuardando(true); setErrorPago('')
+    const r = await registrarPago({
+      contratoId: aPagar.id, monto, metodo: form.metodo, fecha: form.fecha, notas: form.notas,
+      valorPlan: sinValor ? valorPlan : null, via: 'inicio',
+    })
+    setGuardando(false)
+    if (!r.ok) { setErrorPago(r.mensaje); return }
+    setAPagar(null)
+    setAviso(r.mensaje); setTimeout(() => setAviso(''), 2500)
+    await cargar(true)
+  }
+
+  const botonPago = (p: Plan) => (
+    <button onClick={() => abrirPago(p)}
+      style={{ padding: '5px 10px', borderRadius: '8px', border: `1px solid ${COLORES.header}`, background: 'white', color: COLORES.header, fontSize: '12px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+      Registrar pago
+    </button>
+  )
+
   const valorTxt = (p: Plan) => p.valor === 0 ? <span style={{ color: '#dc2626', fontWeight: 700 }}>Sin valor</span> : formatPesos(p.valor)
 
   return (
@@ -137,6 +186,7 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
                     <span style={{ color: '#6b7280' }}>Clases {num(p.tomadas)}/{num(p.total)} · {p.duracion || '—'} min</span>
                     <span style={{ color: '#1f2937', whiteSpace: 'nowrap' }}>{formatPesos(p.pagado)} de {valorTxt(p)}</span>
                   </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>{botonPago(p)}</div>
                 </div>
               ))}
             </div>
@@ -145,7 +195,7 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ background: '#f8fafc', color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px', position: 'sticky', top: 0 }}>
-                    {['Cliente', 'Inicio', 'Instrumento', 'Profesor', 'Clases', 'Duración', 'Valor', 'Pagado'].map((h, i) => (
+                    {['Cliente', 'Inicio', 'Instrumento', 'Profesor', 'Clases', 'Duración', 'Valor', 'Pagado', ''].map((h, i) => (
                       <th key={h} style={{ padding: '8px 12px', textAlign: i >= 4 ? 'right' : 'left', fontWeight: 700, background: '#f8fafc' }}>{h}</th>
                     ))}
                   </tr>
@@ -161,12 +211,93 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
                       <td style={{ padding: '8px 12px', color: '#4b5563', textAlign: 'right', whiteSpace: 'nowrap' }}>{p.duracion || '—'} min</td>
                       <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>{valorTxt(p)}</td>
                       <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap', color: p.pagado === 0 ? '#dc2626' : '#1f2937', fontWeight: 600 }}>{formatPesos(p.pagado)}</td>
+                      <td style={{ padding: '6px 12px', textAlign: 'right' }}>{botonPago(p)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
+        </div>
+      )}
+      {/* Ventana: registrar pago */}
+      {aPagar && (() => {
+        const sinValor = aPagar.valor === 0
+        const valorRef = sinValor ? Number(form.valorPlan || 0) : aPagar.valor
+        const saldo = Math.max(valorRef - aPagar.pagado, 0)
+        const monto = Number(form.monto || 0)
+        const campo = { width: '100%', padding: '10px 12px', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '15px', boxSizing: 'border-box' as const, background: 'white' }
+        const etiqueta = { display: 'block', margin: '0 0 4px', fontSize: '12px', fontWeight: 700, color: '#475569', textAlign: 'left' as const }
+        return (
+          <div onClick={() => !guardando && setAPagar(null)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background: 'white', borderRadius: '16px', padding: '20px', width: '100%', maxWidth: '380px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.2)', textAlign: 'left' }}>
+              <p style={{ margin: '0 0 2px', fontSize: '16px', fontWeight: 700, color: '#1a1a1a' }}>Registrar pago</p>
+              <p style={{ margin: '0 0 14px', fontSize: '13px', color: '#4b5563', lineHeight: 1.5 }}>
+                {aPagar.cliente} · {aPagar.instrumento}<br />
+                {sinValor ? 'Plan sin valor definido' : <>Valor {formatPesos(aPagar.valor)} · Pagado {formatPesos(aPagar.pagado)} · <b>Saldo {formatPesos(saldo)}</b></>}
+              </p>
+
+              {sinValor && (
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={etiqueta}>Valor del plan</label>
+                  <input type="number" inputMode="numeric" min="0" value={form.valorPlan} placeholder="Ej. 400000"
+                    onChange={e => setForm(f => ({ ...f, valorPlan: e.target.value }))} style={campo} />
+                  {Number(form.valorPlan) > 0 && <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#64748b' }}>{formatPesos(Number(form.valorPlan))}</p>}
+                </div>
+              )}
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={etiqueta}>Monto</label>
+                <input type="number" inputMode="numeric" min="0" value={form.monto}
+                  onChange={e => setForm(f => ({ ...f, monto: e.target.value }))} style={campo} />
+                {monto > 0 && (
+                  <p style={{ margin: '3px 0 0', fontSize: '12px', color: valorRef > 0 && monto > saldo ? '#b45309' : '#64748b' }}>
+                    {formatPesos(monto)}{valorRef > 0 && monto > saldo ? ' · supera el saldo pendiente' : ''}
+                  </p>
+                )}
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={etiqueta}>Cuenta</label>
+                <select value={form.metodo} onChange={e => setForm(f => ({ ...f, metodo: e.target.value }))} style={campo}>
+                  <option value="" disabled>Selecciona la cuenta...</option>
+                  {METODOS_PAGO.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <label style={etiqueta}>Fecha del pago</label>
+                <input type="date" value={form.fecha} onChange={e => setForm(f => ({ ...f, fecha: e.target.value }))} style={campo} />
+              </div>
+
+              <div style={{ marginBottom: '14px' }}>
+                <label style={etiqueta}>Notas (opcional)</label>
+                <input type="text" value={form.notas} onChange={e => setForm(f => ({ ...f, notas: e.target.value }))} style={campo} />
+              </div>
+
+              {errorPago && <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#991b1b', fontWeight: 600 }}>{errorPago}</p>}
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button disabled={guardando} onClick={() => setAPagar(null)}
+                  style={{ flex: 1, padding: '11px', borderRadius: '10px', border: '1px solid #d1d5db', background: 'white', color: '#374151', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+                  Cancelar
+                </button>
+                <button disabled={guardando} onClick={guardarPago}
+                  style={{ flex: 1, padding: '11px', borderRadius: '10px', border: 'none', background: COLORES.header, color: 'white', fontSize: '14px', fontWeight: 700, cursor: 'pointer', opacity: guardando ? 0.6 : 1 }}>
+                  {guardando ? 'Guardando...' : 'Registrar pago'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {aviso && (
+        <div style={{ position: 'fixed', left: '50%', bottom: '24px', transform: 'translateX(-50%)', zIndex: 1001, padding: '12px 18px', borderRadius: '12px',
+          fontSize: '14px', fontWeight: 600, boxShadow: '0 6px 20px rgba(0,0,0,0.15)', background: '#dcfce7', color: '#166534' }}>
+          {aviso}
         </div>
       )}
     </SeccionInicio>
