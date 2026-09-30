@@ -4,13 +4,13 @@ import ClasesPorSede from './ClasesPorSede'
 import SeccionInicio from './SeccionInicio'
 import ClientesNuevos from './ClientesNuevos'
 import PlanesSinPago from './PlanesSinPago'
+import PlanesSinRenovar from './PlanesSinRenovar'
 
 const DIAS_L   = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
 const MESES_L  = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
 // Secciones que se construirán más adelante
-const PROXIMAMENTE_A = ['Planes completados sin renovar']
-const PROXIMAMENTE_B = ['Clientes inactivos', 'Talleres']
+const PROXIMAMENTE = ['Clientes inactivos', 'Talleres']
 
 export default function Inicio({ onNavegar }: {
   onNavegar: (seccion: string) => void
@@ -102,7 +102,7 @@ export default function Inicio({ onNavegar }: {
       <ClasesPorSede />
 
       {/* Demás secciones */}
-      <div style={{ display: 'grid', gridTemplateColumns: esMovil ? '1fr' : 'repeat(3, minmax(0, 1fr))', gap: esMovil ? '10px' : '16px', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: esMovil ? '1fr' : 'repeat(3, minmax(0, 1fr))', gap: esMovil ? '10px' : '16px', alignItems: 'start', gridAutoFlow: 'row dense' }}>
 
             {/* Inasistencias pendientes (sin cambios) */}
             {tarjetaLista(
@@ -146,11 +146,11 @@ export default function Inicio({ onNavegar }: {
 
             <ClientesNuevos esMovil={esMovil} onNavegar={onNavegar} />
 
-            {PROXIMAMENTE_A.map(proximamente)}
-
             <PlanesSinPago esMovil={esMovil} />
 
-            {PROXIMAMENTE_B.map(proximamente)}
+            <PlanesSinRenovar esMovil={esMovil} />
+
+            {PROXIMAMENTE.map(proximamente)}
       </div>
     </div>
   )
