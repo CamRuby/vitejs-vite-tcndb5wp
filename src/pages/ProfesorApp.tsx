@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import { pagaHonorario } from '../utils/honorarios'
 import { calcularNumeracion } from '../utils/numeracionClases'
 import pdfMake from 'pdfmake/build/pdfmake'
 import pdfFonts from 'pdfmake/build/vfs_fonts'
@@ -676,14 +677,14 @@ async function cambiarContrasena() {
     const fechaEmision = `${fechaHoy.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}`
 
     const T = '#1a1a1a'
-    const clasesDadas = clases.filter(c => (c.estado === 'dada' && !c.es_cortesia) || (c.estado === 'cancelada' && !c.cancelado_por_academia))
+    const clasesDadas = clases.filter(c => pagaHonorario(c))
     const totalHonClases = clasesDadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
     const totalHon = totalHonClases + apoyoConcierto
     const totalEnLetras = numerosALetras(totalHon)
 
     // Resumen de clases por duración
     const porDuracion: Record<number, number> = {}
-    clasesDadas.filter(c => c.estado === 'dada' && !c.es_cortesia && !c.esTaller).forEach(c => {
+    clasesDadas.filter(c => c.estado === 'dada' && !c.esTaller).forEach(c => {
       const d = Number(c.duracion_min) || 60
       porDuracion[d] = (porDuracion[d] || 0) + 1
     })
@@ -848,7 +849,7 @@ clasesDadas.forEach(c => {
     const mesLabelCap = mesLabel.charAt(0).toUpperCase() + mesLabel.slice(1)
     const T = '#1a8a8a'
     const TL = '#e8f5f5'
-    const clasesDadas = clases.filter(c => (c.estado === 'dada' && !c.es_cortesia) || (c.estado === 'cancelada' && !c.cancelado_por_academia))
+    const clasesDadas = clases.filter(c => pagaHonorario(c))
     const totalHonClases2 = clasesDadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
     const totalHon = totalHonClases2 + apoyoConcierto
     const filasPdf: any[] = []
@@ -995,7 +996,7 @@ clasesDadas.forEach(c => {
       </div>
     )
   
-  const dadas           = clases.filter(c => c.estado === 'dada' || (c.estado === 'cancelada' && !c.cancelado_por_academia))
+  const dadas           = clases.filter(c => pagaHonorario(c))
   const pendientesCobro = clases.filter(c => c.estado === 'cancelada' && !c.cancelado_por_academia).length
   const totalHon        = dadas.reduce((s, c) => { const h = getHonorario(c); return h === 'pendiente' ? s : s + h }, 0)
   const hayAtrasadas    = clases.some(c => c.esAtrasada)
