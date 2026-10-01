@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import { pagaHonorario } from '../utils/honorarios'
 import { calcularNumeracion } from '../utils/numeracionClases'
 import pdfMake from 'pdfmake/build/pdfmake'
 import pdfFonts from 'pdfmake/build/vfs_fonts'
@@ -1326,7 +1327,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
         const g = ensure(c.profesor_id)
         g.detalle.push(c)
 
-        const cuenta = (c.estado === 'dada' && !c.es_cortesia) || (c.estado === 'cancelada' && !c.cancelado_por_academia)
+        const cuenta = pagaHonorario(c)
         if (!cuenta) return
 
         const tarifasProf = tarifasL.filter((t: any) => t.profesor_id === c.profesor_id)
@@ -1411,14 +1412,14 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       const ultimoDiaLabel = `${ultimoDiaNum} de ${nombreMes}`
       const fechaEmision = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
 
-      const clasesDadas = g.detalle.filter((c: any) => (c.estado === 'dada' && !c.es_cortesia) || (c.estado === 'cancelada' && !c.cancelado_por_academia))
+      const clasesDadas = g.detalle.filter((c: any) => pagaHonorario(c))
       const totalHonClases = clasesDadas.reduce((s: number, c: any) => { const h = getHonorarioPDF(c, tarifasProf); return h === 'pendiente' ? s : s + h }, 0)
       const apoyoVal = g.apoyoConcierto || 0
       const totalHon = totalHonClases + apoyoVal
       const totalEnLetras = numerosALetrasH(totalHon)
 
       const porDuracion: Record<number, number> = {}
-      clasesDadas.filter((c: any) => c.estado === 'dada' && !c.es_cortesia && !c.esTaller).forEach((c: any) => {
+      clasesDadas.filter((c: any) => c.estado === 'dada' && !c.esTaller).forEach((c: any) => {
         const d = Number(c.duracion_min) || 60
         porDuracion[d] = (porDuracion[d] || 0) + 1
       })
