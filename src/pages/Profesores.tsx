@@ -438,7 +438,7 @@ export default function Profesores() {
   const clasesFiltradas = filtroVista === 'programadas'
     ? clases.filter(c => c.estado === 'programada' || c.estado === 'confirmada')
     : clases.filter(c => c.estado === 'dada' || c.estado === 'cancelada')
-const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
+const dadas = clases.filter(c => c.estado === 'dada')
  const canceladasTarde = clases.filter(c => c.estado === 'cancelada' && !c.cancelado_por_academia && (c.cancelado_tarde || (c.honorario_valor !== null && c.honorario_valor !== undefined)))
   const totalHon = [...dadas, ...canceladasTarde].reduce((s, c) => s + getHon(c), 0) + apoyoConciertoTotal
   const cnt = {
@@ -923,6 +923,7 @@ const dadas = clases.filter(c => c.estado === 'dada' && !c.es_cortesia)
                                     </span>
                                   )}
                                   {(c.estado === 'cancelada' && !c.cancelado_por_academia) && <span style={{ marginLeft: '6px', fontSize: '11px', background: '#fff7ed', color: '#c2410c', padding: '1px 6px', borderRadius: '10px' }}>Inasistencia</span>}
+                                  {c.estado === 'dada' && c.es_cortesia && <span style={{ marginLeft: '6px', fontSize: '11px', background: '#e0f2fe', color: '#0369a1', padding: '1px 6px', borderRadius: '10px' }}>Cortesía</span>}
                                 </>
                             }
                           </td>
