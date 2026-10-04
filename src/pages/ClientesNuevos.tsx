@@ -53,7 +53,7 @@ export default function ClientesNuevos({ esMovil, onNavegar }: { esMovil: boolea
     if (ids.length) {
       const { data: ct } = await supabase
         .from('contratos')
-        .select('id, cliente_id, fecha_inicio, total_clases, duracion_min, valor_plan, estado, sedes(nombre), profesores(nombre), instrumentos(nombre)')
+        .select('id, cliente_id, fecha_inicio, total_clases, duracion_min, valor_plan, cobro_en_otro_plan, estado, sedes(nombre), profesores(nombre), instrumentos(nombre)')
         .in('cliente_id', ids)
         .neq('estado', 'archivado')
         .order('fecha_inicio', { ascending: true })
