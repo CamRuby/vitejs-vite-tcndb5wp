@@ -53,3 +53,32 @@ export async function registrarPago(datos: {
   if (error) return { ok: false, codigo: 'error', mensaje: 'No se pudo registrar: ' + error.message }
   return data as ResultadoPago
 }
+
+/**
+ * Corrige un pago existente (monto, cuenta, fecha, notas).
+ * Función editar_pago: guarda en Auditoría el antes y el después.
+ */
+export async function editarPago(datos: {
+  pagoId: string
+  monto: number
+  metodo: string
+  fecha: string
+  notas?: string
+}): Promise<ResultadoPago> {
+  const { data, error } = await supabase.rpc('editar_pago', {
+    p_pago_id: datos.pagoId,
+    p_monto: datos.monto,
+    p_metodo: datos.metodo,
+    p_fecha: datos.fecha,
+    p_notas: datos.notas || null,
+  })
+  if (error) return { ok: false, codigo: 'error', mensaje: 'No se pudo corregir: ' + error.message }
+  return data as ResultadoPago
+}
+
+/** Pone el valor a un plan que no lo tiene (no cambia valores existentes). Auditado. */
+export async function asignarValorPlan(contratoId: string, valor: number): Promise<ResultadoPago> {
+  const { data, error } = await supabase.rpc('asignar_valor_plan', { p_contrato_id: contratoId, p_valor: valor })
+  if (error) return { ok: false, codigo: 'error', mensaje: 'No se pudo guardar: ' + error.message }
+  return data as ResultadoPago
+}
