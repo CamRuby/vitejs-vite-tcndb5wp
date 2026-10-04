@@ -5,18 +5,19 @@
 // Arriba: total adeudado de la sede.
 // Botón "Registrar pago" por plan (función única registrar_pago, auditada).
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { supabase } from '../supabase'
 import SeccionInicio from './SeccionInicio'
 import { CORTE_PAGOS, tieneSaldo, pagadoPorPlan, formatPesos } from '../utils/saldoPlan'
 import { registrarPago, METODOS_PAGO, hoyLocal } from '../utils/accionesPago'
+import HistorialPagos from './HistorialPagos'
 
 const COLORES = { header: '#991b1b', headerBg: '#fef2f2', border: '#fecaca' }
 const ORDEN_SEDES = ['rosales', 'chico', 'tunja']
 const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
 type Plan = {
-  id: string; sedeId: string; cliente: string; instrumento: string; profesor: string
+  id: string; clienteId: string; sedeId: string; cliente: string; instrumento: string; profesor: string
   inicio: string; total: number; tomadas: number; duracion: number | null
   valor: number; pagado: number; estado: string
 }
@@ -41,6 +42,7 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
   const [guardando, setGuardando]   = useState(false)
   const [errorPago, setErrorPago]   = useState('')
   const [aviso, setAviso]           = useState('')
+  const [abierto, setAbierto]       = useState<string | null>(null)   // plan con historial desplegado
 
   useEffect(() => { cargar() }, [])
 
@@ -51,7 +53,7 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
     const todos: any[] = []
     for (let desde = 0; ; desde += 1000) {
       const { data } = await supabase.from('contratos')
-        .select('id, sede_id, fecha_inicio, total_clases, clases_tomadas, duracion_min, valor_plan, estado, clientes(nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre)')
+        .select('id, cliente_id, sede_id, fecha_inicio, total_clases, clases_tomadas, duracion_min, valor_plan, estado, clientes(nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre)')
         .gte('fecha_inicio', CORTE_PAGOS)
         .order('fecha_inicio', { ascending: true })
         .range(desde, desde + 999)
@@ -65,6 +67,7 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
         const cl = p.clientes
         return {
           id: p.id,
+          clienteId: p.cliente_id,
           sedeId: p.sede_id || 'sin-sede',
           cliente: cl?.nombre || `${cl?.nombres || ''} ${cl?.apellidos || ''}`.trim() || '—',
           instrumento: p.instrumentos?.nombre || '—',
@@ -133,7 +136,7 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
   }
 
   const botonPago = (p: Plan) => (
-    <button onClick={() => abrirPago(p)}
+    <button onClick={e => { e.stopPropagation(); abrirPago(p) }}
       style={{ padding: '5px 10px', borderRadius: '8px', border: `1px solid ${COLORES.header}`, background: 'white', color: COLORES.header, fontSize: '12px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
       Registrar pago
     </button>
@@ -174,7 +177,8 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
           ) : esMovil ? (
             <div>
               {deSede.map((p, i) => (
-                <div key={p.id} style={{ padding: '10px 16px', borderTop: '1px solid #f1f5f9', background: i % 2 === 0 ? 'white' : '#fafbfc', textAlign: 'left' }}>
+                <div key={p.id} onClick={() => setAbierto(a => a === p.id ? null : p.id)}
+                  style={{ padding: '10px 16px', borderTop: '1px solid #f1f5f9', background: abierto === p.id ? '#fef2f2' : i % 2 === 0 ? 'white' : '#fafbfc', textAlign: 'left', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline' }}>
                     <span style={{ fontSize: '13px', fontWeight: 700, color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {p.cliente}{etiquetaEstado(p.estado)}
@@ -186,7 +190,15 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
                     <span style={{ color: '#6b7280' }}>Clases {num(p.tomadas)}/{num(p.total)} · {p.duracion || '—'} min</span>
                     <span style={{ color: '#1f2937', whiteSpace: 'nowrap' }}>{formatPesos(p.pagado)} de {valorTxt(p)}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>{botonPago(p)}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>{abierto === p.id ? '▴ Ocultar historial' : '▾ Ver historial'}</span>
+                    {botonPago(p)}
+                  </div>
+                  {abierto === p.id && (
+                    <div style={{ margin: '8px -16px -10px' }}>
+                      <HistorialPagos clienteId={p.clienteId} planActualId={p.id} esMovil={esMovil} onCambio={() => cargar(true)} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -202,7 +214,9 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
                 </thead>
                 <tbody>
                   {deSede.map((p, i) => (
-                    <tr key={p.id} style={{ borderTop: '1px solid #f1f5f9', background: i % 2 === 0 ? 'white' : '#fafbfc' }}>
+                    <Fragment key={p.id}>
+                    <tr onClick={() => setAbierto(a => a === p.id ? null : p.id)} title="Ver historial de planes y pagos"
+                      style={{ borderTop: '1px solid #f1f5f9', background: abierto === p.id ? '#fef2f2' : i % 2 === 0 ? 'white' : '#fafbfc', cursor: 'pointer' }}>
                       <td style={{ padding: '8px 12px', fontWeight: 600, color: '#1a1a1a' }}>{p.cliente}{etiquetaEstado(p.estado)}</td>
                       <td style={{ padding: '8px 12px', color: '#4b5563', whiteSpace: 'nowrap' }}>{fechaCorta(p.inicio)}</td>
                       <td style={{ padding: '8px 12px', color: '#4b5563' }}>{p.instrumento}</td>
@@ -213,6 +227,12 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
                       <td style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap', color: p.pagado === 0 ? '#dc2626' : '#1f2937', fontWeight: 600 }}>{formatPesos(p.pagado)}</td>
                       <td style={{ padding: '6px 12px', textAlign: 'right' }}>{botonPago(p)}</td>
                     </tr>
+                    {abierto === p.id && (
+                      <tr><td colSpan={9} style={{ padding: 0 }}>
+                        <HistorialPagos clienteId={p.clienteId} planActualId={p.id} esMovil={esMovil} onCambio={() => cargar(true)} />
+                      </td></tr>
+                    )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
