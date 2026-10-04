@@ -53,7 +53,7 @@ export default function PlanesSinPago({ esMovil }: { esMovil: boolean }) {
     const todos: any[] = []
     for (let desde = 0; ; desde += 1000) {
       const { data } = await supabase.from('contratos')
-        .select('id, cliente_id, sede_id, fecha_inicio, total_clases, clases_tomadas, duracion_min, valor_plan, estado, clientes(nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre)')
+        .select('id, cliente_id, sede_id, fecha_inicio, total_clases, clases_tomadas, duracion_min, valor_plan, cobro_en_otro_plan, estado, clientes(nombre, nombres, apellidos), instrumentos(nombre), profesores(nombre)')
         .gte('fecha_inicio', CORTE_PAGOS)
         .order('fecha_inicio', { ascending: true })
         .range(desde, desde + 999)
