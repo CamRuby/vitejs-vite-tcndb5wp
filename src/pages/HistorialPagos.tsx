@@ -17,6 +17,7 @@ type Pago = { id: string; monto: number; metodo: string | null; fecha: string | 
 type PlanH = {
   id: string; inicio: string | null; instrumento: string; duracion: number | null
   total: number; tomadas: number; valor: number; estado: string; pagos: Pago[]; pagado: number
+  otroPlan: boolean; nota: string | null   // cobro incluido en otro plan
 }
 type Modal =
   | { tipo: 'nuevo'; plan: PlanH }
@@ -48,7 +49,7 @@ export default function HistorialPagos({ clienteId, planActualId, esMovil, onCam
   async function cargar() {
     setCargando(true)
     const { data: ct } = await supabase.from('contratos')
-      .select('id, fecha_inicio, duracion_min, total_clases, clases_tomadas, valor_plan, estado, instrumentos(nombre)')
+      .select('id, fecha_inicio, duracion_min, total_clases, clases_tomadas, valor_plan, estado, cobro_en_otro_plan, cobro_nota, instrumentos(nombre)')
       .eq('cliente_id', clienteId)
       .order('fecha_inicio', { ascending: true })
     const ids = (ct || []).map((p: any) => p.id)
@@ -69,6 +70,7 @@ export default function HistorialPagos({ clienteId, planActualId, esMovil, onCam
         duracion: p.duracion_min || null, total: Number(p.total_clases || 0), tomadas: Number(p.clases_tomadas || 0),
         valor: Number(p.valor_plan || 0), estado: p.estado, pagos,
         pagado: pagos.reduce((s, x) => s + x.monto, 0),
+        otroPlan: !!p.cobro_en_otro_plan, nota: p.cobro_nota || null,
       }
     }))
     setCargando(false)
@@ -133,9 +135,12 @@ export default function HistorialPagos({ clienteId, planActualId, esMovil, onCam
       {e === 'completado' ? 'Completado' : e === 'archivado' ? 'Archivado' : e}
     </span>
   )
-  const valorCelda = (p: PlanH) => p.valor > 0 ? formatPesos(p.valor)
+  const valorCelda = (p: PlanH) => p.otroPlan ? <span style={{ color: '#64748b' }}>—</span> : p.valor > 0 ? formatPesos(p.valor)
     : <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}><span style={{ color: '#dc2626', fontWeight: 700 }}>Sin valor</span>{btn('Poner valor', () => abrir({ tipo: 'valor', plan: p }))}</span>
-  const debe = (p: PlanH) => p.valor === 0 || p.pagado < p.valor
+  const debe = (p: PlanH) => !p.otroPlan && (p.valor === 0 || p.pagado < p.valor)
+  const otroPlanTxt = (p: PlanH) => (
+    <span style={{ color: '#0369a1', fontStyle: 'italic' }} title={p.nota || undefined}>Pagado en otro plan{p.nota ? ` · ${p.nota}` : ''}</span>
+  )
 
   let contenido
   if (cargando) {
@@ -152,7 +157,9 @@ export default function HistorialPagos({ clienteId, planActualId, esMovil, onCam
               <span>{p.duracion || '—'} min · Clases {num(p.tomadas)}/{num(p.total)}</span>
               <span>Valor {valorCelda(p)}</span>
             </div>
-            {p.pagos.length === 0 ? (
+            {p.otroPlan && p.pagos.length === 0 ? (
+              <div style={{ marginTop: '6px', fontSize: '12px' }}>{otroPlanTxt(p)}</div>
+            ) : p.pagos.length === 0 ? (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
                 <span style={{ fontSize: '12px', color: '#dc2626', fontStyle: 'italic' }}>Sin pago registrado</span>
                 {btn('+ Pago', () => abrir({ tipo: 'nuevo', plan: p }), true)}
@@ -202,6 +209,11 @@ export default function HistorialPagos({ clienteId, planActualId, esMovil, onCam
                       {lapiz(() => abrir({ tipo: 'editar', plan: p, pago: pg }))}
                       {k === filas.length - 1 && debe(p) && btn('+ Pago', () => abrir({ tipo: 'nuevo', plan: p }), true)}
                     </td>
+                  </>
+                ) : p.otroPlan ? (
+                  <>
+                    <td style={{ ...td, textAlign: 'right', color: '#64748b' }}>—</td>
+                    <td style={{ ...td, fontSize: '12px' }} colSpan={3}>{otroPlanTxt(p)}</td>
                   </>
                 ) : (
                   <>
