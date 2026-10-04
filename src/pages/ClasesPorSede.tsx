@@ -151,7 +151,7 @@ export default function ClasesPorSede() {
     setCargando(true)
     const [{ data: cl }, { data: ses }] = await Promise.all([
       supabase.from('clases')
-        .select('id, hora, estado, profesores(nombre), salones(sede_id), contratos(id, fecha_inicio, valor_plan, clientes(nombre, nombres, apellidos))')
+        .select('id, hora, estado, profesores(nombre), salones(sede_id), contratos(id, fecha_inicio, valor_plan, cobro_en_otro_plan, clientes(nombre, nombres, apellidos))')
         .eq('fecha', f).not('hora', 'is', null),
       supabase.from('taller_sesiones').select('taller_id, estado, hora, salon_id').eq('fecha', f),
     ])
