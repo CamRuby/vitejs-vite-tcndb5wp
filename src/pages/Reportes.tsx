@@ -1104,7 +1104,10 @@ interface ProfesorHonorario {
   porSede: Record<string, SedeResumen>
   totalClases: number; totalMinutos: number; totalHonorario: number
   detalle: any[]
-  aprobado: boolean; pagado: boolean; revisado: boolean; apoyoConcierto: number; apoyoPorSede: Record<string, number>
+  // Casillas del mes: Revisado + cuenta de la que salió el pago.
+  // Ideal Chicó cubre la sede Chicó; Ideal Rosales o Ruby personal cubren Rosales, Tunja y lo demás.
+  revisadoOk: boolean; pagChico: boolean; pagRosales: boolean; pagRuby: boolean
+  apoyoConcierto: number; apoyoPorSede: Record<string, number>
   apoyoRegistros: { concepto: string; descripcion: string | null; sede_id: string | null; valor: number }[]
 }
 
@@ -1219,7 +1222,7 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
           .in('estado', ['dada', 'cancelada'])
           .or('estado.eq.dada,cancelado_por_academia.eq.false'),
         supabase.from('talleres').select('id, nombre, hora, duracion_min, profesor_id, salones(sede_id, sedes(nombre))'),
-        supabase.from('honorarios_estado').select('profesor_id, aprobado, pagado, revisado').eq('mes', mes),
+        supabase.from('honorarios_estado').select('profesor_id, revisado_ok, pagado_chico, pagado_rosales, pagado_ruby').eq('mes', mes),
         supabase.from('profesor_pagos_adicionales').select('profesor_id, sede_id, concepto, descripcion, valor').eq('mes', mes),
       ])
       if (errP || errT || errC || errTa || errE || errAp) throw (errP || errT || errC || errTa || errE || errAp)
@@ -1283,8 +1286,10 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
       const clasesConNumero = (clases || []).map((c: any) => ({ ...c, numero_calculado: numeracionMap.get(c.id) ?? null }))
       const todasClases = [...clasesConNumero, ...tallerRows]
       const tarifasL = tarifasData || []
-      const estadoMap: Record<string, { aprobado: boolean; pagado: boolean; revisado: boolean }> = {}
-      ;(estados || []).forEach((e: any) => { estadoMap[e.profesor_id] = { aprobado: !!e.aprobado, pagado: !!e.pagado, revisado: !!e.revisado } })
+      const estadoMap: Record<string, { revisadoOk: boolean; pagChico: boolean; pagRosales: boolean; pagRuby: boolean }> = {}
+      ;(estados || []).forEach((e: any) => {
+        estadoMap[e.profesor_id] = { revisadoOk: !!e.revisado_ok, pagChico: !!e.pagado_chico, pagRosales: !!e.pagado_rosales, pagRuby: !!e.pagado_ruby }
+      })
 
       // Pagos adicionales: puede haber varios registros por profesor en el mes.
       const apoyoTotalPorProfesor: Record<string, number> = {}
@@ -1310,8 +1315,8 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
             cc: p?.cc || null, ciudad: p?.ciudad || null, ciudad_cc: p?.ciudad_cc || null,
             banco: p?.banco || null, tipo_cuenta: p?.tipo_cuenta || null, numero_cuenta: p?.numero_cuenta || null,
             porSede: {}, totalClases: 0, totalMinutos: 0, totalHonorario: 0, detalle: [],
-            aprobado: estadoMap[profId]?.aprobado || false, pagado: estadoMap[profId]?.pagado || false,
-            revisado: estadoMap[profId]?.revisado || false,
+            revisadoOk: estadoMap[profId]?.revisadoOk || false, pagChico: estadoMap[profId]?.pagChico || false,
+            pagRosales: estadoMap[profId]?.pagRosales || false, pagRuby: estadoMap[profId]?.pagRuby || false,
             apoyoConcierto: apoyoTotalPorProfesor[profId] || 0,
             apoyoPorSede: apoyoPorProfesorYSede[profId] || {},
             apoyoRegistros: apoyoRegistrosPorProfesor[profId] || [],
@@ -1380,25 +1385,27 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
     finally { setCargando(false) }
   }
 
-  async function actualizarEstado(profesorId: string, campo: 'aprobado' | 'pagado' | 'revisado', valor: boolean) {
+  type CampoEstado = 'revisadoOk' | 'pagChico' | 'pagRosales' | 'pagRuby'
+  async function actualizarEstado(profesorId: string, campo: CampoEstado, valor: boolean) {
     const g = profesoresData.find(p => p.profesor_id === profesorId)
     if (!g) return
-    const aprobadoAnterior = g.aprobado
-    const pagadoAnterior = g.pagado
-    const revisadoAnterior = g.revisado
-    const aprobado = campo === 'aprobado' ? valor : g.aprobado
-    const pagado = campo === 'pagado' ? valor : g.pagado
-    const revisado = campo === 'revisado' ? valor : g.revisado
-    setProfesoresData(prev => prev.map(p => p.profesor_id === profesorId ? { ...p, aprobado, pagado, revisado } : p))
+    const antes = { revisadoOk: g.revisadoOk, pagChico: g.pagChico, pagRosales: g.pagRosales, pagRuby: g.pagRuby }
+    const nuevo = { ...antes, [campo]: valor }
+    // Ideal Rosales y Ruby personal cubren la misma parte: solo una de las dos
+    if (campo === 'pagRosales' && valor) nuevo.pagRuby = false
+    if (campo === 'pagRuby' && valor) nuevo.pagRosales = false
+    setProfesoresData(prev => prev.map(p => p.profesor_id === profesorId ? { ...p, ...nuevo } : p))
     const { error: errGuardar } = await supabase
       .from('honorarios_estado')
-      .upsert({ profesor_id: profesorId, mes, aprobado, pagado, revisado }, { onConflict: 'profesor_id,mes' })
+      .upsert({ profesor_id: profesorId, mes, revisado_ok: nuevo.revisadoOk, pagado_chico: nuevo.pagChico,
+                pagado_rosales: nuevo.pagRosales, pagado_ruby: nuevo.pagRuby }, { onConflict: 'profesor_id,mes' })
     if (errGuardar) {
       console.error('Error al guardar estado:', errGuardar)
-      setProfesoresData(prev => prev.map(p => p.profesor_id === profesorId ? { ...p, aprobado: aprobadoAnterior, pagado: pagadoAnterior, revisado: revisadoAnterior } : p))
+      setProfesoresData(prev => prev.map(p => p.profesor_id === profesorId ? { ...p, ...antes } : p))
       setError(`No se pudo guardar el estado de ${g.nombre}. Detalle: ${errGuardar.message}`)
     }
   }
+
 
   function generarPdfProfesor(g: ProfesorHonorario) {
     setGenerandoPdf(g.profesor_id)
@@ -1534,7 +1541,18 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
   // Fijos: siempre se calculan sobre TODOS los profesores, sin importar el filtro de sede.
   const totalClases = profesoresData.reduce((s, g) => s + g.totalClases, 0)
   const totalHonorario = profesoresData.reduce((s, g) => s + g.totalHonorario, 0)
-  const totalPagado = profesoresData.reduce((s, g) => s + (g.pagado ? g.totalHonorario : 0), 0)
+  // ── Pagos por cuenta ──
+  // Chicó sale de Ideal Chicó. Rosales, Tunja (y lo que no tenga sede) sale de Ideal Rosales o de Ruby personal.
+  const normSede = (t: string) => (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const idsChico = new Set(sedes.filter(s => normSede(s.nombre).includes('chico')).map(s => s.id))
+  const montoEnSede = (g: ProfesorHonorario, sedeId: string) =>
+    (g.porSede[sedeId]?.honorario || 0) + ((g.apoyoPorSede as Record<string, number>)[sedeId] || 0)
+  const montoChico = (g: ProfesorHonorario) => [...idsChico].reduce((t, id) => t + montoEnSede(g, id), 0)
+  const montoResto = (g: ProfesorHonorario) => g.totalHonorario - montoChico(g)
+  const totalIdealChico   = profesoresData.reduce((s, g) => s + (g.pagChico ? montoChico(g) : 0), 0)
+  const totalIdealRosales = profesoresData.reduce((s, g) => s + (g.pagRosales ? montoResto(g) : 0), 0)
+  const totalRuby         = profesoresData.reduce((s, g) => s + (g.pagRuby ? montoResto(g) : 0), 0)
+  const totalPagado = totalIdealChico + totalIdealRosales + totalRuby
   const totalSaldo = totalHonorario - totalPagado
 
   const thS: React.CSSProperties = { padding: '10px 14px', textAlign: 'left', fontSize: '12px', color: TEAL_DARK, fontWeight: 700, whiteSpace: 'nowrap' }
@@ -1590,8 +1608,16 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
 
   function statsSede(sedeId: string) {
     const base = totalesPorSede[sedeId] || { honorario: 0, clases: 0, estudiantes: 0 }
-    const pagado = profesoresData.reduce((s, g) => s + (g.pagado ? (g.porSede[sedeId]?.honorario || 0) : 0), 0)
-    return { ...base, pagado, saldo: base.honorario - pagado }
+    const esChico = idsChico.has(sedeId)
+    let idealChico = 0, idealRosales = 0, ruby = 0
+    profesoresData.forEach(g => {
+      const m = montoEnSede(g, sedeId)
+      if (esChico) { if (g.pagChico) idealChico += m }
+      else if (g.pagRosales) idealRosales += m
+      else if (g.pagRuby) ruby += m
+    })
+    const pagado = idealChico + idealRosales + ruby
+    return { ...base, idealChico, idealRosales, ruby, pagado, saldo: base.honorario - pagado }
   }
 
   return (
@@ -1677,7 +1703,13 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                     <span>Estudiantes activos</span><span style={{ fontWeight: 700, color: '#0ea5e9' }}>{t.estudiantes}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
-                    <span>Pagado</span><span style={{ fontWeight: 700, color: '#16a34a' }}>${t.pagado.toLocaleString('es-CO')}</span>
+                    <span>Pagado Ideal Chicó</span><span style={{ fontWeight: 700, color: '#16a34a' }}>${t.idealChico.toLocaleString('es-CO')}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
+                    <span>Pagado Ideal Rosales</span><span style={{ fontWeight: 700, color: '#16a34a' }}>${t.idealRosales.toLocaleString('es-CO')}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
+                    <span>Pagado Ruby personal</span><span style={{ fontWeight: 700, color: '#16a34a' }}>${t.ruby.toLocaleString('es-CO')}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
                     <span>Saldo</span><span style={{ fontWeight: 700, color: t.saldo > 0 ? '#dc2626' : '#16a34a' }}>${t.saldo.toLocaleString('es-CO')}</span>
@@ -1697,7 +1729,13 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                 <span>Estudiantes activos</span><span style={{ fontWeight: 700, color: '#0ea5e9' }}>{totalEstudiantesActivos}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
-                <span>Pagado</span><span style={{ fontWeight: 700, color: '#16a34a' }}>${totalPagado.toLocaleString('es-CO')}</span>
+                <span>Pagado Ideal Chicó</span><span style={{ fontWeight: 700, color: '#16a34a' }}>${totalIdealChico.toLocaleString('es-CO')}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
+                <span>Pagado Ideal Rosales</span><span style={{ fontWeight: 700, color: '#16a34a' }}>${totalIdealRosales.toLocaleString('es-CO')}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569', marginBottom: '4px' }}>
+                <span>Pagado Ruby personal</span><span style={{ fontWeight: 700, color: '#16a34a' }}>${totalRuby.toLocaleString('es-CO')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#475569' }}>
                 <span>Saldo</span><span style={{ fontWeight: 700, color: totalSaldo > 0 ? '#dc2626' : '#16a34a' }}>${totalSaldo.toLocaleString('es-CO')}</span>
@@ -1740,9 +1778,10 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                 <th style={{ ...thS, textAlign: 'center' }}>Tiempo</th>
                 {sedes.map(s => <th key={s.id} style={{ ...thS, textAlign: 'right' }}>{s.nombre}</th>)}
                 <th style={{ ...thS, textAlign: 'right' }}>Total</th>
-                <th style={{ ...thS, textAlign: 'center' }}>Aprobado</th>
                 <th style={{ ...thS, textAlign: 'center' }}>Revisado</th>
-                <th style={{ ...thS, textAlign: 'center' }}>Pagado</th>
+                <th style={{ ...thS, textAlign: 'center' }}>Ideal Chicó</th>
+                <th style={{ ...thS, textAlign: 'center' }}>Ideal Rosales</th>
+                <th style={{ ...thS, textAlign: 'center' }}>Ruby personal</th>
 
                 <th style={{ ...thS, textAlign: 'center' }}>Cuenta de cobro</th>
               </tr>
@@ -1779,14 +1818,16 @@ function ReporteHonorariosProfesores({ onVolver }: { onVolver: () => void }) {
                     {g.apoyoConcierto > 0 && <div style={{ color: '#7c3aed', fontSize: '10px', marginTop: '2px' }}>Incl. concierto ${g.apoyoConcierto.toLocaleString('es-CO')}</div>}
                   </td>
                   <td style={{ ...tdS, textAlign: 'center' }}>
-                    <input type="checkbox" checked={g.aprobado} onChange={e => actualizarEstado(g.profesor_id, 'aprobado', e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: TEAL }} />
+                    <input type="checkbox" checked={g.revisadoOk} onChange={e => actualizarEstado(g.profesor_id, 'revisadoOk', e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#7c3aed' }} />
                   </td>
-                  <td style={{ ...tdS, textAlign: 'center' }}>
-                    <input type="checkbox" checked={g.revisado} onChange={e => actualizarEstado(g.profesor_id, 'revisado', e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#7c3aed' }} />
-                  </td>
-                  <td style={{ ...tdS, textAlign: 'center' }}>
-                    <input type="checkbox" checked={g.pagado} onChange={e => actualizarEstado(g.profesor_id, 'pagado', e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#16a34a' }} />
-                  </td>
+                  {([['pagChico', montoChico(g), TEAL], ['pagRosales', montoResto(g), '#16a34a'], ['pagRuby', montoResto(g), '#d97706']] as [CampoEstado, number, string][]).map(([campo, monto, color]) => (
+                    <td key={campo} style={{ ...tdS, textAlign: 'center' }}>
+                      {monto > 0 ? (<>
+                        <input type="checkbox" checked={g[campo]} onChange={e => actualizarEstado(g.profesor_id, campo, e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: color }} />
+                        <div style={{ fontSize: '10px', color: g[campo] ? color : '#94a3b8', marginTop: '2px', whiteSpace: 'nowrap' }}>${monto.toLocaleString('es-CO')}</div>
+                      </>) : <span style={{ color: '#d1d5db' }}>—</span>}
+                    </td>
+                  ))}
                   <td style={{ ...tdS, textAlign: 'center' }}>
                     <button onClick={() => generarPdfProfesor(g)} disabled={generandoPdf === g.profesor_id}
                       style={{ padding: '6px 12px', borderRadius: '8px', border: `1px solid ${TEAL_MID}`, background: 'white', color: TEAL_DARK, cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}>
