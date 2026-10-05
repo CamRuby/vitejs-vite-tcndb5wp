@@ -1,13 +1,14 @@
 // src/pages/HistorialPagos.tsx
-// Inicio → Planes sin pago → al tocar un plan: historial de TODOS los planes del cliente
-// (cualquier instrumento, todas las fechas), del más antiguo al más nuevo.
+// Inicio → Planes sin pago → al tocar un plan: historial de los planes del cliente
+// (cualquier instrumento) desde el 1 jun 2026, del más antiguo al más nuevo.
+// Los planes anteriores no se muestran: esos datos se migraron por clases, no por planes.
 // Por plan: fecha, instrumento, duración, clases, valor, y sus pagos (una línea por abono).
 // Acciones: "+ Pago" (registrar_pago), ✏️ corregir pago (editar_pago), "Poner valor" (asignar_valor_plan).
 // No se borran pagos desde aquí.
 
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import { formatPesos } from '../utils/saldoPlan'
+import { formatPesos, CORTE_PAGOS } from '../utils/saldoPlan'
 import { registrarPago, editarPago, asignarValorPlan, METODOS_PAGO, hoyLocal } from '../utils/accionesPago'
 
 const MESES_CORTO = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -51,6 +52,7 @@ export default function HistorialPagos({ clienteId, planActualId, esMovil, onCam
     const { data: ct } = await supabase.from('contratos')
       .select('id, fecha_inicio, duracion_min, total_clases, clases_tomadas, valor_plan, estado, cobro_en_otro_plan, cobro_nota, instrumentos(nombre)')
       .eq('cliente_id', clienteId)
+      .gte('fecha_inicio', CORTE_PAGOS)
       .order('fecha_inicio', { ascending: true })
     const ids = (ct || []).map((p: any) => p.id)
     const porPlan: Record<string, Pago[]> = {}
@@ -299,7 +301,7 @@ export default function HistorialPagos({ clienteId, planActualId, esMovil, onCam
   return (
     <div onClick={e => e.stopPropagation()} style={{ background: '#f8fafc', borderTop: '1px solid #fecaca', borderBottom: '1px solid #fecaca', cursor: 'default' }}>
       <p style={{ margin: 0, padding: '8px 12px 0', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', textAlign: 'left' }}>
-        Historial de planes y pagos del cliente
+        Historial de planes y pagos del cliente (desde jun 2026)
       </p>
       {contenido}
       {ventana}
