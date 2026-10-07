@@ -22,6 +22,8 @@ const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
 const DIAS_LARGO = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 const DURACIONES = ['30', '45', '60', '90', '120']
+// Talleres: además pueden durar 3 horas (ej. vacacionales)
+const DURACIONES_TALLER = [...DURACIONES, '180']
 const MODALIDADES_CLASE = ['presencial', 'virtual', 'domicilio'] as const
 
 const DIA_NUM: Record<string, number> = {
@@ -1834,7 +1836,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                   <div style={{ marginBottom: '14px' }}>
                     <label style={labelStyle}>Duración</label>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      {DURACIONES.map(d => (
+                      {DURACIONES_TALLER.map(d => (
                         <button key={d} onClick={() => setTallerDuracion(d)} style={{
                           flex: 1, padding: '9px', border: `2px solid ${tallerDuracion === d ? TALLER_COLOR : TEAL_MID}`,
                           borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
@@ -2178,7 +2180,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                     <div style={{ gridColumn: '1 / -1' }}>
                       <label style={labelStyle}>Duración</label>
                       <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                        {DURACIONES.map(d => (
+                        {DURACIONES_TALLER.map(d => (
                           <button key={d} onClick={() => setTeDuracion(d)} style={{
                             flex: 1, padding: '9px', border: `2px solid ${teDuracion === d ? TALLER_COLOR : TEAL_MID}`,
                             borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
