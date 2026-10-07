@@ -1184,20 +1184,7 @@ clasesDadas.forEach(c => {
                     const hay = Object.values(asistenciasTaller).some(v => v === true)
                     if (!hay) { alert('Selecciona al menos un asistente antes de marcar el taller como dado'); return }
                     await marcarSesionTaller('dada')
-                    const sid = sesionHoy?.id
-                    if (sid) {
-                      const numAsis = Object.values(asistenciasTaller).filter(v => v === true).length
-                      let hon = 0
-                      if (numAsis >= 3) {
-                        const tarT = tarifas.find((t: any) => t.modalidad === 'taller' && t.duracion_min === tallerModal?.duracion_min)
-                        hon = tarT ? Number(tarT.valor) : 0
-                      } else {
-                        const tarR = tarifas.find((t: any) => t.modalidad === 'presencial' && t.duracion_min === tallerModal?.duracion_min)
-                          || tarifas.find((t: any) => !t.taller_grupal && t.duracion_min === tallerModal?.duracion_min)
-                        hon = tarR ? Number(tarR.valor) : 0
-                      }
-                      if (hon > 0) await supabase.from('taller_sesiones').update({ honorario_valor: hon }).eq('id', sid)
-                    }
+                    // El honorario lo calcula la base de datos (regla única de talleres), según asistentes y duración.
                   }} disabled={guardandoSesion}
                     style={{ padding:'14px', background:'#7c3aed', color:'white', border:'none', borderRadius:'14px', fontSize:'15px', fontWeight:'800', cursor:'pointer', fontFamily:'inherit' }}>
                     ✓ Marcar dado
