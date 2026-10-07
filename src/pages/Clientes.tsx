@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { auditar } from '../auditoria'
 import { calcularNumeracion } from '../utils/numeracionClases'
+import { eliminarInscripcionTaller } from '../utils/accionesTaller'
 import pdfMake from 'pdfmake/build/pdfmake'
 import pdfFonts from 'pdfmake/build/vfs_fonts'
 pdfMake.vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs
@@ -932,11 +933,20 @@ await cargarDatosCliente(cliente)
       mes, fecha_inicio: fechaInicio, fecha_fin: fechaFin,
       num_sesiones: inscripcion.num_sesiones,
       valor_plan: inscripcion.valor_plan,
-      valor_pagado: inscripcion.valor_pagado, estado: 'activo'
+      // La renovación copia el VALOR del taller; lo pagado empieza en cero (lo calcula la base de datos desde los pagos)
+      valor_pagado: 0, total_pagado: 0, saldo: inscripcion.valor_plan, estado: 'activo'
     })
     if (error) { alert('Error al renovar: ' + error.message); return }
-    auditar('archivar_inscripcion_taller', 'taller_inscripciones', inscripcion.id, { cliente: clienteSeleccionado?.nombre || '—' })
+    auditar('renovar_inscripcion_taller', 'taller_inscripciones', inscripcion.id, { cliente: clienteSeleccionado?.nombre || '—' })
     await supabase.from('taller_inscripciones').update({ estado: 'archivado' }).eq('id', inscripcion.id)
+    await cargarDatosCliente(clienteSeleccionado)
+  }
+
+  async function eliminarInscripcion(ins: any) {
+    const nombreTaller = ins.talleres?.nombre || 'este taller'
+    if (!window.confirm(`¿Eliminar la inscripción a ${nombreTaller}?\n\nSolo se puede si no tiene pagos ni sesiones tomadas. Queda registrado en Auditoría.`)) return
+    const r = await eliminarInscripcionTaller(ins.id)
+    if (!r.ok) { alert(r.mensaje); return }
     await cargarDatosCliente(clienteSeleccionado)
   }
 
@@ -1975,6 +1985,7 @@ await cargarDatosCliente(cliente)
                         return <button key={est} onClick={() => !esActual && cambiarEstadoInscripcion(ins.id, est)} disabled={esActual} style={{ padding: '5px 14px', borderRadius: '8px', cursor: esActual ? 'default' : 'pointer', fontSize: '12px', fontWeight: '600', border: `1px solid ${esActual ? c2.border : '#e2e8f0'}`, background: esActual ? c2.bg : 'white', color: esActual ? c2.color : '#666' }}>{est.charAt(0).toUpperCase() + est.slice(1)}</button>
                       })}
                       <button onClick={() => cargarSesionesInscripcion(ins.id, ins.taller_id)} style={{ padding: '5px 14px', background: inscripcionExpandida === ins.id ? '#f3e8ff' : 'white', color: '#7c3aed', border: '1px solid #d8b4fe', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>{inscripcionExpandida === ins.id ? '▲ Ocultar sesiones' : '▼ Ver sesiones'}</button>
+                      <button onClick={() => eliminarInscripcion(ins)} title="Solo si no tiene pagos ni sesiones tomadas" style={{ padding: '5px 12px', background: 'white', color: '#991b1b', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}>🗑 Eliminar</button>
                       {esCompletado && (
                         <>
                           <button onClick={() => renovarInscripcionTaller(ins)} style={{ marginLeft: 'auto', padding: '5px 16px', background: '#7c3aed', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>🔄 Renovar</button>
