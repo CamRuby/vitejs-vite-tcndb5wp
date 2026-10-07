@@ -975,6 +975,7 @@ async function verificarConflictosEnMemoria(
     }
     const { error } = await supabase.from('talleres').update(updatePayload).eq('id', tallerViendo.id)
     if (error) { setTeError('Error: ' + error.message); setTeGuardando(false); return }
+    auditar('editar_taller', 'talleres', tallerViendo.id, { antes: { nombre: tallerViendo.nombre, profesor_id: tallerViendo.profesor_id, salon_id: tallerViendo.salon_id, hora: tallerViendo.hora, duracion_min: tallerViendo.duracion_min, valor_mensual: tallerViendo.valor_mensual }, despues: updatePayload })
     setModalVerTaller(false)
     await cargarTalleres()
     setTeGuardando(false)
@@ -995,15 +996,8 @@ async function verificarConflictosEnMemoria(
       setTeError(`No se puede archivar: tiene ${activos.length} inscrito(s) activo(s).`)
       setConfirmarBorrarTaller(false); setTeGuardando(false); return
     }
-    // Archive the taller — preserves historical inscriptions and payments
-    // Only delete sesiones (not needed for history) and active inscriptions
-    const { data: sesiones } = await supabase.from('taller_sesiones').select('id').eq('taller_id', tallerViendo.id)
-    if (sesiones && sesiones.length > 0) {
-      const sIds = sesiones.map((s: any) => s.id)
-      await supabase.from('taller_asistencias').delete().in('sesion_id', sIds)
-      await supabase.from('taller_sesiones').delete().eq('taller_id', tallerViendo.id)
-    }
-    // Mark taller as archived — does NOT delete inscripciones or pagos
+    // Archivar: el taller deja de usarse, pero se conserva TODO su historial
+    // (sesiones, asistencias, honorarios, inscripciones y pagos). Para reactivarlo se crea uno nuevo.
     const { error } = await supabase.from('talleres').update({ estado: 'archivado' }).eq('id', tallerViendo.id)
     if (error) { setTeError('Error: ' + error.message); setTeGuardando(false); return }
     setModalVerTaller(false)
@@ -1905,6 +1899,34 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                         {sesionActual?.estado || 'programada'}
                       </span>
                     </div>
+                    {sesionActual?.estado !== 'cancelada' && (
+                      <div style={{ marginBottom: '10px' }}>
+                        <label style={{ fontSize: '12px', color: '#555', fontWeight: '600', display: 'block', marginBottom: '4px' }}>Profesor de esta sesión</label>
+                        <select
+                          value={sesionActual?.profesor_id || tallerViendo?.profesor_id || ''}
+                          onChange={async e => {
+                            const nuevoProf = e.target.value
+                            if (!nuevoProf) return
+                            // Cambia el profesor SOLO de esta sesión. El honorario se recalcula solo (si no fue editado a mano).
+                            if (sesionActual?.id) {
+                              const { data: upd } = await supabase.from('taller_sesiones').update({ profesor_id: nuevoProf }).eq('id', sesionActual.id).select().single()
+                              setSesionActual((prev: any) => ({ ...prev, ...(upd || { profesor_id: nuevoProf }) }))
+                            } else {
+                              const { data: newSes } = await supabase.from('taller_sesiones')
+                                .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'programada', profesor_id: nuevoProf })
+                                .select().single()
+                              if (newSes) {
+                                setSesionActual(newSes)
+                                setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'programada' }))
+                              }
+                            }
+                            auditar('cambiar_profesor_sesion_taller', 'taller_sesiones', sesionActual?.id, { taller: tallerViendo.nombre, fecha: fechaSesionViendo, profesor_id: nuevoProf })
+                          }}
+                          style={{ width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px' }}>
+                          {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}{p.id === tallerViendo?.profesor_id ? ' (titular)' : ''}</option>)}
+                        </select>
+                      </div>
+                    )}
                     {sesionActual?.estado === 'cancelada' ? (
                       <div>
                         <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#991b1b', fontWeight: '600' }}>⚠️ Sesión cancelada</p>
@@ -1915,18 +1937,17 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                             onChange={async e => {
                               const nuevoProf = e.target.value
                               if (!nuevoProf) return
-                              // Update professor on the taller itself
-                              await supabase.from('talleres').update({ profesor_id: nuevoProf }).eq('id', tallerViendo.id)
-                              // Update sesion estado to confirmada
+                              // Reemplazo SOLO para esta sesión (el profesor del taller no cambia)
                               if (sesionActual?.id) {
-                                await supabase.from('taller_sesiones').update({ estado: 'confirmada' }).eq('id', sesionActual.id)
-                                setSesionActual((prev: any) => ({ ...prev, estado: 'confirmada' }))
+                                await supabase.from('taller_sesiones').update({ estado: 'confirmada', profesor_id: nuevoProf }).eq('id', sesionActual.id)
+                                setSesionActual((prev: any) => ({ ...prev, estado: 'confirmada', profesor_id: nuevoProf }))
                               } else {
                                 const { data: newSes } = await supabase.from('taller_sesiones')
-                                  .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'confirmada' })
+                                  .insert({ taller_id: tallerViendo.id, fecha: fechaSesionViendo, estado: 'confirmada', profesor_id: nuevoProf })
                                   .select().single()
                                 if (newSes) setSesionActual(newSes)
                               }
+                              auditar('cambiar_profesor_sesion_taller', 'taller_sesiones', sesionActual?.id, { taller: tallerViendo.nombre, fecha: fechaSesionViendo, profesor_id: nuevoProf })
                               setSesionesEstadoMap(prev => ({ ...prev, [`${tallerViendo.id}-${fechaSesionViendo}`]: 'confirmada' }))
                               // Refresh talleres to show new professor
                               await cargarTalleres()
