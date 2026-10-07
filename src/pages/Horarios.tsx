@@ -259,6 +259,28 @@ export default function Horarios() {
   useEffect(() => { cargarSedes(); cargarProfesores(); cargarTodosSalones() }, [])
   useEffect(() => { if (sedeSeleccionada) { setTalleres([]); setInscritosPorTaller({}); cargarSalones(); cargarClases() } }, [sedeSeleccionada, fechaBase, diaSeleccionado, vista])
   useEffect(() => { if (salones.length > 0 && sedeSeleccionada) cargarTalleres() }, [salones])
+
+  // ── Atajos de teclado para cambiar sede ──────────────────────────────────
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      // No activar si el foco está en un input, textarea o select
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (!e.shiftKey) return
+      const key = e.key.toUpperCase()
+      const ATAJOS: Record<string, string> = { T: 'Tunja', C: 'Chicó', R: 'Rosales' }
+      const nombreBuscado = ATAJOS[key]
+      if (!nombreBuscado) return
+      const sede = sedes.find((s: any) =>
+        s.nombre.toLowerCase().includes(nombreBuscado.toLowerCase())
+      )
+      if (sede && sede.id !== sedeSeleccionada) {
+        setSedeSeleccionada(sede.id)
+      }
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [sedes, sedeSeleccionada])
  useEffect(() => {
   if (!claseEditando) return
   if (editEstado !== 'cancelada' && claseEditando.estado !== 'cancelada') return
@@ -1349,6 +1371,20 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
               style={{ padding: '7px 12px', border: `1px solid ${TEAL_MID}`, borderRadius: '8px', fontSize: '14px' }}>
               {sedes.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </select>
+            <span style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              {[{ key: 'T', nombre: 'Tunja' }, { key: 'C', nombre: 'Chicó' }, { key: 'R', nombre: 'Rosales' }].map(({ key, nombre }) => {
+                const sede = sedes.find((s: any) => s.nombre.toLowerCase().includes(nombre.toLowerCase()))
+                const activo = sede?.id === sedeSeleccionada
+                return (
+                  <span key={key} title={`Shift+${key} → ${nombre}`}
+                    style={{ padding: '3px 7px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, cursor: 'default',
+                      background: activo ? TEAL : '#e2e8f0', color: activo ? 'white' : '#64748b',
+                      border: `1px solid ${activo ? TEAL : '#cbd5e1'}`, letterSpacing: '0.5px' }}>
+                    ⇧{key}
+                  </span>
+                )
+              })}
+            </span>
             <select value={filtroProfesorId} onChange={e => setFiltroProfesorId(e.target.value)}
               style={{ padding: '7px 12px', border: `1px solid ${filtroProfesorId ? TEAL : TEAL_MID}`, borderRadius: '8px', fontSize: '14px', background: filtroProfesorId ? TEAL_LIGHT : 'white' }}>
               <option value="">Todos los profesores</option>
