@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { auditar } from '../auditoria'
+import { calcularNumeracion } from '../utils/numeracionClases'
 import pdfMake from 'pdfmake/build/pdfmake'
 import pdfFonts from 'pdfmake/build/vfs_fonts'
 pdfMake.vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs
@@ -395,7 +396,7 @@ function ModalHistorialPlanes({ planes, onCerrar, onVerClases, clasesArchivadasM
                         : { background: '#eff6ff', color: '#1d4ed8' }
                       return (
                         <tr key={cl.id} style={{ borderTop: '1px solid #f1f5f9', background: ci % 2 === 0 ? 'white' : '#fafbfc' }}>
-                          <td style={{ padding: '6px 10px', color: '#aaa' }}>{cl.numero_calculado ? Math.round(cl.numero_calculado) : '—'}</td>
+                          <td style={{ padding: '6px 10px', color: '#aaa' }}>{cl.numero_calculado ? (Number.isInteger(cl.numero_calculado) ? cl.numero_calculado : Number(cl.numero_calculado).toFixed(2).replace(/\.?0+$/, '')) : '—'}</td>
                           <td style={{ padding: '6px 10px' }}>{cl.fecha}</td>
                           <td style={{ padding: '6px 10px' }}>{cl.hora?.substring(0,5)}</td>
                           <td style={{ padding: '6px 10px' }}>{cl.profesores?.nombre || '—'}</td>
@@ -1223,10 +1224,14 @@ await cargarDatosCliente(cliente)
       setPlanArchivadoExpandido(prev => prev === planId ? null : planId)
       return
     }
-    const { data } = await supabase.from('clases_con_numero')
-      .select('id, fecha, hora, estado, numero_calculado, es_cortesia, cancelado_por_academia, inasistencia_perdonada, observaciones, profesores(nombre), salones(nombre, sedes(nombre))')
+    // Numeración con la fuente única (numeracionClases.ts), igual que Horarios, Reportes y la app de profesores
+    const { data } = await supabase.from('clases')
+      .select('id, fecha, hora, duracion_min, estado, es_cortesia, cancelado_por_academia, cancelado_tarde, inasistencia_perdonada, observaciones, profesores(nombre), salones(nombre, sedes(nombre))')
       .eq('contrato_id', planId).order('fecha', { ascending: false }).order('hora', { ascending: false })
-    setClasesArchivadasPlan(prev => ({ ...prev, [planId]: data || [] }))
+    const durPlan = Number(planes.find((p: any) => p.id === planId)?.duracion_min) || 60
+    const numeracion = calcularNumeracion(data || [], durPlan)
+    const conNumero = (data || []).map((c: any) => ({ ...c, numero_calculado: numeracion.get(c.id) ?? null }))
+    setClasesArchivadasPlan(prev => ({ ...prev, [planId]: conNumero }))
     setPlanArchivadoExpandido(planId)
   }
 
