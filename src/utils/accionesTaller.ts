@@ -14,3 +14,27 @@ export async function eliminarInscripcionTaller(inscripcionId: string): Promise<
   if (error) return { ok: false, codigo: 'error', mensaje: 'No se pudo eliminar: ' + error.message }
   return data as ResultadoTaller
 }
+
+/**
+ * Registra un pago de una inscripción a taller (función registrar_pago_taller).
+ * Solo admin/superadmin. La inscripción debe tener valor. Queda en Auditoría.
+ */
+export async function registrarPagoTaller(datos: {
+  inscripcionId: string; monto: number; metodo: string; fecha: string; notas?: string
+}): Promise<ResultadoTaller> {
+  const { data, error } = await supabase.rpc('registrar_pago_taller', {
+    p_inscripcion_id: datos.inscripcionId, p_monto: datos.monto, p_metodo: datos.metodo,
+    p_fecha: datos.fecha, p_notas: datos.notas || null,
+  })
+  if (error) return { ok: false, codigo: 'error', mensaje: 'No se pudo registrar: ' + error.message }
+  return data as ResultadoTaller
+}
+
+/** Pone o cambia el valor acordado de una inscripción, con su motivo. Auditado. */
+export async function editarValorInscripcion(inscripcionId: string, valor: number, nota?: string): Promise<ResultadoTaller> {
+  const { data, error } = await supabase.rpc('editar_valor_inscripcion_taller', {
+    p_inscripcion_id: inscripcionId, p_valor: valor, p_nota: nota || null,
+  })
+  if (error) return { ok: false, codigo: 'error', mensaje: 'No se pudo guardar: ' + error.message }
+  return data as ResultadoTaller
+}
