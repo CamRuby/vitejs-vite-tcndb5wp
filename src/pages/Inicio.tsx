@@ -5,6 +5,7 @@ import SeccionInicio from './SeccionInicio'
 import ClientesNuevos from './ClientesNuevos'
 import PlanesSinPago from './PlanesSinPago'
 import PlanesSinRenovar from './PlanesSinRenovar'
+import TalleresSinPago from './TalleresSinPago'
 
 const DIAS_L   = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
 const MESES_L  = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
@@ -147,6 +148,8 @@ export default function Inicio({ onNavegar }: {
             <ClientesNuevos esMovil={esMovil} onNavegar={onNavegar} />
 
             <PlanesSinPago esMovil={esMovil} />
+
+            <TalleresSinPago esMovil={esMovil} />
 
             <PlanesSinRenovar esMovil={esMovil} />
 
