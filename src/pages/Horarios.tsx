@@ -1847,10 +1847,16 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                       ))}
                     </div>
                   </div>
-                  <div style={{ marginBottom: '20px' }}>
-                    <label style={labelStyle}>{tallerVacacional ? 'Valor único ($)' : 'Valor mensual ($)'}</label>
-                    <input type="number" min={0} value={tallerValor} onChange={e => setTallerValor(e.target.value)} placeholder="Opcional" style={fieldStyle} />
-                  </div>
+                  {tallerVacacional ? (
+                    <div style={{ marginBottom: '20px' }}>
+                      <label style={labelStyle}>Valor del vacacional por estudiante ($)</label>
+                      <input type="number" min={0} value={tallerValor} onChange={e => setTallerValor(e.target.value)} placeholder="Ej. 250000" style={fieldStyle} />
+                    </div>
+                  ) : (
+                    <p style={{ margin: '0 0 20px', fontSize: '12px', color: '#64748b' }}>
+                      Precio: lista de talleres (4 clases $155.000 · 8 clases $279.000). Se puede ajustar en cada inscripción.
+                    </p>
+                  )}
                   {tallerError && <p style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{tallerError}</p>}
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button onClick={crearTaller} disabled={tallerGuardando} style={{ flex: 1, padding: '11px', background: TALLER_COLOR, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
@@ -2190,10 +2196,20 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                         ))}
                       </div>
                     </div>
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <label style={labelStyle}>{(tallerViendo as any).tipo === 'vacacional' ? 'Valor único ($)' : 'Valor mensual ($)'}</label>
-                      <input type="number" min={0} value={teValor} onChange={e => setTeValor(e.target.value)} placeholder="Opcional" style={fieldStyle} />
-                    </div>
+                    {(tallerViendo as any).tipo === 'vacacional' ? (
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <label style={labelStyle}>Valor del vacacional por estudiante ($)</label>
+                        <input type="number" min={0} value={teValor} onChange={e => setTeValor(e.target.value)} placeholder="Ej. 250000" style={fieldStyle} />
+                        <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#64748b' }}>Solo aplica a inscripciones nuevas. Las existentes conservan su valor.</p>
+                      </div>
+                    ) : (
+                      <p style={{ gridColumn: '1 / -1', margin: 0, fontSize: '12px', color: '#64748b' }}>
+                        Precio: lista de talleres (4 clases $155.000 · 8 clases $279.000). Se ajusta en cada inscripción.
+                      </p>
+                    )}
+                    <p style={{ gridColumn: '1 / -1', margin: 0, fontSize: '11px', color: '#64748b' }}>
+                      Cambiar la duración o el profesor no altera las sesiones ya registradas ni sus honorarios. El nombre y la hora nuevos se verán también en el historial.
+                    </p>
                   </div>
                   {teError && <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '12px' }}>{teError}</p>}
                   <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
