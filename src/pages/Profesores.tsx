@@ -285,7 +285,7 @@ export default function Profesores() {
     // Sesiones de taller que dio este profesor:
     //  - las de sus talleres que no quedaron a nombre de otro profesor (reemplazos)
     //  - las de cualquier taller que quedaron a su nombre
-    const SEL_SESION = 'id, fecha, estado, observaciones, honorario_valor, observaciones_admin, taller_id, profesor_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))'
+    const SEL_SESION = 'id, fecha, estado, observaciones, honorario_valor, observaciones_admin, taller_id, profesor_id, duracion_min, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))'
     const { data: talleres } = await supabase.from('talleres').select('id').eq('profesor_id', p.id)
     const idsTalleres = (talleres || []).map((t: any) => t.id)
     const [propias, aSuNombre] = await Promise.all([
@@ -310,7 +310,7 @@ export default function Profesores() {
         const t = s.talleres
         return {
           id: `taller-${s.id}`, fecha: s.fecha, hora: t?.hora || '00:00:00',
-          duracion_min: t?.duracion_min, estado: s.estado, esTaller: true,
+          duracion_min: s.duracion_min ?? t?.duracion_min, estado: s.estado, esTaller: true,
           nombreTaller: t?.nombre, salones: t?.salones, observaciones: s.observaciones,
           es_cortesia: false, cancelado_tarde: false, cancelado_por_academia: false,
           honorario_valor: s.honorario_valor ?? null,
