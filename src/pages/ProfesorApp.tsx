@@ -410,7 +410,7 @@ export default function ProfesorApp({ rol }: { rol?: string | null }) {
     if (tallerIds.length > 0) {
       const { data: ts } = await supabase
         .from('taller_sesiones')
-        .select('id, fecha, estado, observaciones, honorario_valor, taller_id, profesor_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))')
+        .select('id, fecha, estado, observaciones, honorario_valor, taller_id, profesor_id, duracion_min, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))')
         .eq('estado', 'dada')
         .gte('fecha', fi).lte('fecha', ff)
         .in('taller_id', tallerIds)
@@ -421,7 +421,7 @@ export default function ProfesorApp({ rol }: { rol?: string | null }) {
     // También incluir sesiones de talleres ajenos donde este profesor fue sustituto
     const { data: sesionesComoSustituto } = await supabase
       .from('taller_sesiones')
-      .select('id, fecha, estado, observaciones, honorario_valor, taller_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))')
+      .select('id, fecha, estado, observaciones, honorario_valor, taller_id, duracion_min, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))')
       .eq('estado', 'dada')
       .eq('profesor_id', profesor.id)
       .gte('fecha', fi).lte('fecha', ff)
@@ -435,7 +435,7 @@ export default function ProfesorApp({ rol }: { rol?: string | null }) {
       id: `taller-sesion-${s.id}`,
       fecha: s.fecha,
       hora: s.talleres?.hora || '00:00:00',
-      duracion_min: s.talleres?.duracion_min,
+      duracion_min: s.duracion_min ?? s.talleres?.duracion_min,   // duración guardada en la sesión
       estado: 'dada',
       esTaller: true,
       tallerRealId: s.taller_id,
