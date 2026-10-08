@@ -280,10 +280,13 @@ export default function ProfesorApp({ rol }: { rol?: string | null }) {
       const talleresConInscritos = talleresData || []
       if (talleresConInscritos.length > 0) {
         const { data: sesiones } = await supabase.from('taller_sesiones')
-          .select('taller_id, fecha, estado')
+          .select('taller_id, fecha, estado, profesor_id')
           .in('taller_id', talleresConInscritos.map((t: any) => t.id))
         const sesionMap: Record<string, string> = {}
-        ;(sesiones || []).forEach((s: any) => { sesionMap[`${s.taller_id}-${s.fecha}`] = s.estado })
+        ;(sesiones || []).forEach((s: any) => {
+          // Sesión asignada a otro profesor (reemplazo): no aparece en su lista
+          sesionMap[`${s.taller_id}-${s.fecha}`] = (s.profesor_id && s.profesor_id !== profesor.id) ? 'otro_profesor' : s.estado
+        })
         talleresConfirmados = talleresConInscritos.map((t: any) => ({ ...t, _sesionMap: sesionMap }))
       }
     }
@@ -293,12 +296,13 @@ export default function ProfesorApp({ rol }: { rol?: string | null }) {
     if (ids.length > 0) {
       const { data: sesAtrasadas } = await supabase
         .from('taller_sesiones')
-        .select('id, fecha, estado, taller_id')
+        .select('id, fecha, estado, taller_id, profesor_id')
         .in('taller_id', ids)
         .eq('estado', 'confirmada')
         .lt('fecha', fi)
         .order('fecha').order('taller_id')
       ;(sesAtrasadas || []).forEach((s: any) => {
+        if (s.profesor_id && s.profesor_id !== profesor.id) return
         const t = (talleresData || []).find((x: any) => x.id === s.taller_id)
         if (!t) return
         talleresAtrasados.push({
@@ -327,7 +331,7 @@ export default function ProfesorApp({ rol }: { rol?: string | null }) {
         if (matchFecha) {
           const sesionEstadoHoy = t._sesionMap?.[`${t.id}-${fechaStr}`] || null
           const estadoTaller = sesionEstadoHoy || 'programada'
-          if (estadoTaller === 'dada') { /* skip */ } else
+          if (estadoTaller === 'dada' || estadoTaller === 'otro_profesor') { /* skip */ } else
           clasesFinales.push({
             id: `taller-${t.id}-${fechaStr}`,
             fecha: fechaStr, hora: t.hora,
@@ -406,12 +410,13 @@ export default function ProfesorApp({ rol }: { rol?: string | null }) {
     if (tallerIds.length > 0) {
       const { data: ts } = await supabase
         .from('taller_sesiones')
-        .select('id, fecha, estado, observaciones, honorario_valor, taller_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))')
+        .select('id, fecha, estado, observaciones, honorario_valor, taller_id, profesor_id, talleres(nombre, hora, duracion_min, salones(nombre, sedes(nombre)))')
         .eq('estado', 'dada')
         .gte('fecha', fi).lte('fecha', ff)
         .in('taller_id', tallerIds)
         .order('fecha', { ascending: false })
-      tallerSesiones = ts || []
+      // Sesiones de sus talleres que dio otro profesor (reemplazo) no son suyas
+      tallerSesiones = (ts || []).filter((s: any) => !s.profesor_id || s.profesor_id === profesor.id)
     }
     // También incluir sesiones de talleres ajenos donde este profesor fue sustituto
     const { data: sesionesComoSustituto } = await supabase
