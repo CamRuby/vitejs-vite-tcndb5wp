@@ -33,7 +33,26 @@ async function todas(consulta: (desde: number) => any): Promise<any[]> {
   return out
 }
 
-type Fila = { t: any; ultima: string; activos: number; filas: FilaMes[]; total: FilaMes }
+type Inscrito = { clienteId: string; nombre: string; inicio: string; fin: string; estado: string; saldo: number; sinValor: boolean; vigente: boolean }
+type Fila = { t: any; ultima: string; activos: number; filas: FilaMes[]; total: FilaMes; inscritos: Inscrito[] }
+
+// Un renglón por cliente: su inscripción más reciente en el taller y su saldo total en ese taller
+function inscritosDelTaller(ins: any[], hoy: string): Inscrito[] {
+  const porCliente: Record<string, any[]> = {}
+  ins.forEach(i => { if (i.cliente_id) (porCliente[i.cliente_id] ||= []).push(i) })
+  return Object.values(porCliente).map(lista => {
+    const ult = [...lista].sort((a, b) => (b.fecha_inicio || '').localeCompare(a.fecha_inicio || ''))[0]
+    const cl = ult.clientes
+    const saldo = lista.reduce((t, i) => t + Math.max(Number(i.valor_plan || 0) - Number(i.total_pagado || 0), 0), 0)
+    return {
+      clienteId: ult.cliente_id,
+      nombre: cl?.nombre || `${cl?.nombres || ''} ${cl?.apellidos || ''}`.trim() || '—',
+      inicio: ult.fecha_inicio || '', fin: ult.fecha_fin || '', estado: ult.estado, saldo,
+      sinValor: lista.some(i => Number(i.valor_plan || 0) <= 0),
+      vigente: ult.estado === 'activo' && (!ult.fecha_fin || ult.fecha_fin >= hoy),
+    }
+  }).sort((a, b) => a.nombre.localeCompare(b.nombre))
+}
 
 export default function TalleresPorTaller({ esMovil }: { esMovil: boolean }) {
   const [lista, setLista] = useState<Fila[]>([])
@@ -49,7 +68,7 @@ export default function TalleresPorTaller({ esMovil }: { esMovil: boolean }) {
     const [talleres, sesiones, inscripciones] = await Promise.all([
       todas(d => supabase.from('talleres').select('id, nombre, tipo, estado, dia_semana, hora, fecha_unica, fecha_fin_vacacional, profesores(nombre), salones(sedes(nombre))').order('nombre').range(d, d + 999)),
       todas(d => supabase.from('taller_sesiones').select('taller_id, fecha, estado, honorario_valor').gte('fecha', CORTE_PAGOS).order('fecha').range(d, d + 999)),
-      todas(d => supabase.from('taller_inscripciones').select('id, taller_id, fecha_inicio, fecha_fin, valor_plan, estado').gte('fecha_inicio', CORTE_PAGOS).order('fecha_inicio').range(d, d + 999)),
+      todas(d => supabase.from('taller_inscripciones').select('id, taller_id, cliente_id, fecha_inicio, fecha_fin, num_sesiones, valor_plan, total_pagado, estado, clientes(nombre, nombres, apellidos)').gte('fecha_inicio', CORTE_PAGOS).order('fecha_inicio').range(d, d + 999)),
     ])
     const ids = inscripciones.map((i: any) => i.id)
     const pagos: any[] = []
@@ -68,7 +87,7 @@ export default function TalleresPorTaller({ esMovil }: { esMovil: boolean }) {
       const ultima = dadas.length ? dadas[dadas.length - 1] : ''
       const activos = ins.filter((i: any) => i.estado === 'activo' && (!i.fecha_fin || i.fecha_fin >= hoy)).length
       const fm = utilidadPorMes(t, ins, ses, pg)
-      return { t, ultima, activos, filas: fm, total: totalFilas(fm) }
+      return { t, ultima, activos, filas: fm, total: totalFilas(fm), inscritos: inscritosDelTaller(ins, hoy) }
     }).filter((f: Fila) => f.filas.length > 0 || f.t.estado !== 'archivado')
     filas.sort((a, b) => (b.ultima || '').localeCompare(a.ultima || '') || a.t.nombre.localeCompare(b.t.nombre))
     setLista(filas)
@@ -123,6 +142,33 @@ export default function TalleresPorTaller({ esMovil }: { esMovil: boolean }) {
       </p>
     </div>
   )
+  const listaInscritos = (f: Fila) => {
+    const vig = f.inscritos.filter(i => i.vigente)
+    const ven = f.inscritos.filter(i => !i.vigente).sort((a, b) => b.fin.localeCompare(a.fin))
+    const renglon = (i: Inscrito) => (
+      <div key={i.clienteId} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '5px 0', borderTop: '1px solid #f1f5f9', fontSize: '12px' }}>
+        <span style={{ color: '#1f2937', minWidth: 0 }}>
+          <b>{i.nombre}</b> <span style={{ color: '#6b7280' }}>· {fechaCorta(i.inicio)} – {fechaCorta(i.fin)}{i.estado === 'archivado' ? ' · retirado' : ''}</span>
+        </span>
+        <span style={{ whiteSpace: 'nowrap', fontWeight: 700, color: i.saldo > 0 || i.sinValor ? '#991b1b' : '#166534' }}>
+          {i.sinValor ? 'Sin valor' : i.saldo > 0 ? `Debe ${pesos(i.saldo)}` : 'Al día'}
+        </span>
+      </div>
+    )
+    const bloque = (titulo: string, lista: Inscrito[], color: string) => (
+      <div style={{ minWidth: 0 }}>
+        <p style={{ margin: '0 0 4px', fontSize: '12px', fontWeight: 800, color }}>{titulo} ({lista.length})</p>
+        {lista.length === 0 ? <p style={{ margin: 0, fontSize: '12px', color: '#94a3b8' }}>—</p> : lista.map(renglon)}
+      </div>
+    )
+    return (
+      <div style={{ padding: '10px 16px 12px', background: 'white', borderTop: `1px solid ${C.border}`, display: 'grid', gridTemplateColumns: esMovil ? '1fr' : '1fr 1fr', gap: '14px', textAlign: 'left' }}>
+        {bloque('Inscripción vigente', vig, '#166534')}
+        {bloque('Inscripción vencida', ven, '#b45309')}
+      </div>
+    )
+  }
+
   const fila = (f: Fila) => {
     const vac = f.t.tipo === 'vacacional' || !!f.t.fecha_unica
     const abiertoF = abierto === f.t.id
@@ -140,6 +186,7 @@ export default function TalleresPorTaller({ esMovil }: { esMovil: boolean }) {
           </div>
         </div>
         {abiertoF && tabla(f)}
+        {abiertoF && listaInscritos(f)}
       </div>
     )
   }
