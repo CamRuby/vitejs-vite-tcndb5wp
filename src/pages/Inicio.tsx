@@ -5,13 +5,13 @@ import SeccionInicio from './SeccionInicio'
 import ClientesNuevos from './ClientesNuevos'
 import PlanesSinPago from './PlanesSinPago'
 import PlanesSinRenovar from './PlanesSinRenovar'
-import TalleresSinPago from './TalleresSinPago'
+import TalleresInicio from './TalleresInicio'
 
 const DIAS_L   = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
 const MESES_L  = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
 // Secciones que se construirán más adelante
-const PROXIMAMENTE = ['Clientes inactivos', 'Talleres']
+const PROXIMAMENTE = ['Clientes inactivos']
 
 export default function Inicio({ onNavegar }: {
   onNavegar: (seccion: string) => void
@@ -149,7 +149,7 @@ export default function Inicio({ onNavegar }: {
 
             <PlanesSinPago esMovil={esMovil} />
 
-            <TalleresSinPago esMovil={esMovil} />
+            <TalleresInicio esMovil={esMovil} />
 
             <PlanesSinRenovar esMovil={esMovil} />
 

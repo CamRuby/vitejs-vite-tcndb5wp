@@ -1,5 +1,5 @@
 // src/pages/TalleresSinPago.tsx
-// Inicio → Talleres sin pago, por sede (Rosales, Chicó, Tunja).
+// Inicio → Talleres → pestaña "Pendientes", por sede (Rosales, Chicó, Tunja).
 // Entran: inscripciones a talleres desde la fecha de corte (1 jun 2026), en cualquier estado,
 // sin valor o con lo pagado menor al valor acordado. Orden: de la más antigua a la más nueva.
 // Acciones: Poner/Editar valor (con motivo) y Registrar pago. Ambas auditadas.
@@ -7,7 +7,6 @@
 
 import { useState, useEffect, Fragment } from 'react'
 import { supabase } from '../supabase'
-import SeccionInicio from './SeccionInicio'
 import { CORTE_PAGOS, formatPesos } from '../utils/saldoPlan'
 import { ModalValorInscripcion, ModalPagoTaller, type InscripcionResumen } from './ModalesTaller'
 
@@ -24,7 +23,7 @@ function fechaCorta(f: string) {
   return `${d} ${MESES_CORTO[m - 1]}${y !== new Date().getFullYear() ? ' ' + y : ''}`
 }
 
-export default function TalleresSinPago({ esMovil }: { esMovil: boolean }) {
+export default function TalleresSinPago({ esMovil, onCantidad }: { esMovil: boolean; onCantidad?: (n: number) => void }) {
   const [sedes, setSedes]       = useState<{ id: string; nombre: string }[]>([])
   const [filas, setFilas]       = useState<Fila[]>([])
   const [sedeSel, setSedeSel]   = useState('')
@@ -78,6 +77,7 @@ export default function TalleresSinPago({ esMovil }: { esMovil: boolean }) {
     if (lista.some(f => f.sedeId === 'sin-sede')) ordenadas.push({ id: 'sin-sede', nombre: 'Sin sede' })
     setSedes(ordenadas)
     setFilas(lista)
+    onCantidad?.(lista.length)
     setPagos({})
     setSedeSel(prev => prev || ordenadas.find(x => lista.some(f => f.sedeId === x.id))?.id || ordenadas[0]?.id || '')
     setCargando(false)
@@ -134,8 +134,7 @@ export default function TalleresSinPago({ esMovil }: { esMovil: boolean }) {
   )
 
   return (
-    <SeccionInicio titulo="Talleres sin pago" colores={COLORES} esMovil={esMovil} anchoCompleto
-      cantidad={cargando ? null : filas.length}>
+    <div>
       {cargando ? (
         <p style={{ textAlign: 'center', color: '#aaa', padding: '24px 20px', fontSize: '13px', margin: 0 }}>Cargando...</p>
       ) : (
@@ -223,6 +222,6 @@ export default function TalleresSinPago({ esMovil }: { esMovil: boolean }) {
           {aviso}
         </div>
       )}
-    </SeccionInicio>
+    </div>
   )
 }
