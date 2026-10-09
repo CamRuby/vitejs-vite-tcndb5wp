@@ -18,13 +18,16 @@ function fechaCorta(f: string) {
 function nombreCliente(cl: any) { return cl?.nombre || `${cl?.nombres || ''} ${cl?.apellidos || ''}`.trim() || '—' }
 function sinTildes(s: string) { return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '') }
 
+type ClienteResumen = { id: string; nombre: string; activos: string[]; valor: number; pagado: number; sinValor: number; ultimaFin: string }
+
 type Ins = {
   id: string; tallerId: string; taller: string; tallerObj: any; inicio: string; fin: string; numSesiones: number
   valor: number; pagado: number; nota: string | null; estado: string; esVacacional: boolean
 }
 
 export default function TalleresPorCliente({ esMovil }: { esMovil: boolean }) {
-  const [clientes, setClientes] = useState<{ id: string; nombre: string }[]>([])
+  const [clientes, setClientes] = useState<ClienteResumen[]>([])
+  const [filtro, setFiltro] = useState<'todos' | 'activos' | 'saldo'>('todos')
   const [busqueda, setBusqueda] = useState('')
   const [sel, setSel] = useState<{ id: string; nombre: string } | null>(null)
   const [ins, setIns] = useState<Ins[]>([])
@@ -36,22 +39,36 @@ export default function TalleresPorCliente({ esMovil }: { esMovil: boolean }) {
   const [aPagar, setAPagar] = useState<InscripcionResumen | null>(null)
   const [aValorar, setAValorar] = useState<InscripcionResumen | null>(null)
 
-  useEffect(() => {
-    (async () => {
-      const mapa: Record<string, string> = {}
-      for (let desde = 0; ; desde += 1000) {
-        const { data } = await supabase.from('taller_inscripciones')
-          .select('cliente_id, clientes(nombre, nombres, apellidos)')
-          .gte('fecha_inicio', CORTE_PAGOS).range(desde, desde + 999)
-        ;(data || []).forEach((r: any) => { if (r.cliente_id) mapa[r.cliente_id] = nombreCliente(r.clientes) })
-        if (!data || data.length < 1000) break
-      }
-      setClientes(Object.entries(mapa).map(([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre)))
-    })()
-  }, [])
+  useEffect(() => { cargarLista() }, [])
+
+  // Lista de clientes con talleres desde el corte: talleres activos, acordado, pagado y saldo
+  async function cargarLista() {
+    const hoy = new Date().toISOString().slice(0, 10)
+    const mapa: Record<string, ClienteResumen> = {}
+    for (let desde = 0; ; desde += 1000) {
+      const { data } = await supabase.from('taller_inscripciones')
+        .select('cliente_id, fecha_fin, valor_plan, total_pagado, estado, clientes(nombre, nombres, apellidos), talleres(nombre)')
+        .gte('fecha_inicio', CORTE_PAGOS).range(desde, desde + 999)
+      ;(data || []).forEach((r: any) => {
+        if (!r.cliente_id) return
+        const c = (mapa[r.cliente_id] ||= { id: r.cliente_id, nombre: nombreCliente(r.clientes), activos: [], valor: 0, pagado: 0, sinValor: 0, ultimaFin: '' })
+        const valor = Number(r.valor_plan || 0)
+        c.valor += valor; c.pagado += Number(r.total_pagado || 0)
+        if (valor <= 0) c.sinValor += 1
+        if ((r.fecha_fin || '') > c.ultimaFin) c.ultimaFin = r.fecha_fin || ''
+        if (r.estado === 'activo' && (!r.fecha_fin || r.fecha_fin >= hoy)) {
+          const t = r.talleres?.nombre || '—'
+          if (!c.activos.includes(t)) c.activos.push(t)
+        }
+      })
+      if (!data || data.length < 1000) break
+    }
+    setClientes(Object.values(mapa).sort((a, b) =>
+      (b.activos.length > 0 ? 1 : 0) - (a.activos.length > 0 ? 1 : 0) || a.nombre.localeCompare(b.nombre)))
+  }
 
   async function cargarCliente(c: { id: string; nombre: string }) {
-    setSel(c); setBusqueda(''); setCargando(true); setAbierta(null)
+        setSel(c); setCargando(true); setAbierta(null)
     const { data } = await supabase.from('taller_inscripciones')
       .select('id, taller_id, fecha_inicio, fecha_fin, num_sesiones, valor_plan, valor_nota, total_pagado, estado, talleres(nombre, tipo, fecha_unica, dia_semana)')
       .eq('cliente_id', c.id).gte('fecha_inicio', CORTE_PAGOS)
@@ -84,10 +101,12 @@ export default function TalleresPorCliente({ esMovil }: { esMovil: boolean }) {
     id: i.id, cliente: sel?.nombre || '—', taller: i.taller, esVacacional: i.esVacacional,
     numSesiones: i.numSesiones, valor: i.valor, pagado: i.pagado, nota: i.nota,
   })
-  const listo = () => { setAPagar(null); setAValorar(null); if (sel) cargarCliente(sel) }
+  const listo = () => { setAPagar(null); setAValorar(null); cargarLista(); if (sel) cargarCliente(sel) }
 
-  const coincidencias = busqueda.trim().length >= 2
-    ? clientes.filter(c => sinTildes(c.nombre).includes(sinTildes(busqueda.trim()))).slice(0, 8) : []
+  const texto = sinTildes(busqueda.trim())
+  const visibles = clientes
+    .filter(c => !texto || sinTildes(c.nombre).includes(texto))
+    .filter(c => filtro === 'todos' ? true : filtro === 'activos' ? c.activos.length > 0 : (c.valor - c.pagado > 0 || c.sinValor > 0))
   const tot = ins.reduce((t, i) => ({ valor: t.valor + i.valor, pagado: t.pagado + i.pagado }), { valor: 0, pagado: 0 })
 
   const boton = (txt: string, fn: () => void, principal = false) => (
@@ -98,26 +117,49 @@ export default function TalleresPorCliente({ esMovil }: { esMovil: boolean }) {
 
   return (
     <div style={{ padding: '12px 16px 16px', textAlign: 'left' }}>
-      <div style={{ position: 'relative', marginBottom: '12px' }}>
-        <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
-          placeholder={`Buscar cliente (${clientes.length} con talleres)…`}
-          style={{ width: '100%', padding: '10px 12px', border: `1.5px solid ${C.border}`, borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box' }} />
-        {coincidencias.length > 0 && (
-          <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', background: 'white', border: `1px solid ${C.border}`, borderRadius: '10px', marginTop: '4px', zIndex: 5, boxShadow: '0 6px 20px rgba(0,0,0,0.08)' }}>
-            {coincidencias.map(c => (
-              <div key={c.id} onClick={() => cargarCliente(c)}
-                style={{ padding: '9px 12px', fontSize: '13px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>{c.nombre}</div>
+      {!sel ? (
+        <div>
+          <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
+            placeholder={`Buscar entre ${clientes.length} clientes con talleres…`}
+            style={{ width: '100%', padding: '10px 12px', border: `1.5px solid ${C.border}`, borderRadius: '10px', fontSize: '14px', boxSizing: 'border-box', marginBottom: '8px' }} />
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+            {([['todos', 'Todos'], ['activos', 'Con taller activo'], ['saldo', 'Con saldo']] as const).map(([k, t]) => (
+              <button key={k} onClick={() => setFiltro(k)}
+                style={{ padding: '5px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                  border: `1px solid ${filtro === k ? C.header : C.border}`, background: filtro === k ? C.header : 'white', color: filtro === k ? 'white' : C.header }}>{t}</button>
             ))}
           </div>
-        )}
-      </div>
-
-      {!sel ? (
-        <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '13px', margin: '12px 0' }}>Escribe al menos 2 letras del nombre para buscar.</p>
+          <div style={{ maxHeight: esMovil ? 'none' : '420px', overflowY: 'auto', border: `1px solid ${C.border}`, borderRadius: '10px' }}>
+            {visibles.length === 0 && <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '13px', margin: '14px 0' }}>Sin clientes para mostrar</p>}
+            {visibles.map((c, i) => {
+              const saldo = Math.max(c.valor - c.pagado, 0)
+              return (
+                <div key={c.id} onClick={() => cargarCliente(c)}
+                  style={{ padding: '9px 12px', cursor: 'pointer', borderTop: i ? '1px solid #f1f5f9' : 'none', background: i % 2 ? '#fafbfc' : 'white',
+                    display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#1a1a1a' }}>{c.nombre}</p>
+                    <p style={{ margin: '1px 0 0', fontSize: '11px', color: c.activos.length ? '#166534' : '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {c.activos.length ? c.activos.join(' · ') : `Sin taller activo${c.ultimaFin ? ' · terminó ' + fechaCorta(c.ultimaFin) : ''}`}
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                    {saldo > 0 ? <b style={{ color: '#991b1b' }}>Debe {formatPesos(saldo)}</b> : <span style={{ color: '#166534' }}>Al día</span>}
+                    {c.sinValor > 0 && <p style={{ margin: 0, fontSize: '11px', color: '#dc2626' }}>{c.sinValor} sin valor</p>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       ) : cargando ? (
         <p style={{ textAlign: 'center', color: '#aaa', fontSize: '13px' }}>Cargando…</p>
       ) : (
         <div>
+          <button onClick={() => { setSel(null); setIns([]) }}
+            style={{ padding: '4px 10px', marginBottom: '8px', borderRadius: '8px', border: `1px solid ${C.border}`, background: 'white', color: C.header, fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
+            ← Volver a la lista
+          </button>
           <p style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: 800, color: '#1a1a1a' }}>{sel.nombre}</p>
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '13px', color: '#4b5563', marginBottom: '12px' }}>
             <span>Acordado <b>{formatPesos(tot.valor)}</b></span>
