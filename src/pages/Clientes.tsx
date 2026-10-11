@@ -3,6 +3,7 @@ import { supabase } from '../supabase'
 import { auditar } from '../auditoria'
 import { calcularNumeracion } from '../utils/numeracionClases'
 import { eliminarInscripcionTaller, registrarPagoTaller } from '../utils/accionesTaller'
+import { eliminarCliente } from '../utils/accionesCliente'
 import { precioPropuestoTaller } from '../utils/preciosTaller'
 import { METODOS_PAGO, hoyLocal } from '../utils/accionesPago'
 import { ModalValorInscripcion } from './ModalesTaller'
@@ -854,18 +855,10 @@ await cargarDatosCliente(cliente)
       const { data: pendientes } = await supabase.from('clases').select('id').in('contrato_id', ids).in('estado', ['programada', 'confirmada']).gte('fecha', hoy)
       if (pendientes && pendientes.length > 0) { setErrorBorrar(`Este cliente tiene ${pendientes.length} clase(s) programada(s). Bórralas primero desde Horarios.`); setBorrando(false); return }
     }
-    const clienteId = clienteSeleccionado.id
-    if (ids.length > 0) {
-      const { data: inscrip } = await supabase.from('taller_inscripciones').select('id').eq('cliente_id', clienteId)
-      const inscripIds = (inscrip || []).map((i: any) => i.id)
-      if (inscripIds.length > 0) await supabase.from('taller_asistencias').delete().in('inscripcion_id', inscripIds)
-      await supabase.from('taller_inscripciones').delete().eq('cliente_id', clienteId)
-      await supabase.from('pagos').delete().in('contrato_id', ids)
-      await supabase.from('clases').delete().in('contrato_id', ids)
-      await supabase.from('contratos').delete().eq('cliente_id', clienteId)
-    }
-    const { error } = await supabase.from('clientes').delete().eq('id', clienteId)
-    if (error) { setErrorBorrar('Error al borrar: ' + error.message); setBorrando(false); return }
+    // Función única (eliminar_cliente): solo borra si no tiene clases dadas, pagos ni asistencias a talleres.
+    // Si tiene historial, no borra nada (se usa "Desactivar cliente"). Queda en Auditoría.
+    const r = await eliminarCliente(clienteSeleccionado.id)
+    if (!r.ok) { setErrorBorrar(r.mensaje); setBorrando(false); return }
     cargarVista(vistaActual); setModo('lista'); setBusqueda(''); setClientes([]); setBorrando(false)
   }
 
