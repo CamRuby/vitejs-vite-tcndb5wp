@@ -27,3 +27,23 @@ export async function desactivarCliente(clienteId: string, contratoId: string): 
   if (error) return { ok: false, codigo: 'error', mensaje: 'No se pudo desactivar: ' + error.message }
   return data as ResultadoAccion
 }
+
+/**
+ * Borra un plan SOLO si no tiene clases dadas ni pagos (función eliminar_plan).
+ * Si tiene historial no borra nada: se debe archivar. Queda en Auditoría.
+ */
+export async function eliminarPlan(contratoId: string): Promise<ResultadoAccion> {
+  const { data, error } = await supabase.rpc('eliminar_plan', { p_contrato_id: contratoId })
+  if (error) return { ok: false, codigo: 'error', mensaje: 'No se pudo borrar: ' + error.message }
+  return data as ResultadoAccion
+}
+
+/**
+ * Borra un cliente SOLO si no tiene clases dadas, pagos ni asistencias a talleres
+ * (función eliminar_cliente). Si tiene historial no borra nada: se debe desactivar. Queda en Auditoría.
+ */
+export async function eliminarCliente(clienteId: string): Promise<ResultadoAccion> {
+  const { data, error } = await supabase.rpc('eliminar_cliente', { p_cliente_id: clienteId })
+  if (error) return { ok: false, codigo: 'error', mensaje: 'No se pudo borrar: ' + error.message }
+  return data as ResultadoAccion
+}
