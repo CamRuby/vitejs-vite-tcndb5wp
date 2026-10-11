@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { calcularNumeracion } from '../utils/numeracionClases'
+import { eliminarPlan } from '../utils/accionesCliente'
 
 const TEAL = '#1a8a8a'     
 const TEAL_LIGHT = '#e8f5f5'
@@ -554,11 +555,11 @@ export default function AdminApp() {
 
   async function borrarPlanVacio(plan: Plan) {
     setConfirmarCambio({
-      mensaje: `¿Borrar el plan de ${plan.instrumento_nombre} (${plan.sede_nombre})? Solo se puede borrar si no tiene clases dadas.`,
+      mensaje: `¿Borrar el plan de ${plan.instrumento_nombre} (${plan.sede_nombre})? Solo se borra si no tiene clases dadas ni pagos; si los tiene, archívalo.`,
       accion: async () => {
-        await supabase.from('pagos').delete().eq('contrato_id', plan.id)
-        await supabase.from('clases').delete().eq('contrato_id', plan.id)
-        await supabase.from('contratos').delete().eq('id', plan.id)
+        // Función única (eliminar_plan): verifica que no tenga clases dadas ni pagos y deja registro en Auditoría
+        const r = await eliminarPlan(plan.id)
+        if (!r.ok) { alert(r.mensaje); return }
         setEditandoPlan(null)
         await cargarPlanes(plan.cliente_id)
         setMensajeOk('Plan eliminado')
