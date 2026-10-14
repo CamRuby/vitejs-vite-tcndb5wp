@@ -55,8 +55,8 @@ export default function RegistroCliente() {
   const set = (k: string, v: any) => setForm(p => ({ ...p, [k]: v }))
 
   async function enviar() {
-    if (!form.nombres.trim())  { setError('El nombre es obligatorio.'); return }
-    if (!form.apellidos.trim()) { setError('El apellido es obligatorio.'); return }
+    if (!form.nombres.trim())  { setError('El nombre del estudiante es obligatorio.'); return }
+    if (!form.apellidos.trim()) { setError('El apellido del estudiante es obligatorio.'); return }
     if (!form.telefono.trim()) { setError('El teléfono es obligatorio.'); return }
     setError(''); setEnviando(true)
 
@@ -121,12 +121,15 @@ export default function RegistroCliente() {
 
         {/* ── Datos personales ── */}
         <div style={{ marginBottom: '32px' }}>
-          <Seccion titulo="Datos personales" />
-          <Campo label="Nombres" required>
+          <Seccion titulo="Datos del estudiante" />
+          <p style={{ margin: '-6px 0 14px', fontSize: '13px', color: '#64748b', lineHeight: 1.4 }}>
+            Escribe aquí los datos de quien toma las clases. Si es menor de edad, los datos del acudiente van más abajo.
+          </p>
+          <Campo label="Nombres del estudiante" required>
             <input value={form.nombres} onChange={e => set('nombres', e.target.value)}
               placeholder="Ej: María Camila" style={inp} autoComplete="given-name" />
           </Campo>
-          <Campo label="Apellidos" required>
+          <Campo label="Apellidos del estudiante" required>
             <input value={form.apellidos} onChange={e => set('apellidos', e.target.value)}
               placeholder="Ej: Rodríguez Pérez" style={inp} autoComplete="family-name" />
           </Campo>
