@@ -1234,6 +1234,19 @@ if (err) setError('Error: ' + err.message)
       }
     } else {
 const updatePayload: any = { hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha }
+// Clase de una serie que se mueve SOLO esta vez (otra fecha, hora o salón): deja de ser parte de la serie.
+// Así pierde la franja rosada y los cambios futuros de la serie no la vuelven a mover.
+const horaOriginal = (claseEditando.hora || '').substring(0, 5)
+const seMovio = editFecha !== claseEditando.fecha || editHora !== horaOriginal || editSalonId !== (claseEditando.salones?.id || claseEditando.salon_id)
+if (claseEditando.recurrente && seMovio) {
+  updatePayload.recurrente = false
+  updatePayload.patron_id = null
+  auditar('reprogramar_clase', 'clases', claseEditando.id, {
+    cliente: (claseEditando as any).contratos?.clientes?.nombre || '—',
+    de: { fecha: claseEditando.fecha, hora: horaOriginal }, a: { fecha: editFecha, hora: editHora },
+    nota: 'Movida solo esta clase: sale de la serie recurrente'
+  })
+}
 if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalculado !== null) updatePayload.honorario_valor = honorarioCalculado
      if (editEstado === 'confirmada' && editConteoWhatsapp !== '') {
         await supabase.from('contratos').update({ conteo_whatsapp: Number(editConteoWhatsapp) }).eq('id', claseEditando.contratos.id)
@@ -1618,7 +1631,10 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                         return (
                           <div onClick={(e) => abrirClaseExistente(e, mainClass)} title="Clic para editar"
                             style={{
-                              background: col2.bg, color: col2.color, border: `1px solid ${col2.border}`,
+                              background: col2.bg, color: col2.color,
+                              // Bordes por lado (no usar "border" junto con "borderLeft": al cambiar de estado,
+                              // React reescribe el borde completo y se perdía la franja rosada)
+                              borderTop: `1px solid ${col2.border}`, borderRight: `1px solid ${col2.border}`, borderBottom: `1px solid ${col2.border}`,
                               // Clase recurrente: franja rosada a la izquierda, visible en cualquier estado
                               borderLeft: mainClass.recurrente ? `4px solid ${RECURRENTE_COLOR}` : `1px solid ${col2.border}`,
                               borderRadius: '6px', padding: '4px 7px',
