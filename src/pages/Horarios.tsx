@@ -85,7 +85,7 @@ const labelStyle: React.CSSProperties = {
 }
 
 // ── FIX 5: removed duplicate cancelada condition ──
-// Señal de clase recurrente (serie semanal): color propio, distinto a los estados
+// Color de la etiqueta "N sem" (semanas seguidas en el mismo horario) y del aviso de clase recurrente
 const RECURRENTE_COLOR = '#db2777'
 
 function getColorEstado(estado: string, revision?: boolean) {
@@ -1234,17 +1234,19 @@ if (err) setError('Error: ' + err.message)
       }
     } else {
 const updatePayload: any = { hora: editHora + ':00', duracion_min: parseInt(editDuracion), profesor_id: editProfesorId, salon_id: editSalonId, estado: editEstado, fecha: editFecha }
-// Clase de una serie que se mueve SOLO esta vez (otra fecha, hora o salón): deja de ser parte de la serie.
+// Clase de una serie que se cambia SOLO esta vez (otra fecha, hora, duración o salón): deja de ser parte de la serie.
 // Así pierde la franja rosada y los cambios futuros de la serie no la vuelven a mover.
 const horaOriginal = (claseEditando.hora || '').substring(0, 5)
-const seMovio = editFecha !== claseEditando.fecha || editHora !== horaOriginal || editSalonId !== (claseEditando.salones?.id || claseEditando.salon_id)
+const seMovio = editFecha !== claseEditando.fecha || editHora !== horaOriginal
+  || parseInt(editDuracion) !== Number(claseEditando.duracion_min || 60)
+  || editSalonId !== (claseEditando.salones?.id || claseEditando.salon_id)
 if (claseEditando.recurrente && seMovio) {
   updatePayload.recurrente = false
   updatePayload.patron_id = null
   auditar('reprogramar_clase', 'clases', claseEditando.id, {
     cliente: (claseEditando as any).contratos?.clientes?.nombre || '—',
-    de: { fecha: claseEditando.fecha, hora: horaOriginal }, a: { fecha: editFecha, hora: editHora },
-    nota: 'Movida solo esta clase: sale de la serie recurrente'
+    de: { fecha: claseEditando.fecha, hora: horaOriginal, duracion: claseEditando.duracion_min }, a: { fecha: editFecha, hora: editHora, duracion: parseInt(editDuracion) },
+    nota: 'Cambiada solo esta clase: sale de la serie recurrente'
   })
 }
 if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalculado !== null) updatePayload.honorario_valor = honorarioCalculado
@@ -1479,8 +1481,8 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
             </div>
           ))}
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <span style={{ fontSize: '10px', fontWeight: 800, background: RECURRENTE_COLOR, color: 'white', borderRadius: '4px', padding: '1px 5px' }}>↻ 8 sem</span>
-            <span style={{ fontSize: '12px', color: '#666' }}>Semanas seguidas en el mismo horario · borde rosado = serie recurrente</span>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: RECURRENTE_COLOR }}>8 sem</span>
+            <span style={{ fontSize: '12px', color: '#666' }}>Semanas seguidas en el mismo horario</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: TALLER_BG, border: `1px solid ${TALLER_BORDER}` }} />
@@ -1635,8 +1637,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                               // Bordes por lado (no usar "border" junto con "borderLeft": al cambiar de estado,
                               // React reescribe el borde completo y se perdía la franja rosada)
                               borderTop: `1px solid ${col2.border}`, borderRight: `1px solid ${col2.border}`, borderBottom: `1px solid ${col2.border}`,
-                              // Clase recurrente: franja rosada a la izquierda, visible en cualquier estado
-                              borderLeft: mainClass.recurrente ? `4px solid ${RECURRENTE_COLOR}` : `1px solid ${col2.border}`,
+                              borderLeft: `1px solid ${col2.border}`,
                               borderRadius: '6px', padding: '4px 7px',
                               fontSize: vista === 'dia' ? '13px' : '11px',
                               cursor: 'pointer', height: 'calc(100% - 4px)',
@@ -1663,9 +1664,9 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                               const txt = ns > MAX_SEMANAS ? `${MAX_SEMANAS}+` : String(ns)
                               const etiqueta = ns >= 2 ? (
                                 <span title={`${txt} semanas seguidas en este mismo día y hora`}
-                                  style={{ fontSize: vista === 'dia' ? '10px' : '9px', fontWeight: 800, background: RECURRENTE_COLOR, color: 'white', flexShrink: 0,
-                                    borderRadius: '4px', padding: vista === 'dia' ? '1px 5px' : '0 3px', lineHeight: 1.4, whiteSpace: 'nowrap', marginLeft: 'auto' }}>
-                                  {vista === 'dia' ? `↻ ${txt} sem` : `↻${txt}`}
+                                  style={{ fontSize: vista === 'dia' ? '11px' : '9px', fontWeight: 700, color: RECURRENTE_COLOR, flexShrink: 0,
+                                    lineHeight: 1.4, whiteSpace: 'nowrap', marginLeft: 'auto' }}>
+                                  {txt} sem
                                 </span>
                               ) : null
                               if (vista !== 'dia') return etiqueta ? <div style={{ display: 'flex', marginTop: '1px' }}>{etiqueta}</div> : null
@@ -2353,7 +2354,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                       ⚠️ El salón pertenece a <strong>{sedes.find(s => s.id === claseEditando.salones?.sede_id)?.nombre || 'otra sede'}</strong>, pero el plan es de <strong>{sedes.find(s => s.id === claseEditando.contratos?.sede_id)?.nombre || 'otra sede'}</strong>
                     </div>
                   )}
-                  {claseEditando.recurrente && <div style={{ marginTop: '6px', display: 'inline-block', background: RECURRENTE_COLOR, color: 'white', fontWeight: '700', fontSize: '12px', borderRadius: '6px', padding: '2px 8px' }}>↻ Clase recurrente (semanal)</div>}
+                  {claseEditando.recurrente && <div style={{ marginTop: '6px', color: RECURRENTE_COLOR, fontWeight: '700', fontSize: '12px' }}>🔁 Clase recurrente (semanal)</div>}
                   {esBloqueada(claseEditando) && <div style={{ marginTop: '6px', color: '#854d0e', fontWeight: '600', fontSize: '12px' }}>🔒 No se puede editar — solo borrar si es necesario</div>}
                 </div>
               )}
