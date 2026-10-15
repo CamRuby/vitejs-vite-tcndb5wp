@@ -1634,29 +1634,44 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                                 {numPlan && vista === 'dia' && (
                                   <span style={{ fontSize: '12px', fontWeight: '700', opacity: 0.9, whiteSpace: 'nowrap' }}>{numPlan}</span>
                                 )}
-                                {(semanasMap[mainClass.id] || 0) >= 2 && (() => {
-                                  const n = semanasMap[mainClass.id]
-                                  const txt = n > MAX_SEMANAS ? `${MAX_SEMANAS}+` : String(n)
-                                  return (
-                                    <span title={`${txt} semanas seguidas en este mismo día y hora`}
-                                      style={{ fontSize: vista === 'dia' ? '10px' : '9px', fontWeight: 800, background: RECURRENTE_COLOR, color: 'white',
-                                        borderRadius: '4px', padding: vista === 'dia' ? '1px 5px' : '0 3px', lineHeight: 1.4, whiteSpace: 'nowrap' }}>
-                                      {vista === 'dia' ? `↻ ${txt} sem` : `↻${txt}`}
-                                    </span>
-                                  )
-                                })()}
                                 {mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && <span style={{ fontSize: '23px' }}>⚠️</span>}
                                 {mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && mainClass.honorario_valor === null && vista === 'dia' && (
                                 <span style={{ fontSize: '23px', background: '#fff7ed', color: '#c2410c', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>💰</span>
                                   )}
                               </div>
                             </div>
-                            {vista === 'dia' && mainClass.profesores?.nombre && (
-                              <div style={{ fontSize: '12px', opacity: 0.85, marginTop: '1px' }}>{mainClass.profesores.nombre}</div>
-                            )}
-                            {vista === 'dia' && rowSpan >= 3 && (
-                              <div style={{ fontSize: '11px', opacity: 0.75, marginTop: '1px' }}>{mainClass.contratos?.instrumentos?.nombre}</div>
-                            )}
+                            {(() => {
+                              // Etiqueta rosada de semanas seguidas: abajo a la derecha, en el renglón del instrumento
+                              // (o del profesor si la clase es corta; en la vista semanal, en un renglón propio)
+                              const ns = semanasMap[mainClass.id] || 0
+                              const txt = ns > MAX_SEMANAS ? `${MAX_SEMANAS}+` : String(ns)
+                              const etiqueta = ns >= 2 ? (
+                                <span title={`${txt} semanas seguidas en este mismo día y hora`}
+                                  style={{ fontSize: vista === 'dia' ? '10px' : '9px', fontWeight: 800, background: RECURRENTE_COLOR, color: 'white', flexShrink: 0,
+                                    borderRadius: '4px', padding: vista === 'dia' ? '1px 5px' : '0 3px', lineHeight: 1.4, whiteSpace: 'nowrap', marginLeft: 'auto' }}>
+                                  {vista === 'dia' ? `↻ ${txt} sem` : `↻${txt}`}
+                                </span>
+                              ) : null
+                              if (vista !== 'dia') return etiqueta ? <div style={{ display: 'flex', marginTop: '1px' }}>{etiqueta}</div> : null
+                              const conInstrumento = rowSpan >= 3
+                              return (
+                                <>
+                                  {mainClass.profesores?.nombre && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '1px' }}>
+                                      <span style={{ fontSize: '12px', opacity: 0.85, minWidth: 0 }}>{mainClass.profesores.nombre}</span>
+                                      {!conInstrumento && etiqueta}
+                                    </div>
+                                  )}
+                                  {conInstrumento && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '1px' }}>
+                                      <span style={{ fontSize: '11px', opacity: 0.75, minWidth: 0 }}>{mainClass.contratos?.instrumentos?.nombre}</span>
+                                      {etiqueta}
+                                    </div>
+                                  )}
+                                  {!mainClass.profesores?.nombre && !conInstrumento && etiqueta && <div style={{ display: 'flex' }}>{etiqueta}</div>}
+                                </>
+                              )
+                            })()}
                           </div>
                         )
                       })()}
