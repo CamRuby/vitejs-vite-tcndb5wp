@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../supabase'
 import { auditar } from '../auditoria'
 import { calcularNumeracion } from '../utils/numeracionClases'
+import { semanasSeguidas, claveSlot, fechaMinimaHistorial, MAX_SEMANAS } from '../utils/semanasSeguidas'
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
 const TEAL_MID = '#b2d8d8'
@@ -84,6 +85,9 @@ const labelStyle: React.CSSProperties = {
 }
 
 // ── FIX 5: removed duplicate cancelada condition ──
+// Señal de clase recurrente (serie semanal): color propio, distinto a los estados
+const RECURRENTE_COLOR = '#db2777'
+
 function getColorEstado(estado: string, revision?: boolean) {
   if (revision) return { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' }
   switch (estado) {
@@ -123,6 +127,8 @@ export default function Horarios() {
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [recurrente, setRecurrente] = useState(false)
+  // Semanas seguidas en el mismo día y hora, por clase (etiqueta rosada ↻)
+  const [semanasMap, setSemanasMap] = useState<Record<string, number>>({})
   const [fechaFinRecurrencia, setFechaFinRecurrencia] = useState(`${new Date().getFullYear()}-12-31`)
   const [avisoCrear, setAvisoCrear] = useState<string[]>([])
   const [confirmarSedeDiferente, setConfirmarSedeDiferente] = useState(false)
@@ -388,6 +394,35 @@ const clasesConNumero = clasesFiltradas.map((c: any) => ({
 }))
 setClases(clasesConNumero)
 setCargando(false)
+cargarSemanasSeguidas(clasesFiltradas, fechaInicio, fechaFin)
+  }
+
+  // Cuenta cuántas semanas seguidas lleva cada estudiante en el mismo día y hora (utils/semanasSeguidas).
+  // Se carga después de mostrar el horario para no hacerlo más lento.
+  async function cargarSemanasSeguidas(clasesVista: any[], fechaInicio: string, fechaFin: string) {
+    const clientes = [...new Set(clasesVista.map((c: any) => c.contratos?.clientes?.id).filter(Boolean))] as string[]
+    if (clientes.length === 0) { setSemanasMap({}); return }
+    const historial = new Set<string>()
+    for (let k = 0; k < clientes.length; k += 100) {
+      const lote = clientes.slice(k, k + 100)
+      for (let desde = 0; ; desde += 1000) {
+        const { data, error } = await supabase.from('clases')
+          .select('fecha, hora, contratos!inner(cliente_id)')
+          .in('contratos.cliente_id', lote)
+          .gte('fecha', fechaMinimaHistorial(fechaInicio)).lte('fecha', fechaFin)
+          .not('hora', 'is', null)
+          .range(desde, desde + 999)
+        if (error) { setSemanasMap({}); return }
+        ;(data || []).forEach((c: any) => historial.add(claveSlot(c.contratos?.cliente_id, c.fecha, c.hora)))
+        if (!data || data.length < 1000) break
+      }
+    }
+    const mapa: Record<string, number> = {}
+    clasesVista.forEach((c: any) => {
+      const cli = c.contratos?.clientes?.id
+      if (cli && c.hora) mapa[c.id] = semanasSeguidas({ clienteId: cli, fecha: c.fecha, hora: c.hora }, historial)
+    })
+    setSemanasMap(mapa)
   }
 
   async function cargarTalleres() {
@@ -1431,8 +1466,8 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
             </div>
           ))}
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <span style={{ fontSize: '12px' }}>🔁</span>
-            <span style={{ fontSize: '12px', color: '#666' }}>Recurrente</span>
+            <span style={{ fontSize: '10px', fontWeight: 800, background: RECURRENTE_COLOR, color: 'white', borderRadius: '4px', padding: '1px 5px' }}>↻ 8 sem</span>
+            <span style={{ fontSize: '12px', color: '#666' }}>Semanas seguidas en el mismo horario · borde rosado = serie recurrente</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: TALLER_BG, border: `1px solid ${TALLER_BORDER}` }} />
@@ -1584,6 +1619,8 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                           <div onClick={(e) => abrirClaseExistente(e, mainClass)} title="Clic para editar"
                             style={{
                               background: col2.bg, color: col2.color, border: `1px solid ${col2.border}`,
+                              // Clase recurrente: franja rosada a la izquierda, visible en cualquier estado
+                              borderLeft: mainClass.recurrente ? `4px solid ${RECURRENTE_COLOR}` : `1px solid ${col2.border}`,
                               borderRadius: '6px', padding: '4px 7px',
                               fontSize: vista === 'dia' ? '13px' : '11px',
                               cursor: 'pointer', height: 'calc(100% - 4px)',
@@ -1597,7 +1634,17 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                                 {numPlan && vista === 'dia' && (
                                   <span style={{ fontSize: '12px', fontWeight: '700', opacity: 0.9, whiteSpace: 'nowrap' }}>{numPlan}</span>
                                 )}
-                                {mainClass.recurrente && <span style={{ fontSize: '9px' }}>🔁</span>}
+                                {(semanasMap[mainClass.id] || 0) >= 2 && (() => {
+                                  const n = semanasMap[mainClass.id]
+                                  const txt = n > MAX_SEMANAS ? `${MAX_SEMANAS}+` : String(n)
+                                  return (
+                                    <span title={`${txt} semanas seguidas en este mismo día y hora`}
+                                      style={{ fontSize: vista === 'dia' ? '10px' : '9px', fontWeight: 800, background: RECURRENTE_COLOR, color: 'white',
+                                        borderRadius: '4px', padding: vista === 'dia' ? '1px 5px' : '0 3px', lineHeight: 1.4, whiteSpace: 'nowrap' }}>
+                                      {vista === 'dia' ? `↻ ${txt} sem` : `↻${txt}`}
+                                    </span>
+                                  )
+                                })()}
                                 {mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && <span style={{ fontSize: '23px' }}>⚠️</span>}
                                 {mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && mainClass.honorario_valor === null && vista === 'dia' && (
                                 <span style={{ fontSize: '23px', background: '#fff7ed', color: '#c2410c', padding: '1px 4px', borderRadius: '4px', fontWeight: '700' }}>💰</span>
@@ -2275,7 +2322,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                       ⚠️ El salón pertenece a <strong>{sedes.find(s => s.id === claseEditando.salones?.sede_id)?.nombre || 'otra sede'}</strong>, pero el plan es de <strong>{sedes.find(s => s.id === claseEditando.contratos?.sede_id)?.nombre || 'otra sede'}</strong>
                     </div>
                   )}
-                  {claseEditando.recurrente && <div style={{ marginTop: '6px', color: TEAL, fontWeight: '600', fontSize: '12px' }}>🔁 Clase recurrente</div>}
+                  {claseEditando.recurrente && <div style={{ marginTop: '6px', display: 'inline-block', background: RECURRENTE_COLOR, color: 'white', fontWeight: '700', fontSize: '12px', borderRadius: '6px', padding: '2px 8px' }}>↻ Clase recurrente (semanal)</div>}
                   {esBloqueada(claseEditando) && <div style={{ marginTop: '6px', color: '#854d0e', fontWeight: '600', fontSize: '12px' }}>🔒 No se puede editar — solo borrar si es necesario</div>}
                 </div>
               )}
