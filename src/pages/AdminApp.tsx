@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import { contieneSinTildes } from '../utils/busqueda'
 import { calcularNumeracion } from '../utils/numeracionClases'
 import { eliminarPlan } from '../utils/accionesCliente'
 
@@ -411,7 +412,7 @@ export default function AdminApp() {
 
   const clientesFiltrados = clientes
     .filter(c => {
-      if (busqueda && !c.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
+      if (busqueda && !contieneSinTildes(c.nombre || '', busqueda)) return false   // sin importar tildes
       if (filtroSede && c.sede_id !== filtroSede) return false
       return true
     })
