@@ -5,6 +5,7 @@ import SeccionInicio from './SeccionInicio'
 import ClientesNuevos from './ClientesNuevos'
 import PlanesSinPago from './PlanesSinPago'
 import PlanesSinRenovar from './PlanesSinRenovar'
+import PlanesAplazados from './PlanesAplazados'
 import TalleresInicio from './TalleresInicio'
 
 const DIAS_L   = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado']
@@ -152,6 +153,8 @@ export default function Inicio({ onNavegar }: {
             <TalleresInicio esMovil={esMovil} />
 
             <PlanesSinRenovar esMovil={esMovil} />
+
+            <PlanesAplazados esMovil={esMovil} onNavegar={onNavegar} />
 
             {PROXIMAMENTE.map(proximamente)}
       </div>
