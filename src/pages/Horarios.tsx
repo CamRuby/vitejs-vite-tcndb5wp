@@ -681,10 +681,10 @@ async function verificarConflictosEnMemoria(
         .select('*').eq('id', planActualId).single()
       if (errorBuscar || !planActual) { alert('Error buscando plan: ' + errorBuscar?.message); return }
       // Confirmación con el estado real del plan (clases dadas), para no renovar un plan sin terminar por error
-      const { data: dadasPlan } = await supabase.from('clases').select('duracion_min')
+      const { data: dadasPlan } = await supabase.from('clases').select('duracion_min, es_cortesia')
         .eq('contrato_id', planActualId).eq('estado', 'dada')
       const durP = Number(planActual.duracion_min) || 60
-      const dadas = parseFloat(((dadasPlan || []).reduce((t: number, c: any) => t + (Number(c.duracion_min) || durP) / durP, 0)).toFixed(2))
+      const dadas = parseFloat(((dadasPlan || []).filter((c: any) => !c.es_cortesia).reduce((t: number, c: any) => t + (Number(c.duracion_min) || durP) / durP, 0)).toFixed(2))
       const total = Number(planActual.total_clases || 0)
       const aviso = dadas < total
         ? `⚠️ El plan actual lleva ${dadas} de ${total} clases dadas: NO ha terminado.\n\nRevisa primero las clases confirmadas y sus duraciones.\n\n¿Seguro que quieres archivarlo y crear un plan nuevo?`
@@ -2444,9 +2444,9 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                                 const total = claseEditando.contratos?.total_clases ?? 0
                                 const durPlan = claseEditando.contratos?.duracion_min || claseEditando.duracion_min || 60
                                 // Clases dadas reales del plan (no el contador guardado, que se puede desfasar)
-                                const { data: dadasPlan } = await supabase.from('clases').select('duracion_min')
+                                const { data: dadasPlan } = await supabase.from('clases').select('duracion_min, es_cortesia')
                                   .eq('contrato_id', claseEditando.contratos.id).eq('estado', 'dada')
-                                const tomadas = parseFloat(((dadasPlan || []).reduce((t: number, c: any) => t + (Number(c.duracion_min) || durPlan) / durPlan, 0)).toFixed(4))
+                                const tomadas = parseFloat(((dadasPlan || []).filter((c: any) => !c.es_cortesia).reduce((t: number, c: any) => t + (Number(c.duracion_min) || durPlan) / durPlan, 0)).toFixed(4))
                                 // Contar fracciones de clases ya confirmadas de este contrato (excluir la actual)
                                 const { data: otrasConfirmadas } = await supabase.from('clases')
                                   .select('duracion_min')
