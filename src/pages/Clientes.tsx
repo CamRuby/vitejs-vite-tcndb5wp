@@ -8,6 +8,7 @@ import { eliminarCliente } from '../utils/accionesCliente'
 import { precioPropuestoTaller } from '../utils/preciosTaller'
 import { METODOS_PAGO, hoyLocal } from '../utils/accionesPago'
 import { ModalValorInscripcion } from './ModalesTaller'
+import ModalAplazar from './ModalAplazar'
 import pdfMake from 'pdfmake/build/pdfmake'
 import pdfFonts from 'pdfmake/build/vfs_fonts'
 pdfMake.vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).vfs
@@ -642,7 +643,8 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
   const [pagosPlanes, setPagosPlanes]       = useState<Record<string, any[]>>({})
   const [pagosTalleres, setPagosTalleres]   = useState<Record<string, any[]>>({})
   const [modalAbonoTaller, setModalAbonoTaller] = useState<any>(null)
-  const [insValorando, setInsValorando] = useState<any>(null)   // inscripción a la que se le pone/edita el valor
+  const [insValorando, setInsValorando] = useState<any>(null)
+  const [aplazando, setAplazando] = useState(false)   // ventana "Aplazar clases" del cliente   // inscripción a la que se le pone/edita el valor
   const [pagosActivosTotales, setPagosActivosTotales] = useState<Record<string, number>>({})
   const [modalAbono, setModalAbono] = useState<any>(null)
   const [abonoGuardando, setAbonoGuardando] = useState(false)
@@ -1893,10 +1895,17 @@ await cargarDatosCliente(cliente)
 
                 <div style={{ paddingTop: '12px', borderTop: '1px solid #f1f5f9', marginTop: '10px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '12px', color: '#999' }}>Estado:</span>
-                  {['activo', 'aplazado', 'completado'].map(est2 => {
+                  {/* "aplazado" como estado de plan ya no se usa (dejaba al cliente "sin plan activo"); se usa "Aplazar clases" */}
+                  {(p.estado === 'aplazado' ? ['activo', 'aplazado', 'completado'] : ['activo', 'completado']).map(est2 => {
                     const c2 = colorEstadoPlan(est2); const esActual = (p.estado || 'activo') === est2
                     return <button key={est2} onClick={() => !esActual && cambiarEstadoPlan(p.id, est2)} disabled={esActual} style={{ padding: '5px 14px', borderRadius: '8px', cursor: esActual ? 'default' : 'pointer', fontSize: '12px', fontWeight: '600', border: `1px solid ${esActual ? c2.border : '#e2e8f0'}`, background: esActual ? c2.bg : 'white', color: esActual ? c2.color : '#666' }}>{est2.charAt(0).toUpperCase() + est2.slice(1)}</button>
                   })}
+                  {(p.estado || 'activo') === 'activo' && (
+                    <button onClick={() => setAplazando(true)} title="El cliente se ausenta: sus clases de ese periodo salen del horario"
+                      style={{ marginLeft: 'auto', padding: '5px 14px', background: 'white', color: '#0e7490', border: '1px solid #a5f3fc', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
+                      ⏸ Aplazar clases
+                    </button>
+                  )}
                   {p.estado === 'completado' && (
                     <>
                       <button onClick={() => { setEsRenovacion(true); setModalPlan(p) }} style={{ marginLeft: '8px', padding: '5px 16px', background: '#0f766e', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>🔄 Renovar plan</button>
@@ -2423,6 +2432,12 @@ await cargarDatosCliente(cliente)
             </div>
           </div>
         </div>
+      )}
+
+      {aplazando && clienteSeleccionado && (
+        <ModalAplazar clienteId={clienteSeleccionado.id} clienteNombre={clienteSeleccionado.nombre || '—'}
+          onCerrar={() => setAplazando(false)}
+          onListo={async (m) => { setAplazando(false); alert(m); await cargarDatosCliente(clienteSeleccionado) }} />
       )}
 
       {insValorando && (
