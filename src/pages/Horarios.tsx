@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../supabase'
 import { auditar } from '../auditoria'
 import { calcularNumeracion } from '../utils/numeracionClases'
+import { hoyLocal } from '../utils/accionesPago'
 import { semanasSeguidas, claveSlot, fechaMinimaHistorial, MAX_SEMANAS } from '../utils/semanasSeguidas'
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
@@ -121,6 +122,8 @@ export default function Horarios() {
   const [clientesBuscados, setClientesBuscados] = useState<any[]>([])
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null)
   const [contratos, setContratos] = useState<any[]>([])
+  // Mientras se cargan los planes del cliente no se muestra "Sin plan activo" (evita renovar por error)
+  const [cargandoContratos, setCargandoContratos] = useState(false)
   const [contratoSeleccionado, setContratoSeleccionado] = useState<any>(null)
   const [duracion, setDuracion] = useState('60')
   const [profesorId, setProfesorId] = useState('')
@@ -636,10 +639,12 @@ async function verificarConflictosEnMemoria(
     setClienteSeleccionado(c)
     setBusquedaCliente(c.nombre)
     setClientesBuscados([])
+    setContratos([]); setCargandoContratos(true)
     const { data } = await supabase.from('contratos')
       .select('id, total_clases, clases_tomadas, duracion_min, sede_id, conteo_whatsapp, instrumentos(nombre), profesores(id, nombre)')
       .eq('cliente_id', c.id).eq('estado', 'activo')
     setContratos(data || [])
+    setCargandoContratos(false)
     if (data?.length) {
       const ct = data[0] as any
       console.log('ct.conteo_whatsapp:', ct.conteo_whatsapp, 'ct:', ct)
@@ -671,9 +676,19 @@ async function verificarConflictosEnMemoria(
       const { data: planActual, error: errorBuscar } = await supabase.from('contratos')
         .select('*').eq('id', planActualId).single()
       if (errorBuscar || !planActual) { alert('Error buscando plan: ' + errorBuscar?.message); return }
+      // Confirmación con el estado real del plan (clases dadas), para no renovar un plan sin terminar por error
+      const { data: dadasPlan } = await supabase.from('clases').select('duracion_min')
+        .eq('contrato_id', planActualId).eq('estado', 'dada')
+      const durP = Number(planActual.duracion_min) || 60
+      const dadas = parseFloat(((dadasPlan || []).reduce((t: number, c: any) => t + (Number(c.duracion_min) || durP) / durP, 0)).toFixed(2))
+      const total = Number(planActual.total_clases || 0)
+      const aviso = dadas < total
+        ? `⚠️ El plan actual lleva ${dadas} de ${total} clases dadas: NO ha terminado.\n\nRevisa primero las clases confirmadas y sus duraciones.\n\n¿Seguro que quieres archivarlo y crear un plan nuevo?`
+        : `El plan actual tiene ${dadas} de ${total} clases dadas.\n\n¿Crear el plan nuevo?`
+      if (!window.confirm(aviso)) return
       const { id: _id, created_at: _ca, clases_tomadas: _ct, estado: _est,
               fecha_inicio: _fi, fecha_fin: _ff, updated_at: _ua, ...camposCopiados } = planActual
-      const hoy = new Date().toISOString().slice(0, 10)
+      const hoy = hoyLocal()
       // Crear nuevo plan
       const { data: nuevoContrato, error } = await supabase.from('contratos').insert({
         ...camposCopiados,
@@ -683,6 +698,10 @@ async function verificarConflictosEnMemoria(
         fecha_fin: null,
       }).select().single()
       if (error || !nuevoContrato) { alert('Error al renovar el plan: ' + (error?.message || '')); return }
+      auditar('renovar_plan', 'contratos', nuevoContrato.id, {
+        cliente: claseEditando?.contratos?.clientes?.nombre || '—', desde: 'horarios_limite_del_plan',
+        plan_anterior: planActualId, dadas_plan_anterior: dadas, total_plan_anterior: total
+      })
       // Archivar el plan viejo
       await supabase.from('contratos').update({ estado: 'archivado' }).eq('id', planActualId)
       // Mover todas las clases programadas del plan viejo al nuevo
@@ -714,12 +733,24 @@ async function verificarConflictosEnMemoria(
         setRenovando(false)
         return
       }
-      // Priorizar 'completado' (el recién terminado) sobre 'archivado'
-      const completado = planes.find((p: any) => p.estado === 'completado')
-      const ultimo = completado || planes[0]
+      // Seguridad: si el cliente YA tiene un plan activo, no se crea otro (evita planes fantasma)
+      const { data: activos } = await supabase.from('contratos').select('id, fecha_inicio, total_clases')
+        .eq('cliente_id', clienteSeleccionado.id).eq('estado', 'activo')
+      if (activos && activos.length > 0) {
+        alert(`Este cliente ya tiene un plan activo (desde ${activos[0].fecha_inicio}, ${activos[0].total_clases} clases). No se creó un plan nuevo.`)
+        await seleccionarCliente(clienteSeleccionado)
+        setRenovando(false); return
+      }
+      // Priorizar 'completado' (el recién terminado); si no hay, el más reciente
+      const ordenados = [...planes].sort((a: any, b: any) => (b.fecha_inicio || '').localeCompare(a.fecha_inicio || ''))
+      const completado = ordenados.find((p: any) => p.estado === 'completado')
+      const ultimo = completado || ordenados[0]
+      if (!window.confirm(`¿Crear un plan nuevo de ${ultimo.total_clases} clases para ${clienteSeleccionado.nombre}, copiando el plan del ${ultimo.fecha_inicio}?`)) {
+        setRenovando(false); return
+      }
       const { id: oldPlanId, created_at: _ca, clases_tomadas: _ct, estado: _est,
               fecha_inicio: _fi, fecha_fin: _ff, updated_at: _ua, ...camposCopiados } = ultimo
-      const hoy = new Date().toISOString().slice(0, 10)
+      const hoy = hoyLocal()
       // Crear nuevo plan y obtener su ID
       const { data: nuevoContrato, error } = await supabase.from('contratos').insert({
         ...camposCopiados,
@@ -729,6 +760,10 @@ async function verificarConflictosEnMemoria(
         fecha_fin: null,
       }).select().single()
       if (error || !nuevoContrato) { alert('Error al renovar el plan: ' + error?.message); setRenovando(false); return }
+      auditar('renovar_plan', 'contratos', nuevoContrato.id, {
+        cliente: clienteSeleccionado.nombre, desde: 'horarios_sin_plan_activo', plan_anterior: oldPlanId,
+        plan_anterior_inicio: ultimo.fecha_inicio, total_clases: ultimo.total_clases
+      })
       // Archivar el plan viejo
       await supabase.from('contratos').update({ estado: 'archivado' }).eq('id', oldPlanId)
       // Mover todas las clases programadas del plan viejo al nuevo
@@ -1760,7 +1795,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                     )}
                   </div>
 
-                  {clienteSeleccionado && contratos.length === 0 && (
+                  {clienteSeleccionado && !cargandoContratos && contratos.length === 0 && (
                     <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px' }}>
                       <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#991b1b' }}>🚫 Sin plan activo</p>
                       <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#7f1d1d' }}>Este cliente no tiene un plan activo. Crea el plan desde <strong>Clientes</strong> antes de asignar la clase.</p>
@@ -2402,9 +2437,12 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                           return (
                            <button key={est} onClick={async () => {
                               if (est === 'confirmada' && editEstado !== 'confirmada') {
-                                const tomadas = claseEditando.contratos?.clases_tomadas ?? 0
                                 const total = claseEditando.contratos?.total_clases ?? 0
                                 const durPlan = claseEditando.contratos?.duracion_min || claseEditando.duracion_min || 60
+                                // Clases dadas reales del plan (no el contador guardado, que se puede desfasar)
+                                const { data: dadasPlan } = await supabase.from('clases').select('duracion_min')
+                                  .eq('contrato_id', claseEditando.contratos.id).eq('estado', 'dada')
+                                const tomadas = parseFloat(((dadasPlan || []).reduce((t: number, c: any) => t + (Number(c.duracion_min) || durPlan) / durPlan, 0)).toFixed(4))
                                 // Contar fracciones de clases ya confirmadas de este contrato (excluir la actual)
                                 const { data: otrasConfirmadas } = await supabase.from('clases')
                                   .select('duracion_min')
