@@ -4,6 +4,7 @@ import { patronSinTildes } from '../utils/busqueda'
 import { auditar } from '../auditoria'
 import { calcularNumeracion } from '../utils/numeracionClases'
 import { hoyLocal } from '../utils/accionesPago'
+import ModalAplazar from './ModalAplazar'
 import { semanasSeguidas, claveSlot, fechaMinimaHistorial, MAX_SEMANAS } from '../utils/semanasSeguidas'
 const TEAL = '#1a8a8a'
 const TEAL_LIGHT = '#e8f5f5'
@@ -200,6 +201,7 @@ export default function Horarios() {
   const [conteoWhatsapp, setConteoWhatsapp] = useState<number | ''>('')
   const [editConteoWhatsapp, setEditConteoWhatsapp] = useState<number | ''>('')
   const [renovando, setRenovando] = useState(false)
+  const [aplazandoCliente, setAplazandoCliente] = useState<{ id: string; nombre: string; desde: string } | null>(null)
   const columns = useMemo(() => {
     if (vista === 'semana') {
       return fechasSemana.flatMap((fecha, i) =>
@@ -349,6 +351,7 @@ export default function Horarios() {
       .gte('fecha', fechaInicio)
       .lte('fecha', fechaFin)
       .not('hora', 'is', null)
+      .neq('estado', 'aplazada')   // clases aplazadas (cliente ausente) no se muestran
     const clasesFiltradas = (data || []).filter((c: any) => c.salones?.sede_id === sedeSeleccionada)
 const contratosUnicos = [...new Set(clasesFiltradas.map((c: any) => c.contratos?.id).filter(Boolean))]
 let numeracionMap: Map<string, number> = new Map()
@@ -477,9 +480,9 @@ async function verificarConflictosEnMemoria(
 
   const [{ data: clasesSalon }, { data: clasesProfesor }, { data: talleresProfesor }, { data: talleresSalon }] = await Promise.all([
     supabase.from('clases').select('id, fecha, hora, duracion_min, contratos(clientes(nombre))')
-      .eq('salon_id', salonId).neq('estado', 'cancelada').gte('fecha', fechaMin).lte('fecha', fechaMax),
+      .eq('salon_id', salonId).not('estado', 'in', '(cancelada,aplazada)').gte('fecha', fechaMin).lte('fecha', fechaMax),
     profId ? supabase.from('clases').select('id, fecha, hora, duracion_min, contratos(clientes(nombre))')
-      .eq('profesor_id', profId).neq('estado', 'cancelada').gte('fecha', fechaMin).lte('fecha', fechaMax) : Promise.resolve({ data: [] }),
+      .eq('profesor_id', profId).not('estado', 'in', '(cancelada,aplazada)').gte('fecha', fechaMin).lte('fecha', fechaMax) : Promise.resolve({ data: [] }),
     profId ? supabase.from('talleres').select('id, nombre, hora, duracion_min, dia_semana, fecha_unica, fecha_fin_vacacional')
       .eq('profesor_id', profId).neq('estado', 'archivado') : Promise.resolve({ data: [] }),
     supabase.from('talleres').select('id, nombre, salon_id, hora, duracion_min, dia_semana, fecha_unica, fecha_fin_vacacional')
@@ -503,7 +506,7 @@ async function verificarConflictosEnMemoria(
     // Sesiones de talleres con salón base DIFERENTE que fueron movidas a este salón
     supabase.from('taller_sesiones')
       .select('taller_id, fecha, hora, salon_id, estado, talleres(id, nombre, duracion_min)')
-      .eq('salon_id', salonId).neq('estado', 'cancelada')
+      .eq('salon_id', salonId).not('estado', 'in', '(cancelada,aplazada)')
       .gte('fecha', fechaMin).lte('fecha', fechaMax)
   ])
   const sesionesTallerMap: Record<string, any> = {}
@@ -2693,6 +2696,12 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                 )
               )}
 
+              {!esBloqueada(claseEditando) && ['programada', 'confirmada'].includes(claseEditando.estado) && claseEditando.contratos?.clientes?.id && !confirmarBorrar && (
+                <button onClick={() => setAplazandoCliente({ id: claseEditando.contratos.clientes.id, nombre: claseEditando.contratos.clientes.nombre, desde: claseEditando.fecha })}
+                  style={{ width: '100%', padding: '9px', marginBottom: '8px', background: 'white', color: '#0e7490', border: '1px solid #a5f3fc', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
+                  ⏸ Aplazar clases del cliente (se ausenta)
+                </button>
+              )}
                              {!(esBloqueada(claseEditando) || (claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia)) && (
                   !confirmarBorrar ? (
                     <button onClick={() => setConfirmarBorrar(true)} style={{ width: '100%', padding: '10px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Borrar clase</button>
@@ -2727,6 +2736,11 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
             </div>
           </div>
         </div>
+      )}
+      {aplazandoCliente && (
+        <ModalAplazar clienteId={aplazandoCliente.id} clienteNombre={aplazandoCliente.nombre} desdeInicial={aplazandoCliente.desde}
+          onCerrar={() => setAplazandoCliente(null)}
+          onListo={(m) => { setAplazandoCliente(null); setModalEditar(false); alert(m); cargarClases() }} />
       )}
     </div>
   )
