@@ -17,7 +17,7 @@ const VARIANTES: Record<string, string> = {
 }
 
 /**
- * Patrón para buscar en la base de datos con `.imatch('nombre', patron)`:
+ * Patrón para buscar en la base de datos con `.regexIMatch('nombre', patron)`:
  * cada vocal (y la n) acepta su versión con o sin tilde.
  */
 export function patronSinTildes(buscado: string): string {
