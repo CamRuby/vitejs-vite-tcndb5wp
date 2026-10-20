@@ -705,7 +705,7 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
 
   async function buscarClientes() {
     setCargando(true)
-    const { data } = await supabase.from('clientes').select('id, nombre, nombres, apellidos, telefono, email, grupo_whatsapp, estado, created_at, fecha_nacimiento, numero_identificacion, ocupacion, direccion, ciudad, contacto_emergencia_nombre, contacto_emergencia_telefono, menor_de_edad, acudiente_nombres, acudiente_apellidos, acudiente_telefono, acudiente_documento, discapacidad_fisica, condicion_aprendizaje').imatch('nombre', patronSinTildes(busqueda)).order('nombre').limit(20)
+    const { data } = await supabase.from('clientes').select('id, nombre, nombres, apellidos, telefono, email, grupo_whatsapp, estado, created_at, fecha_nacimiento, numero_identificacion, ocupacion, direccion, ciudad, contacto_emergencia_nombre, contacto_emergencia_telefono, menor_de_edad, acudiente_nombres, acudiente_apellidos, acudiente_telefono, acudiente_documento, discapacidad_fisica, condicion_aprendizaje').regexIMatch('nombre', patronSinTildes(busqueda)).order('nombre').limit(20)
     setClientes(data || []); setCargando(false)
   }
 
