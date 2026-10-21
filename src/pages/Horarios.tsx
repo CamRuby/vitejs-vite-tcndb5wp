@@ -358,6 +358,7 @@ export default function Horarios() {
     const clasesFiltradas = (data || []).filter((c: any) => c.salones?.sede_id === sedeSeleccionada)
 const contratosUnicos = [...new Set(clasesFiltradas.map((c: any) => c.contratos?.id).filter(Boolean))]
 let numeracionMap: Map<string, number> = new Map()
+let usadasPorContrato: Record<string, number> = {}   // dadas (sin cortesía) + inasistencias, por plan
 if (contratosUnicos.length > 0) {
   // Se lee por páginas: la base de datos entrega máximo 1000 filas por consulta
   const todasClases: any[] = []
@@ -387,6 +388,7 @@ if (contratosUnicos.length > 0) {
     numMap.forEach((num, id) => { numeracionMap.set(id, num); if (num > max) max = num })
     numeracionReal[contratoId] = max
   })
+  usadasPorContrato = { ...numeracionReal }
   // Calcular proyectados para confirmadas
   const confirmadas = clasesFiltradas
     .filter((c: any) => c.estado === 'confirmada' && c.contratos?.id)
@@ -403,7 +405,8 @@ if (contratosUnicos.length > 0) {
 }
 const clasesConNumero = clasesFiltradas.map((c: any) => ({
   ...c,
-  numero_calculado: numeracionMap.get(c.id) ?? c.numero_calculado ?? null
+  numero_calculado: numeracionMap.get(c.id) ?? c.numero_calculado ?? null,
+  usadas_plan: c.contratos?.id ? (usadasPorContrato[c.contratos.id] ?? null) : null
 }))
 if (miCarga !== cargaIdRef.current) return
 setClases(clasesConNumero)
@@ -2400,7 +2403,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                 <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px', marginBottom: '16px', fontSize: '13px', color: '#333' }}>
                   <div><strong>Cliente:</strong> {claseEditando.contratos?.clientes?.nombre}</div>
                   <div><strong>Instrumento:</strong> {claseEditando.contratos?.instrumentos?.nombre}</div>
-                  <div><strong>Plan:</strong> {claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases</div>
+                  <div><strong>Plan:</strong> {claseEditando.usadas_plan ?? claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases usadas (dadas + inasistencias)</div>
                   <div><strong>Sede del plan:</strong> {sedes.find(s => s.id === claseEditando.contratos?.sede_id)?.nombre || '—'}</div>
                   {claseEditando.modalidad && <div><strong>Modalidad:</strong> <span style={{ textTransform: 'capitalize' }}>{claseEditando.modalidad}</span></div>}
                   {claseEditando.contratos?.sede_id && claseEditando.salones?.sede_id && claseEditando.contratos.sede_id !== claseEditando.salones.sede_id && (
