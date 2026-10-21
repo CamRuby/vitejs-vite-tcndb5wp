@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../supabase'
 import { patronSinTildes } from '../utils/busqueda'
 import { auditar } from '../auditoria'
@@ -192,6 +192,8 @@ export default function Horarios() {
   const [confirmarBorrar, setConfirmarBorrar] = useState(false)
   const [confirmarDada, setConfirmarDada] = useState(false)
   const [planCompleto, setPlanCompleto] = useState(false)
+  const [usadasPlan, setUsadasPlan] = useState<number | null>(null)
+  const cargaIdRef = useRef(0)   // evita que una carga vieja (más lenta) pise a la nueva
   const [procesandoRevision, setProcesandoRevision] = useState(false)
   const [motivoCancelacion, setMotivoCancelacion] = useState<string>('academia')
   const [honorarioCancelacion, setHonorarioCancelacion] = useState<number>(0)
@@ -337,6 +339,7 @@ export default function Horarios() {
   }
 
   async function cargarClases() {
+    const miCarga = ++cargaIdRef.current
     setCargando(true)
     const fechaInicio = vista === 'semana' ? formatFecha(fechasSemana[0]) : formatFecha(diaSeleccionado)
     const fechaFin = vista === 'semana' ? formatFecha(fechasSemana[5]) : formatFecha(diaSeleccionado)
@@ -356,35 +359,38 @@ export default function Horarios() {
 const contratosUnicos = [...new Set(clasesFiltradas.map((c: any) => c.contratos?.id).filter(Boolean))]
 let numeracionMap: Map<string, number> = new Map()
 if (contratosUnicos.length > 0) {
-  const { data: todasClases } = await supabase
-    .from('clases')
-    .select('id, fecha, hora, duracion_min, estado, cancelado_por_academia, cancelado_tarde, es_cortesia, inasistencia_perdonada, contrato_id, contratos(duracion_min)')
-    .in('contrato_id', contratosUnicos)
-    .order('fecha', { ascending: true })
-    .order('hora', { ascending: true })
+  // Se lee por páginas: la base de datos entrega máximo 1000 filas por consulta
+  const todasClases: any[] = []
+  for (let desde = 0; ; desde += 1000) {
+    const { data: pagina } = await supabase
+      .from('clases')
+      .select('id, fecha, hora, duracion_min, estado, cancelado_por_academia, cancelado_tarde, es_cortesia, inasistencia_perdonada, contrato_id, contratos(duracion_min)')
+      .in('contrato_id', contratosUnicos)
+      .order('fecha', { ascending: true })
+      .order('hora', { ascending: true })
+      .order('id', { ascending: true })
+      .range(desde, desde + 999)
+    todasClases.push(...(pagina || []))
+    if (!pagina || pagina.length < 1000) break
+  }
+  if (miCarga !== cargaIdRef.current) return
   const porContrato: Record<string, any[]> = {}
   ;(todasClases || []).forEach((c: any) => {
     if (!porContrato[c.contrato_id]) porContrato[c.contrato_id] = []
     porContrato[c.contrato_id].push(c)
   })
-  Object.entries(porContrato).forEach(([_, clases]) => {
+  const numeracionReal: Record<string, number> = {}
+  Object.entries(porContrato).forEach(([contratoId, clases]) => {
     const durPlan = clases[0]?.contratos?.duracion_min || 60
     const numMap = calcularNumeracion(clases, durPlan)
-    numMap.forEach((num, id) => numeracionMap.set(id, num))
+    let max = 0
+    numMap.forEach((num, id) => { numeracionMap.set(id, num); if (num > max) max = num })
+    numeracionReal[contratoId] = max
   })
   // Calcular proyectados para confirmadas
   const confirmadas = clasesFiltradas
     .filter((c: any) => c.estado === 'confirmada' && c.contratos?.id)
     .sort((a: any, b: any) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`))
-  const numeracionReal: Record<string, number> = {}
-  contratosUnicos.forEach(id => {
-    let max = 0
-    numeracionMap.forEach((num, claseId) => {
-      const clase = (todasClases || []).find((c: any) => c.id === claseId)
-      if (clase?.contrato_id === id) max = Math.max(max, num)
-    })
-    numeracionReal[id] = max
-  })
   confirmadas.forEach((c: any) => {
     const durPlan = porContrato[c.contratos.id]?.[0]?.contratos?.duracion_min || 60
     const fraccion = parseFloat(((c.duracion_min || durPlan) / durPlan).toFixed(4))
@@ -399,16 +405,19 @@ const clasesConNumero = clasesFiltradas.map((c: any) => ({
   ...c,
   numero_calculado: numeracionMap.get(c.id) ?? c.numero_calculado ?? null
 }))
+if (miCarga !== cargaIdRef.current) return
 setClases(clasesConNumero)
 setCargando(false)
-cargarSemanasSeguidas(clasesFiltradas, fechaInicio, fechaFin)
+cargarSemanasSeguidas(clasesFiltradas, fechaInicio, fechaFin, miCarga)
   }
 
   // Cuenta cuántas semanas seguidas lleva cada estudiante en el mismo día y hora (utils/semanasSeguidas).
   // Se carga después de mostrar el horario para no hacerlo más lento.
-  async function cargarSemanasSeguidas(clasesVista: any[], fechaInicio: string, fechaFin: string) {
+  async function cargarSemanasSeguidas(clasesVista: any[], fechaInicio: string, fechaFin: string, miCarga: number) {
     const clientes = [...new Set(clasesVista.map((c: any) => c.contratos?.clientes?.id).filter(Boolean))] as string[]
     if (clientes.length === 0) { setSemanasMap({}); return }
+    // Solo importan las clases a las mismas horas que se ven en pantalla (consulta mucho más liviana)
+    const horas = [...new Set(clasesVista.map((c: any) => c.hora).filter(Boolean))] as string[]
     const historial = new Set<string>()
     for (let k = 0; k < clientes.length; k += 100) {
       const lote = clientes.slice(k, k + 100)
@@ -417,8 +426,10 @@ cargarSemanasSeguidas(clasesFiltradas, fechaInicio, fechaFin)
           .select('fecha, hora, contratos!inner(cliente_id)')
           .in('contratos.cliente_id', lote)
           .gte('fecha', fechaMinimaHistorial(fechaInicio)).lte('fecha', fechaFin)
-          .not('hora', 'is', null)
+          .in('hora', horas)
+          .order('id', { ascending: true })
           .range(desde, desde + 999)
+        if (miCarga !== cargaIdRef.current) return
         if (error) { setSemanasMap({}); return }
         ;(data || []).forEach((c: any) => historial.add(claveSlot(c.contratos?.cliente_id, c.fecha, c.hora)))
         if (!data || data.length < 1000) break
@@ -429,6 +440,7 @@ cargarSemanasSeguidas(clasesFiltradas, fechaInicio, fechaFin)
       const cli = c.contratos?.clientes?.id
       if (cli && c.hora) mapa[c.id] = semanasSeguidas({ clienteId: cli, fecha: c.fecha, hora: c.hora }, historial)
     })
+    if (miCarga !== cargaIdRef.current) return
     setSemanasMap(mapa)
   }
 
@@ -681,14 +693,17 @@ async function verificarConflictosEnMemoria(
         .select('*').eq('id', planActualId).single()
       if (errorBuscar || !planActual) { alert('Error buscando plan: ' + errorBuscar?.message); return }
       // Confirmación con el estado real del plan (clases dadas), para no renovar un plan sin terminar por error
-      const { data: dadasPlan } = await supabase.from('clases').select('duracion_min, es_cortesia')
-        .eq('contrato_id', planActualId).eq('estado', 'dada')
+      // Misma cuenta que la numeración: dadas (sin cortesías) + inasistencias
+      const { data: clasesPlan } = await supabase.from('clases')
+        .select('id, fecha, hora, duracion_min, estado, cancelado_por_academia, cancelado_tarde, es_cortesia, inasistencia_perdonada')
+        .eq('contrato_id', planActualId)
       const durP = Number(planActual.duracion_min) || 60
-      const dadas = parseFloat(((dadasPlan || []).filter((c: any) => !c.es_cortesia).reduce((t: number, c: any) => t + (Number(c.duracion_min) || durP) / durP, 0)).toFixed(2))
+      const numP = calcularNumeracion(clasesPlan || [], durP)
+      const dadas = parseFloat((numP.size > 0 ? Math.max(...numP.values()) : 0).toFixed(2))
       const total = Number(planActual.total_clases || 0)
       const aviso = dadas < total
-        ? `⚠️ El plan actual lleva ${dadas} de ${total} clases dadas: NO ha terminado.\n\nRevisa primero las clases confirmadas y sus duraciones.\n\n¿Seguro que quieres archivarlo y crear un plan nuevo?`
-        : `El plan actual tiene ${dadas} de ${total} clases dadas.\n\n¿Crear el plan nuevo?`
+        ? `⚠️ El plan actual lleva ${dadas} de ${total} clases usadas (dadas + inasistencias): NO ha terminado.\n\nRevisa primero las clases confirmadas y sus duraciones.\n\n¿Seguro que quieres archivarlo y crear un plan nuevo?`
+        : `El plan actual tiene ${dadas} de ${total} clases usadas (dadas + inasistencias).\n\n¿Crear el plan nuevo?`
       if (!window.confirm(aviso)) return
       const { id: _id, created_at: _ca, clases_tomadas: _ct, estado: _est,
               fecha_inicio: _fi, fecha_fin: _ff, updated_at: _ua, ...camposCopiados } = planActual
@@ -2443,38 +2458,32 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                               if (est === 'confirmada' && editEstado !== 'confirmada') {
                                 const total = claseEditando.contratos?.total_clases ?? 0
                                 const durPlan = claseEditando.contratos?.duracion_min || claseEditando.duracion_min || 60
-                                // Clases dadas reales del plan (no el contador guardado, que se puede desfasar)
-                                const { data: dadasPlan } = await supabase.from('clases').select('duracion_min, es_cortesia')
-                                  .eq('contrato_id', claseEditando.contratos.id).eq('estado', 'dada')
-                                const tomadas = parseFloat(((dadasPlan || []).filter((c: any) => !c.es_cortesia).reduce((t: number, c: any) => t + (Number(c.duracion_min) || durPlan) / durPlan, 0)).toFixed(4))
-                                // Contar fracciones de clases ya confirmadas de este contrato (excluir la actual)
-                                const { data: otrasConfirmadas } = await supabase.from('clases')
-                                  .select('duracion_min')
-                                  .eq('contrato_id', claseEditando.contratos.id)
-                                  .eq('estado', 'confirmada')
-                                  .neq('id', claseEditando.id)
-                                const fraccionesConfirmadas = (otrasConfirmadas || []).reduce((acc: number, c: any) => {
-                                  return parseFloat((acc + (c.duracion_min || durPlan) / durPlan).toFixed(4))
-                                }, 0)
-                                const fraccionEstaClase = parseFloat(((claseEditando.duracion_min || durPlan) / durPlan).toFixed(4))
-                                const totalConEstaClase = parseFloat((tomadas + fraccionesConfirmadas + fraccionEstaClase).toFixed(4))
-                                if (total > 0 && totalConEstaClase > total) { setPlanCompleto(true); setConfirmarDada(false) }
-                               else {
-                                setEditEstado('confirmada'); setPlanCompleto(false)
+                                // UNA sola lectura del plan. El límite y el número usan la MISMA cuenta
+                                // (utils/numeracionClases: dadas sin cortesía + inasistencias) + otras confirmadas.
                                 const [{ data: ctWA }, { data: todasClases }] = await Promise.all([
                                   supabase.from('contratos').select('conteo_whatsapp').eq('id', claseEditando.contratos.id).single(),
                                   supabase.from('clases')
-                                    .select('id, fecha, hora, duracion_min, estado, cancelado_por_academia, cancelado_tarde, es_cortesia, inasistencia_perdonada, contrato_id, contratos(duracion_min)')
+                                    .select('id, fecha, hora, duracion_min, estado, cancelado_por_academia, cancelado_tarde, es_cortesia, inasistencia_perdonada, contrato_id')
                                     .eq('contrato_id', claseEditando.contratos.id)
-                                    .order('fecha', { ascending: true })
-                                    .order('hora', { ascending: true })
                                 ])
-                                setEditConteoWhatsapp(ctWA?.conteo_whatsapp != null ? ctWA.conteo_whatsapp + 1 : '')
                                 const numeracion = calcularNumeracion(todasClases || [], durPlan)
-                                const maxNumeracion = numeracion.size > 0 ? Math.max(...numeracion.values()) : 0
-                                const fraccion = parseFloat(((claseEditando.duracion_min || durPlan) / durPlan).toFixed(4))
-                                const proyectado = parseFloat((maxNumeracion + fraccion).toFixed(4))
-                                setClaseEditando((prev: any) => ({ ...prev, numero_calculado: proyectado, numero_proyectado: proyectado }))
+                                const usadas = numeracion.size > 0 ? Math.max(...numeracion.values()) : 0
+                                const fr = (c: any) => (Number(c.duracion_min) || durPlan) / durPlan
+                                const otrasConfirmadas = (todasClases || []).filter((c: any) => c.estado === 'confirmada' && c.id !== claseEditando.id)
+                                const fraccionesConfirmadas = otrasConfirmadas.reduce((t: number, c: any) => t + fr(c), 0)
+                                const fraccionEstaClase = fr(claseEditando)
+                                const totalConEstaClase = parseFloat((usadas + fraccionesConfirmadas + fraccionEstaClase).toFixed(4))
+                                if (total > 0 && totalConEstaClase > total + 0.0001) {
+                                  setUsadasPlan(parseFloat((usadas + fraccionesConfirmadas).toFixed(2)))
+                                  setPlanCompleto(true); setConfirmarDada(false)
+                                } else {
+                                  setEditEstado('confirmada'); setPlanCompleto(false)
+                                  setEditConteoWhatsapp(ctWA?.conteo_whatsapp != null ? ctWA.conteo_whatsapp + 1 : '')
+                                  // Número = usadas + confirmadas anteriores a esta + esta
+                                  const claveEsta = `${claseEditando.fecha}${claseEditando.hora}`
+                                  const anteriores = otrasConfirmadas.filter((c: any) => `${c.fecha}${c.hora}` < claveEsta).reduce((t: number, c: any) => t + fr(c), 0)
+                                  const proyectado = parseFloat((usadas + anteriores + fraccionEstaClase).toFixed(4))
+                                  setClaseEditando((prev: any) => ({ ...prev, numero_calculado: proyectado, numero_proyectado: proyectado }))
                                 }
                               } else if (est === 'dada' && editEstado !== 'dada') {
                                 if (editEstado !== 'confirmada') { setEditError('La clase debe estar Confirmada antes de marcarla como Dada'); return }
@@ -2496,7 +2505,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                     {planCompleto && (
                       <div style={{ marginTop: '10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px' }}>
                         <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#991b1b', fontWeight: '700' }}>
-                          🚫 Esta clase supera el límite del plan ({claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases usadas). Si es doble clase, crea dos clases separadas: una en este plan y otra en el plan renovado.
+                          🚫 Esta clase supera el límite del plan ({usadasPlan ?? claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases usadas, contando dadas, inasistencias y confirmadas). Si es doble clase, crea dos clases separadas: una en este plan y otra en el plan renovado.
                         </p>
                         <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#666' }}>Renueva el plan del cliente para continuar.</p>
                         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
