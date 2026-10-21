@@ -86,6 +86,11 @@ const fieldStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = {
   display: 'block', fontWeight: '500', fontSize: '13px', marginBottom: '5px', color: '#555'
 }
+// Estilos compactos de la ventana "Editar clase" (pensados para celular)
+const fieldCompacto: React.CSSProperties = { ...fieldStyle, padding: '7px 9px', fontSize: '14px', minWidth: 0 }
+const labelCompacto: React.CSSProperties = { display: 'block', fontWeight: '600', fontSize: '11px', marginBottom: '3px', color: '#6b7280' }
+// Dos columnas que se apilan solas si la pantalla es muy angosta
+const filaDoble: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(135px, 1fr))', gap: '8px', marginBottom: '10px' }
 
 // ── FIX 5: removed duplicate cancelada condition ──
 // Color de la etiqueta "N sem" (semanas seguidas en el mismo horario) y del aviso de clase recurrente
@@ -200,8 +205,6 @@ export default function Horarios() {
   const [tarifaBase, setTarifaBase] = useState<number>(0)
   const [clienteInasistenciaPerdonada, setClienteInasistenciaPerdonada] = useState(false)
   const fechasSemana = getFechasSemana(fechaBase)
-  const [conteoWhatsapp, setConteoWhatsapp] = useState<number | ''>('')
-  const [editConteoWhatsapp, setEditConteoWhatsapp] = useState<number | ''>('')
   const [renovando, setRenovando] = useState(false)
   const [aplazandoCliente, setAplazandoCliente] = useState<{ id: string; nombre: string; desde: string } | null>(null)
   const columns = useMemo(() => {
@@ -660,18 +663,16 @@ async function verificarConflictosEnMemoria(
     setClientesBuscados([])
     setContratos([]); setCargandoContratos(true)
     const { data } = await supabase.from('contratos')
-      .select('id, total_clases, clases_tomadas, duracion_min, sede_id, conteo_whatsapp, instrumentos(nombre), profesores(id, nombre)')
+      .select('id, total_clases, clases_tomadas, duracion_min, sede_id, instrumentos(nombre), profesores(id, nombre)')
       .eq('cliente_id', c.id).eq('estado', 'activo')
     setContratos(data || [])
     setCargandoContratos(false)
     if (data?.length) {
       const ct = data[0] as any
-      console.log('ct.conteo_whatsapp:', ct.conteo_whatsapp, 'ct:', ct)
       setContratoSeleccionado(ct)
       setDuracion(String(ct.duracion_min || 60))
       setProfesorId(ct.profesores?.id || '')
      calcularAvisosCrear(ct, ct.profesores?.id || '', String(ct.duracion_min || 60), slotSeleccionado?.salon?.sede_id || '')
-      setConteoWhatsapp(ct.conteo_whatsapp != null ? ct.conteo_whatsapp + 1 : '')
     }
   }
 
@@ -682,7 +683,6 @@ async function verificarConflictosEnMemoria(
       setDuracion(String(ct.duracion_min || 60))
       setProfesorId(ct.profesores?.id || '')
       calcularAvisosCrear(ct, ct.profesores?.id || '', String(ct.duracion_min || 60), slotSeleccionado?.salon?.sede_id || '')
-      setConteoWhatsapp(ct.conteo_whatsapp != null ? ct.conteo_whatsapp + 1 : '')
     }
   }
 
@@ -843,12 +843,6 @@ async function verificarConflictosEnMemoria(
     setMotivoCancelacion('academia')
     setHonorarioCancelacion(0)
     setTarifaBase(0)
-   if (clase.estado === 'confirmada' && clase.contratos?.id) {
-      const { data: ctWA } = await supabase.from('contratos').select('conteo_whatsapp').eq('id', clase.contratos.id).single()
-      setEditConteoWhatsapp(ctWA?.conteo_whatsapp != null ? ctWA.conteo_whatsapp : '')
-    } else {
-      setEditConteoWhatsapp('')
-    }
     setClienteInasistenciaPerdonada(false)
     setModalEditar(true)
   }
@@ -1307,15 +1301,6 @@ if (claseEditando.recurrente && seMovio) {
   })
 }
 if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalculado !== null) updatePayload.honorario_valor = honorarioCalculado
-     if (editEstado === 'confirmada' && editConteoWhatsapp !== '') {
-        await supabase.from('contratos').update({ conteo_whatsapp: Number(editConteoWhatsapp) }).eq('id', claseEditando.contratos.id)
-      }
-    if (editEstado === 'cancelada' && claseEditando.estado === 'confirmada' && claseEditando.contratos?.id) {
-        const { data: ctWA } = await supabase.from('contratos').select('conteo_whatsapp').eq('id', claseEditando.contratos.id).single()
-        if (ctWA?.conteo_whatsapp != null) {
-          await supabase.from('contratos').update({ conteo_whatsapp: ctWA.conteo_whatsapp - 1 }).eq('id', claseEditando.contratos.id)
-        }
-      }
      if (editEstado === 'cancelada') {
         updatePayload.motivo_cancelacion = motivoCancelacion
       if (motivoCancelacion === 'academia') {
@@ -1395,12 +1380,6 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
       await supabase.from('bot_estados').delete().eq('clase_id', claseEditando.id)
       const { error: errBorrar } = await supabase.from('clases').delete().eq('id', claseEditando.id)
       if (errBorrar) { setEditError('Error al borrar: ' + errBorrar.message); setEditGuardando(false); return }
-  if ((editEstado === 'confirmada' || editEstado === 'dada') && claseEditando.contratos?.id) {
-        const { data: ctWA } = await supabase.from('contratos').select('conteo_whatsapp').eq('id', claseEditando.contratos.id).single()
-        if (ctWA?.conteo_whatsapp != null) {
-          await supabase.from('contratos').update({ conteo_whatsapp: ctWA.conteo_whatsapp - 1 }).eq('id', claseEditando.contratos.id)
-        }
-      }
     }
     setModalEditar(false)
     cargarClases()
@@ -2376,20 +2355,19 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
       {/* ══ MODAL EDITAR CLASE ══ */}
       {modalEditar && claseEditando && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: '16px', width: '90%', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-            <div style={{ background: TEAL, padding: '18px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <h3 style={{ margin: 0, color: 'white', fontSize: '17px' }}>
-                  {esBloqueada(claseEditando) ? '🔒 Clase dada' : 'Editar clase'}
-                </h3>
-                <p style={{ margin: '2px 0 0', color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>{claseEditando.contratos?.clientes?.nombre}</p>
-                <p style={{ margin: '4px 0 0', color: 'white', fontSize: '18px', fontWeight: '700' }}>
+          <div style={{ background: 'white', borderRadius: '14px', width: 'calc(100% - 16px)', maxWidth: '480px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+            <div style={{ background: TEAL, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ margin: 0, color: 'white', fontSize: '16px', fontWeight: '700', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {esBloqueada(claseEditando) ? '🔒 ' : ''}{claseEditando.contratos?.clientes?.nombre || 'Editar clase'}
+                </p>
+                <p style={{ margin: '1px 0 0', color: 'rgba(255,255,255,0.9)', fontSize: '13px' }}>
                   {formatFechaLarga(parseFechaLocal(claseEditando.fecha))} · {claseEditando.hora?.substring(0, 5)}
                 </p>
               </div>
-              <button onClick={() => setModalEditar(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer' }}>✕</button>
+              <button onClick={() => setModalEditar(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 11px', cursor: 'pointer', flexShrink: 0 }}>✕</button>
             </div>
-            <div style={{ padding: '20px 24px', maxHeight: '75vh', overflowY: 'auto' }}>
+            <div style={{ padding: '12px 14px', maxHeight: '82vh', overflowY: 'auto' }}>
 
               {claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia ? (
                 <div style={{ background: TEAL_LIGHT, borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', fontSize: '12px', color: '#555', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
@@ -2400,27 +2378,29 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                   {claseEditando.modalidad && <span style={{ textTransform: 'capitalize' }}>📱 {claseEditando.modalidad}</span>}
                 </div>
               ) : (
-                <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '12px 14px', marginBottom: '16px', fontSize: '13px', color: '#333' }}>
-                  <div><strong>Cliente:</strong> {claseEditando.contratos?.clientes?.nombre}</div>
-                  <div><strong>Instrumento:</strong> {claseEditando.contratos?.instrumentos?.nombre}</div>
-                  <div><strong>Plan:</strong> {claseEditando.usadas_plan ?? claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases} clases usadas (dadas + inasistencias)</div>
-                  <div><strong>Sede del plan:</strong> {sedes.find(s => s.id === claseEditando.contratos?.sede_id)?.nombre || '—'}</div>
-                  {claseEditando.modalidad && <div><strong>Modalidad:</strong> <span style={{ textTransform: 'capitalize' }}>{claseEditando.modalidad}</span></div>}
+                <div style={{ background: TEAL_LIGHT, borderRadius: '10px', padding: '8px 12px', marginBottom: '10px', fontSize: '13px', color: '#333', lineHeight: 1.45 }}>
+                  <div>
+                    {[claseEditando.contratos?.instrumentos?.nombre, sedes.find(s => s.id === claseEditando.contratos?.sede_id)?.nombre, claseEditando.modalidad]
+                      .filter(Boolean).map((t: string) => t.charAt(0).toUpperCase() + t.slice(1)).join(' · ') || '—'}
+                  </div>
+                  <div>
+                    <strong>Plan {claseEditando.usadas_plan ?? claseEditando.contratos?.clases_tomadas}/{claseEditando.contratos?.total_clases}</strong>
+                    <span style={{ color: '#6b7280', fontSize: '12px' }}> (dadas + inasist.)</span>
+                    {claseEditando.recurrente && <span style={{ marginLeft: '8px', color: RECURRENTE_COLOR, fontWeight: '700', fontSize: '12px' }}>🔁 {(semanasMap[claseEditando.id] || 0) > 1 ? `Recurrente · ${semanasMap[claseEditando.id]} sem` : 'Recurrente'}</span>}
+                  </div>
                   {claseEditando.contratos?.sede_id && claseEditando.salones?.sede_id && claseEditando.contratos.sede_id !== claseEditando.salones.sede_id && (
                     <div style={{ marginTop: '8px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '8px 10px', color: '#c2410c', fontWeight: '600', fontSize: '12px' }}>
                       ⚠️ El salón pertenece a <strong>{sedes.find(s => s.id === claseEditando.salones?.sede_id)?.nombre || 'otra sede'}</strong>, pero el plan es de <strong>{sedes.find(s => s.id === claseEditando.contratos?.sede_id)?.nombre || 'otra sede'}</strong>
                     </div>
                   )}
-                  {claseEditando.recurrente && <div style={{ marginTop: '6px', color: RECURRENTE_COLOR, fontWeight: '700', fontSize: '12px' }}>🔁 Clase recurrente (semanal)</div>}
                   {esBloqueada(claseEditando) && <div style={{ marginTop: '6px', color: '#854d0e', fontWeight: '600', fontSize: '12px' }}>🔒 No se puede editar — solo borrar si es necesario</div>}
                 </div>
               )}
 
             {!esBloqueada(claseEditando) && !(claseEditando.estado === 'cancelada') && (
                 <>
-                  <div style={{ marginBottom: '14px' }}>
-                    <label style={labelStyle}>Estado</label>
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <div style={{ marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                      {claseEditando.estado === 'cancelada' ? (
                         <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '10px', padding: '10px 14px', fontSize: '13px', color: '#c2410c', width: '100%' }}>
                           <p style={{ margin: '0 0 10px', fontWeight: '600' }}>⚠️ Clase cancelada</p>
@@ -2463,12 +2443,9 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                                 const durPlan = claseEditando.contratos?.duracion_min || claseEditando.duracion_min || 60
                                 // UNA sola lectura del plan. El límite y el número usan la MISMA cuenta
                                 // (utils/numeracionClases: dadas sin cortesía + inasistencias) + otras confirmadas.
-                                const [{ data: ctWA }, { data: todasClases }] = await Promise.all([
-                                  supabase.from('contratos').select('conteo_whatsapp').eq('id', claseEditando.contratos.id).single(),
-                                  supabase.from('clases')
+                                const { data: todasClases } = await supabase.from('clases')
                                     .select('id, fecha, hora, duracion_min, estado, cancelado_por_academia, cancelado_tarde, es_cortesia, inasistencia_perdonada, contrato_id')
                                     .eq('contrato_id', claseEditando.contratos.id)
-                                ])
                                 const numeracion = calcularNumeracion(todasClases || [], durPlan)
                                 const usadas = numeracion.size > 0 ? Math.max(...numeracion.values()) : 0
                                 const fr = (c: any) => (Number(c.duracion_min) || durPlan) / durPlan
@@ -2481,7 +2458,6 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                                   setPlanCompleto(true); setConfirmarDada(false)
                                 } else {
                                   setEditEstado('confirmada'); setPlanCompleto(false)
-                                  setEditConteoWhatsapp(ctWA?.conteo_whatsapp != null ? ctWA.conteo_whatsapp + 1 : '')
                                   // Número = usadas + confirmadas anteriores a esta + esta
                                   const claveEsta = `${claseEditando.fecha}${claseEditando.hora}`
                                   const anteriores = otrasConfirmadas.filter((c: any) => `${c.fecha}${c.hora}` < claveEsta).reduce((t: number, c: any) => t + fr(c), 0)
@@ -2495,7 +2471,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                                 setEditEstado(est); setConfirmarDada(false); setPlanCompleto(false)
                               }
                             }} style={{
-                              padding: '6px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500',
+                              flex: '1 1 0', minWidth: 0, padding: '7px 2px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: editEstado === est ? '700' : '500',
                               border: `1px solid ${editEstado === est ? col2.color : '#e2e8f0'}`,
                               background: editEstado === est ? col2.bg : 'white',
                               color: editEstado === est ? col2.color : '#666'
@@ -2581,61 +2557,48 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
   </div>
 )}
                   
-                  <div style={{ marginBottom: '14px' }}>
-                    <label style={labelStyle}>Fecha</label>
-                    <input type="date" value={editFecha} onChange={e => setEditFecha(e.target.value)} style={fieldStyle} />
+                  <div style={filaDoble}>
+                    <div>
+                      <label style={labelCompacto}>Fecha</label>
+                      <input type="date" value={editFecha} onChange={e => setEditFecha(e.target.value)} style={fieldCompacto} />
+                    </div>
+                    <div>
+                      <label style={labelCompacto}>Hora de inicio</label>
+                      <input type="time" value={editHora} onChange={e => setEditHora(e.target.value)} style={fieldCompacto} min="07:00" max="21:00" step="300" />
+                    </div>
                   </div>
-                  <div style={{ marginBottom: '14px' }}>
-                    <label style={labelStyle}>Hora de inicio</label>
-                   <input type="time" value={editHora} onChange={e => setEditHora(e.target.value)} style={fieldStyle} min="07:00" max="21:00" step="300" />
-                  </div>
-                  <div style={{ marginBottom: '14px' }}>
-                    <label style={labelStyle}>Duración</label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ marginBottom: '10px' }}>
+                    <label style={labelCompacto}>Duración (minutos)</label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
                       {DURACIONES.map(d => (
                         <button key={d} onClick={() => setEditDuracion(d)} style={{
-                          flex: 1, padding: '9px', border: `1px solid ${editDuracion === d ? TEAL : TEAL_MID}`,
+                          flex: 1, minWidth: 0, padding: '7px 2px', border: `1px solid ${editDuracion === d ? TEAL : TEAL_MID}`,
                           borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
                           background: editDuracion === d ? TEAL : 'white', color: editDuracion === d ? 'white' : '#333',
                           fontWeight: editDuracion === d ? '600' : '400'
-                        }}>{d}min</button>
+                        }}>{d}</button>
                       ))}
                     </div>
                   </div>
-                  <div style={{ marginBottom: '14px' }}>
-                    <label style={labelStyle}>Profesor</label>
-                    <select value={editProfesorId} onChange={e => setEditProfesorId(e.target.value)} style={fieldStyle}>
-                      <option value="">— Sin profesor —</option>
-                      {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                    </select>
-                  </div>
-                  <div style={{ marginBottom: '20px' }}>
-                    <label style={labelStyle}>Salón</label>
-                    <select value={editSalonId} onChange={e => setEditSalonId(e.target.value)} style={fieldStyle}>
-                      {salones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                    </select>
-                  </div>
-          {editEstado === 'confirmada' && (
-              <div style={{ marginBottom: '20px' }}>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={labelStyle}>
-                      <span style={{ color: '#b45309', fontWeight: '700' }}>Número de la clase confirmada</span>
-                    </label>
-                    <div style={{ padding: '9px 12px', border: `1px solid #fde68a`, borderRadius: '8px', fontSize: '14px', background: '#fffbeb', color: '#b45309', fontWeight: '700' }}>
-                      {claseEditando?.numero_calculado ?? '—'}
+                  <div style={filaDoble}>
+                    <div>
+                      <label style={labelCompacto}>Profesor</label>
+                      <select value={editProfesorId} onChange={e => setEditProfesorId(e.target.value)} style={fieldCompacto}>
+                        <option value="">— Sin profesor —</option>
+                        {profesores.map((p: any) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelCompacto}>Salón</label>
+                      <select value={editSalonId} onChange={e => setEditSalonId(e.target.value)} style={fieldCompacto}>
+                        {salones.map((s: any) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                      </select>
                     </div>
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={labelStyle}>
-                      <span style={{ color: '#dc2626', fontWeight: '700' }}>Conteo WhatsApp</span>
-                    </label>
-                    <input type="number" min={1} value={editConteoWhatsapp}
-                      onChange={e => setEditConteoWhatsapp(e.target.value === '' ? '' : Number(e.target.value))}
-                      placeholder="Sin conteo"
-                      style={{ ...fieldStyle, borderColor: '#dc2626', color: '#dc2626', fontWeight: '700' }} />
-                  </div>
-                </div>
+          {editEstado === 'confirmada' && (
+              <div style={{ marginBottom: '10px', padding: '6px 10px', border: '1px solid #fde68a', borderRadius: '8px', background: '#fffbeb', color: '#b45309', fontSize: '13px' }}>
+                Clase N.º <strong style={{ fontSize: '15px' }}>{claseEditando?.numero_calculado ?? '—'}</strong>
+                {claseEditando.contratos?.total_clases ? <span> de {claseEditando.contratos.total_clases}</span> : null}
               </div>
             )}
                 </>
@@ -2702,22 +2665,32 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                     </div>
                   </>
                 ) : (
-                  <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{ width: '100%', padding: '11px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500', marginBottom: '10px' }}>
+                  <button onClick={() => guardarEdicion('esta')} disabled={editGuardando} style={{ width: '100%', padding: '10px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '600', marginBottom: '8px' }}>
                     {editGuardando ? 'Guardando...' : 'Guardar cambios'}
                   </button>
                 )
               )}
 
-              {!esBloqueada(claseEditando) && ['programada', 'confirmada'].includes(claseEditando.estado) && claseEditando.contratos?.clientes?.id && !confirmarBorrar && (
-                <button onClick={() => setAplazandoCliente({ id: claseEditando.contratos.clientes.id, nombre: claseEditando.contratos.clientes.nombre, desde: claseEditando.fecha })}
-                  style={{ width: '100%', padding: '9px', marginBottom: '8px', background: 'white', color: '#0e7490', border: '1px solid #a5f3fc', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
-                  ⏸ Aplazar clases del cliente (se ausenta)
-                </button>
-              )}
+              {(() => {
+                const puedeAplazar = !esBloqueada(claseEditando) && ['programada', 'confirmada'].includes(claseEditando.estado) && !!claseEditando.contratos?.clientes?.id
+                const puedeBorrar = !(esBloqueada(claseEditando) || (claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia))
+                if (confirmarBorrar || (!puedeAplazar && !puedeBorrar)) return null
+                return (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {puedeAplazar && (
+                      <button title="Aplazar clases del cliente (se ausenta)" onClick={() => setAplazandoCliente({ id: claseEditando.contratos.clientes.id, nombre: claseEditando.contratos.clientes.nombre, desde: claseEditando.fecha })}
+                        style={{ flex: 1, padding: '8px', background: 'white', color: '#0e7490', border: '1px solid #a5f3fc', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
+                        ⏸ Aplazar
+                      </button>
+                    )}
+                    {puedeBorrar && (
+                      <button onClick={() => setConfirmarBorrar(true)} style={{ flex: 1, padding: '8px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>🗑 Borrar</button>
+                    )}
+                  </div>
+                )
+              })()}
                              {!(esBloqueada(claseEditando) || (claseEditando.estado === 'cancelada' && !claseEditando.cancelado_por_academia)) && (
-                  !confirmarBorrar ? (
-                    <button onClick={() => setConfirmarBorrar(true)} style={{ width: '100%', padding: '10px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '13px' }}>Borrar clase</button>
-                  ) : (
+                  !confirmarBorrar ? null : (
                     <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '14px' }}>
                       <p style={{ margin: '0 0 4px', fontSize: '14px', color: '#991b1b', fontWeight: '700' }}>¿Confirmar eliminación?</p>
                       <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#666' }}>
