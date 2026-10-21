@@ -119,7 +119,7 @@ export default function ProfesorApp({ rol }: { rol?: string | null }) {
   const [guardando, setGuardando]         = useState(false)
   const [exito, setExito]                 = useState('')
   const [resumenExpandido, setResumenExpandido] = useState<string | null>(null)
-  const [pantallaModal, setPantallaModal] = useState<'acciones' | 'inasistencia' | 'cancelar' | 'avisoTardia'>('acciones')
+  const [pantallaModal, setPantallaModal] = useState<'acciones' | 'inasistencia' | 'avisoTardia'>('acciones')
   const [avisoCancelacion, setAvisoCancelacion] = useState('')
   const [tallerModal, setTallerModal]         = useState<any>(null)
   const [inscritosTaller, setInscritosTaller] = useState<any[]>([])
@@ -1318,38 +1318,6 @@ clasesDadas.forEach(c => {
   </div>
 )}
 
-            {pantallaModal === 'cancelar' && (
-              <div>
-                <div style={{ background:'#fef2f2', borderRadius:'16px', padding:'16px', marginBottom:'20px' }}>
-                  <p style={{ margin:'0 0 4px', fontSize:'18px', fontWeight:'800', color:'#dc2626' }}>Cancelar clase</p>
-                  <p style={{ margin:0, fontSize:'14px', color:'#991b1b' }}>{nombreCliente(claseActiva)} · {formatHoraAmPm(claseActiva.hora)}</p>
-                </div>
-                {(() => {
-                  const minutos  = minutosParaClase(claseActiva.fecha, claseActiva.hora)
-                  const esTardia = minutos < 180
-                  return (
-                    <div style={{ background: esTardia ? '#fff7ed' : '#f0fdf4', border:`1px solid ${esTardia ? '#fed7aa' : '#86efac'}`, borderRadius:'12px', padding:'14px', marginBottom:'20px' }}>
-                      <p style={{ margin:'0 0 4px', fontSize:'14px', fontWeight:'700', color: esTardia ? '#c2410c' : '#166534' }}>
-                        {esTardia ? '⚠️ Cancelación tardía' : '✓ Cancelación a tiempo'}
-                      </p>
-                      <p style={{ margin:0, fontSize:'13px', color: esTardia ? '#92400e' : '#166634' }}>
-                        {esTardia ? 'Avisar a la administración urgentemente' : 'Se requiere reasignar esta clase a otro profesor. Avisar a la administración'}
-                      </p>
-                    </div>
-                  )
-                })()}
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
-                  <button className="ba" onClick={cancelarClase} disabled={guardando}
-                    style={{ padding:'16px', background:'#dc2626', color:'white', border:'none', borderRadius:'16px', fontSize:'15px', fontWeight:'800', cursor:guardando ? 'not-allowed' : 'pointer', fontFamily:'inherit' }}>
-                    {guardando ? '...' : 'Confirmar'}
-                  </button>
-                  <button onClick={() => setPantallaModal('acciones')} disabled={guardando}
-                    style={{ padding:'16px', background:'#f1f5f9', color:'#374151', border:'none', borderRadius:'16px', fontSize:'15px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
-                    Volver
-                  </button>
-                </div>
-              </div>
-            )}
 
             {pantallaModal === 'acciones' && (
               <>
@@ -1563,12 +1531,12 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
           </span>
        {mostrarFecha && !c.esTaller && !c.es_cortesia && c.numero_calculado && c.contratos?.total_clases && (
   <span style={{ fontSize:'12px', fontWeight:'800', color:TEAL, background:'#e8f5f5', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
-    clase {c.contratos?.conteo_whatsapp !== null && c.contratos?.conteo_whatsapp !== undefined ? c.contratos.conteo_whatsapp : c.numero_calculado}/{c.contratos.total_clases}
+    clase {c.numero_calculado}/{c.contratos.total_clases}
   </span>
 )}
 {!mostrarFecha && !c.esTaller && !c.es_cortesia && c.numero_proyectado && c.contratos?.total_clases && (
   <span style={{ fontSize:'12px', fontWeight:'800', color:'#b45309', background:'#fffbeb', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
-   ~clase {c.contratos?.conteo_whatsapp !== null && c.contratos?.conteo_whatsapp !== undefined ? c.contratos.conteo_whatsapp : c.numero_proyectado}/{c.contratos.total_clases}
+   ~clase {c.numero_proyectado}/{c.contratos.total_clases}
   </span>
 )}
 {!c.esTaller && c.es_cortesia && (
