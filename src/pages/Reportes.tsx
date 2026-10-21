@@ -42,7 +42,7 @@ function mesActual() {
 const REPORTES = [
   { id: 'utilidad_planes', icono: '💹', titulo: 'Utilidad por plan', descripcion: 'Ingreso por clases dadas menos honorario del profesor, por plan y sede' },
   { id: 'control_pagos', icono: '💳', titulo: 'Control de pagos', descripcion: 'Seguimiento mensual de pagos, abonos y saldos por plan' },
-  { id: 'clases_tomadas', icono: '📋', titulo: 'Clases tomadas por plan', descripcion: 'Planes activos con conteo de clases y verificación WhatsApp por sede' },
+  { id: 'clases_tomadas', icono: '📋', titulo: 'Clases tomadas por plan', descripcion: 'Planes activos con conteo de clases por sede' },
   { id: 'honorarios_profesores', icono: '👩‍🏫', titulo: 'Honorarios mensuales profesores', descripcion: 'Clases, tiempo y honorarios por profesor y sede, con totales mensuales' },
   { id: 'historico_planes', icono: '📊', titulo: 'Histórico de planes y talleres', descripcion: 'Historial completo de planes y talleres por cliente, agrupado por profesor y sede' },
 ]
@@ -913,7 +913,6 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mes, setMes] = useState(mesActual())
-  const [filtro, setFiltro] = useState<'todos' | 'al_dia' | 'pendiente' | 'con_wa'>('todos')
   const [sedeFiltro, setSedeFiltro] = useState('todas')
   const [busqueda, setBusqueda] = useState('')
   const [modoEdicion, setModoEdicion] = useState(false)
@@ -962,15 +961,12 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
   }
 
   const sedes = ['todas', ...Array.from(new Set(datos.map(d => d.sede_nombre))).sort()]
-  let filtrados = datos.filter(d => {
+  const filtrados = datos.filter(d => {
     const q = busqueda.toLowerCase()
     if (busqueda && !d.cliente_nombre.toLowerCase().includes(q) && !d.sede_nombre.toLowerCase().includes(q) && !d.instrumento_nombre.toLowerCase().includes(q) && !(d.grupo_whatsapp ?? '').toLowerCase().includes(q)) return false
     if (sedeFiltro !== 'todas' && d.sede_nombre !== sedeFiltro) return false
     return true
   })
-  if (filtro === 'al_dia') filtrados = filtrados.filter(d => d.diferencia === 0)
-  else if (filtro === 'pendiente') filtrados = filtrados.filter(d => d.diferencia > 0).sort((a, b) => a.diferencia - b.diferencia)
-  else if (filtro === 'con_wa') filtrados = filtrados.filter(d => d.conteo_whatsapp !== null)
 
   function getNum(plan: PlanActivo, campo: CampoNumero): number | string {
     const ed = editados[plan.id]
@@ -1008,8 +1004,8 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
   const estiloInput = (editado: boolean) => ({ padding: '5px 8px', borderRadius: '6px', textAlign: 'center' as const, border: `1.5px solid ${editado ? TEAL : TEAL_MID}`, fontSize: '13px', outline: 'none', background: '#fff' })
   const estiloInputTxt = (editado: boolean) => ({ padding: '5px 8px', borderRadius: '6px', border: `1.5px solid ${editado ? TEAL : TEAL_MID}`, fontSize: '13px', outline: 'none', background: '#fff', width: '100%', minWidth: '120px' })
   const estiloSelect = (editado: boolean) => ({ padding: '5px 8px', borderRadius: '6px', border: `1.5px solid ${editado ? TEAL : TEAL_MID}`, fontSize: '13px', outline: 'none', background: '#fff', width: '100%', minWidth: '130px', cursor: 'pointer' })
-  const columnas = ['#', 'Cliente', 'Grupo WA', 'Sede', 'Instrumento', 'Plan', 'Duración', 'Clases tomadas', 'Conteo WA', 'Diferencia']
-  const editables = ['Grupo WA', 'Sede', 'Instrumento', 'Plan', 'Duración', 'Conteo WA']
+  const columnas = ['#', 'Cliente', 'Grupo WA', 'Sede', 'Instrumento', 'Plan', 'Duración', 'Clases tomadas']
+  const editables = ['Grupo WA', 'Sede', 'Instrumento', 'Plan', 'Duración']
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: '1400px', margin: '0 auto' }}>
@@ -1040,9 +1036,6 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
           <span style={{ fontSize: '13px', fontWeight: 600, color: TEAL_DARK }}>📅 Mes:</span>
           <input type="month" value={mes} onChange={e => setMes(e.target.value)} style={{ border: 'none', background: 'transparent', fontSize: '13px', fontWeight: 600, color: TEAL_DARK, outline: 'none', cursor: 'pointer' }} />
         </div>
-        {([{ key: 'todos', label: '📋 Todos' }, { key: 'al_dia', label: '✅ Al día' }, { key: 'pendiente', label: '⏳ Pendiente' }, { key: 'con_wa', label: '💬 Con conteo WA' }] as const).map(f => (
-          <button key={f.key} onClick={() => setFiltro(f.key)} style={{ padding: '7px 16px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', background: filtro === f.key ? TEAL : '#fff', color: filtro === f.key ? '#fff' : TEAL_DARK, border: `1.5px solid ${filtro === f.key ? TEAL : TEAL_MID}` }}>{f.label}</button>
-        ))}
         <select value={sedeFiltro} onChange={e => setSedeFiltro(e.target.value)} style={{ padding: '7px 14px', borderRadius: '20px', fontSize: '13px', fontWeight: 600, border: `1.5px solid ${sedeFiltro !== 'todas' ? TEAL : TEAL_MID}`, background: sedeFiltro !== 'todas' ? TEAL_LIGHT : '#fff', color: sedeFiltro !== 'todas' ? TEAL_DARK : '#475569', cursor: 'pointer', outline: 'none' }}>
           {sedes.map(s => <option key={s} value={s}>{s === 'todas' ? '🏢 Todas las sedes' : `🏢 ${s}`}</option>)}
         </select>
@@ -1067,10 +1060,6 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
                 ? <tr><td colSpan={columnas.length} style={{ padding: '40px', textAlign: 'center', color: '#999' }}>No hay planes.</td></tr>
                 : filtrados.map((plan, idx) => {
                   const ed = editados[plan.id] ?? {}
-                  const waActual = 'conteo_whatsapp' in ed ? ed.conteo_whatsapp : plan.conteo_whatsapp
-                  const diff = waActual !== null && waActual !== undefined ? plan.clases_tomadas - (waActual as number) : plan.clases_tomadas
-                  const diffColor = diff === 0 ? '#16a34a' : diff <= 2 ? '#d97706' : '#dc2626'
-                  const diffBg = diff === 0 ? '#f0fdf4' : diff <= 2 ? '#fffbeb' : '#fef2f2'
                   return (
                     <tr key={plan.id} style={{ borderTop: `1px solid ${TEAL_LIGHT}`, background: Object.keys(ed).length > 0 ? '#fffde7' : idx % 2 === 0 ? '#fff' : '#fafefe' }}>
                       <td style={{ padding: '10px 14px', textAlign: 'center', color: '#999', fontWeight: 600, position: 'sticky', left: 0, zIndex: 1, background: Object.keys(ed).length > 0 ? '#fffde7' : idx % 2 === 0 ? '#fff' : '#fafefe' }}>{idx + 1}</td>
@@ -1081,8 +1070,6 @@ function ReporteClasesTomadasPlaceholder({ onVolver }: { onVolver: () => void })
                       <td style={{ padding: '6px 14px', textAlign: 'center' }}>{modoEdicion ? <input type="number" value={getNum(plan, 'total_clases')} onChange={e => editarNum(plan.id, 'total_clases', e.target.value)} style={{ ...estiloInput('total_clases' in ed), width: '64px' }} /> : <span style={{ color: '#334155', fontWeight: 600 }}>{plan.total_clases}</span>}</td>
                       <td style={{ padding: '6px 14px', textAlign: 'center' }}>{modoEdicion ? <input type="number" value={getNum(plan, 'duracion_min')} onChange={e => editarNum(plan.id, 'duracion_min', e.target.value)} style={{ ...estiloInput('duracion_min' in ed), width: '64px' }} /> : <span style={{ color: '#334155' }}>{plan.duracion_min} min</span>}</td>
                       <td style={{ padding: '10px 14px', textAlign: 'center', color: '#334155', fontWeight: 600 }}>{plan.clases_tomadas}</td>
-                      <td style={{ padding: '6px 14px', textAlign: 'center' }}>{modoEdicion ? <input type="number" value={getNum(plan, 'conteo_whatsapp')} onChange={e => editarNum(plan.id, 'conteo_whatsapp', e.target.value)} placeholder="—" style={{ ...estiloInput('conteo_whatsapp' in ed), width: '64px' }} /> : plan.conteo_whatsapp !== null ? <span style={{ color: '#334155' }}>{plan.conteo_whatsapp}</span> : <span style={{ color: '#ccc' }}>—</span>}</td>
-                      <td style={{ padding: '10px 14px', textAlign: 'center' }}><span style={{ background: diffBg, color: diffColor, borderRadius: '20px', padding: '3px 12px', fontWeight: 700, fontSize: '13px', display: 'inline-block' }}>{diff === 0 ? '✓ 0' : `+${diff}`}</span></td>
                     </tr>
                   )
                 })}
