@@ -87,7 +87,7 @@ const T = {
     apellidos: 'Apellidos del estudiante', phApellidos: 'Ej: Rodríguez Pérez',
     fechaNac: 'Fecha de nacimiento',
     documento: 'N° de documento', phDocumento: 'Cédula o TI',
-    ocupacion: 'Ocupación', phOcupacion: 'Ej: Estudiante, médico, ingeniero...',
+    ocupacion: 'Ocupación del estudiante', phOcupacion: 'Ej: Estudiante, médico... (opcional)',
     secContacto: 'Contacto',
     whatsapp: 'WhatsApp', ayudaWhatsapp: 'Por aquí confirmaremos tus clases.',
     phCelular: 'Ej: 300 123 4567',
@@ -166,7 +166,7 @@ const T = {
     apellidos: 'Student’s last name(s)', phApellidos: 'E.g. Smith Johnson',
     fechaNac: 'Date of birth',
     documento: 'ID number', phDocumento: 'ID or passport',
-    ocupacion: 'Occupation', phOcupacion: 'E.g. Student, doctor, engineer...',
+    ocupacion: 'Student’s occupation', phOcupacion: 'E.g. Student, doctor... (optional)',
     secContacto: 'Contact',
     whatsapp: 'WhatsApp', ayudaWhatsapp: 'We will confirm your lessons here.',
     phCelular: 'E.g. 300 123 4567',
@@ -337,7 +337,6 @@ export default function RegistroCliente() {
     if (vacio('fecha_nacimiento')) return 'falta_fecha_nacimiento'
     if (form.fecha_nacimiento > new Date().toISOString().split('T')[0]) return 'fecha_invalida'
     if (vacio('numero_identificacion')) return 'falta_documento'
-    if (vacio('ocupacion')) return 'falta_ocupacion'
     if (esMenor && (vacio('acudiente_nombres') || vacio('acudiente_apellidos') || vacio('acudiente_documento'))) return 'faltan_datos_acudiente'
     if (!telefono) return esMenor ? 'telefono_acudiente_invalido' : 'telefono_invalido'
     if (!correoOk(form.email)) return 'email_invalido'
@@ -476,15 +475,15 @@ export default function RegistroCliente() {
                 placeholder={t.phDocumento} style={inp} />
             </div>
           </div>
-          {esMenor && (
-            <p style={{ margin: '-4px 0 16px', fontSize: '13px', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '10px 12px', lineHeight: 1.4 }}>
-              👶 {t.avisoMenor}
-            </p>
-          )}
-          <Campo label={t.ocupacion} required>
+          <Campo label={t.ocupacion}>
             <input value={form.ocupacion} onChange={e => set('ocupacion', e.target.value)}
               placeholder={t.phOcupacion} style={inp} />
           </Campo>
+          {esMenor && (
+            <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '10px 12px', lineHeight: 1.4 }}>
+              👶 {t.avisoMenor}
+            </p>
+          )}
         </div>
 
         {/* ── Contacto (solo adultos; si es menor, va en los datos del acudiente) ── */}
