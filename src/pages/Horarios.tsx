@@ -341,9 +341,9 @@ export default function Horarios() {
     setSalones(data || [])
   }
 
-  async function cargarClases() {
+  async function cargarClases(silencioso = false) {
     const miCarga = ++cargaIdRef.current
-    setCargando(true)
+    if (!silencioso) setCargando(true)   // silencioso: actualiza en segundo plano, sin poner el horario en blanco
     const fechaInicio = vista === 'semana' ? formatFecha(fechasSemana[0]) : formatFecha(diaSeleccionado)
     const fechaFin = vista === 'semana' ? formatFecha(fechasSemana[5]) : formatFecha(diaSeleccionado)
     const { data } = await supabase
@@ -707,6 +707,39 @@ async function verificarConflictosEnMemoria(
       const aviso = dadas < total
         ? `⚠️ El plan actual lleva ${dadas} de ${total} clases usadas (dadas + inasistencias): NO ha terminado.\n\nRevisa primero las clases confirmadas y sus duraciones.\n\n¿Seguro que quieres archivarlo y crear un plan nuevo?`
         : `El plan actual tiene ${dadas} de ${total} clases usadas (dadas + inasistencias).\n\n¿Crear el plan nuevo?`
+      // Si el cliente YA tiene otro plan activo del mismo instrumento, no se crea uno nuevo (evita planes duplicados):
+      // la clase y las programadas de este plan pasan a ese plan activo, y este se archiva.
+      // Solo planes del MISMO instrumento (un cliente puede tener, por ejemplo, piano y guitarra a la vez)
+      let consultaActivos = supabase.from('contratos')
+        .select('id, fecha_inicio, total_clases, clases_tomadas, instrumentos(nombre)')
+        .eq('cliente_id', planActual.cliente_id).eq('estado', 'activo').neq('id', planActualId)
+      if (planActual.instrumento_id) consultaActivos = consultaActivos.eq('instrumento_id', planActual.instrumento_id)
+      const { data: otrosActivos } = await consultaActivos.order('fecha_inicio', { ascending: false })
+      if (otrosActivos && otrosActivos.length > 0) {
+        const destino: any = otrosActivos[0]
+        const mensaje =
+          `Este cliente ya tiene otro plan activo: ${destino.instrumentos?.nombre || 'plan'}, desde ${destino.fecha_inicio}, ` +
+          `${Number(destino.clases_tomadas || 0)}/${destino.total_clases} clases.\n\n` +
+          `NO se creará un plan nuevo. Esta clase y las programadas de este plan se pasarán a ese plan activo, ` +
+          `y este plan (${dadas} de ${total} usadas) se archivará.` +
+          (dadas < total ? `\n\n⚠️ Ojo: este plan NO ha terminado.` : '') +
+          `\n\n¿Continuar?`
+        if (!window.confirm(mensaje)) return
+        await supabase.from('contratos').update({ estado: 'archivado' }).eq('id', planActualId)
+        await supabase.from('clases').update({ contrato_id: destino.id })
+          .eq('contrato_id', planActualId).eq('estado', 'programada')
+        if (claseEditando?.id) {
+          await supabase.from('clases').update({ contrato_id: destino.id }).eq('id', claseEditando.id)
+        }
+        auditar('mover_a_plan_activo', 'contratos', destino.id, {
+          cliente: claseEditando?.contratos?.clientes?.nombre || '—', desde: 'horarios_limite_del_plan',
+          plan_anterior: planActualId, dadas_plan_anterior: dadas, total_plan_anterior: total
+        })
+        alert('Listo: la clase se pasó al plan activo que ya tenía el cliente. No se creó un plan nuevo.')
+        setModalEditar(false)
+        cargarClases()
+        return
+      }
       if (!window.confirm(aviso)) return
       const { id: _id, created_at: _ca, clases_tomadas: _ct, estado: _est,
               fecha_inicio: _fi, fecha_fin: _ff, updated_at: _ua, ...camposCopiados } = planActual
@@ -1226,8 +1259,16 @@ if (err) setError('Error: ' + err.message)
       fechasAVerificar = clasesFuturas.map((c: any) => c.fecha)
     }
 
+    // Si solo cambia el estado (confirmar, dar, etc.) y la clase no se mueve, no hace falta revisar choques:
+    // esa revisión hace 7 consultas a la base de datos y era la parte más lenta de confirmar.
+    const horaOriginalClase = (claseEditando.hora || '').substring(0, 5)
+    const cambiaLugarOHora = alcance === 'futuras'
+      || editFecha !== claseEditando.fecha || editHora !== horaOriginalClase
+      || parseInt(editDuracion) !== Number(claseEditando.duracion_min || 60)
+      || editSalonId !== (claseEditando.salones?.id || claseEditando.salon_id)
+      || editProfesorId !== (claseEditando.profesores?.id || claseEditando.profesor_id || '')
     // Al cancelar no tiene sentido validar conflictos de horario
-    if (editEstado !== 'cancelada') {
+    if (editEstado !== 'cancelada' && cambiaLugarOHora) {
       const conflictos = await verificarConflictosEnMemoria(
         editSalonId, editProfesorId,
         fechasAVerificar, editHora, parseInt(editDuracion), idsClasesFuturas ?? [claseEditando.id]
@@ -1239,6 +1280,7 @@ if (err) setError('Error: ' + err.message)
       }
     }
 
+    let actualizarSinEspera = false   // true = ya se pintó el cambio; recargar en segundo plano
     let numeroPlan: number | undefined = undefined
    let honorarioCalculado: number | null = null
         if (editEstado === 'dada' && claseEditando.estado !== 'dada' && claseEditando.contratos?.id) {
@@ -1322,6 +1364,14 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
         .update(updatePayload)
         .eq('id', claseEditando.id)
       if (error) { setEditError('Error: ' + error.message); setEditGuardando(false); return }
+      // Solo cambió el estado: se pinta de inmediato en el horario; la recarga completa sigue en segundo plano
+      if (!cambiaLugarOHora) {
+        const { hora: _h, fecha: _f, salon_id: _s, profesor_id: _p, duracion_min: _d, ...camposEstado } = updatePayload
+        setClases((prev: any[]) => prev.map((c: any) => c.id === claseEditando.id
+          ? { ...c, ...camposEstado, numero_calculado: claseEditando.numero_calculado ?? c.numero_calculado }
+          : c))
+        actualizarSinEspera = true
+      }
       if (editEstado !== claseEditando.estado) {
         auditar('cambiar_estado_clase', 'clases', claseEditando.id, {
           cliente: (claseEditando as any).contratos?.clientes?.nombre || '—',
@@ -1343,7 +1393,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
     }
 
     setModalEditar(false)
-    cargarClases()
+    cargarClases(actualizarSinEspera)   // si ya se pintó el cambio, la recarga no pone el horario en blanco
     setEditGuardando(false)
   }
 
