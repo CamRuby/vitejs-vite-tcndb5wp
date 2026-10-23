@@ -405,6 +405,18 @@ if (contratosUnicos.length > 0) {
     numeracionMap.set(c.id, proyectado)
     c.numero_proyectado = proyectado
   })
+  // Número guía para programadas: sigue después de la última confirmada (en orden cronológico).
+  // Es solo una guía para pedir la confirmación de la siguiente clase; no se guarda.
+  clasesFiltradas
+    .filter((c: any) => c.estado === 'programada' && c.contratos?.id && !c.es_cortesia)
+    .sort((a: any, b: any) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`))
+    .forEach((c: any) => {
+      const durPlan = porContrato[c.contratos.id]?.[0]?.contratos?.duracion_min || 60
+      const fraccion = parseFloat(((c.duracion_min || durPlan) / durPlan).toFixed(4))
+      const proyectado = parseFloat(((numeracionReal[c.contratos.id] || 0) + fraccion).toFixed(4))
+      numeracionReal[c.contratos.id] = proyectado
+      c.numero_guia = proyectado
+    })
 }
 const clasesConNumero = clasesFiltradas.map((c: any) => ({
   ...c,
@@ -1711,9 +1723,12 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                         const col2 = getColorEstado(mainClass.es_cortesia ? 'dada' : mainClass.estado, mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && mainClass.cancelado_tarde)
                         // número calculado en tiempo real desde la view de Supabase
                        const esProyectado = mainClass.estado === 'confirmada' && mainClass.numero_proyectado
-                       const numPlan = mainClass.contratos?.total_clases && mainClass.numero_calculado && mainClass.estado !== 'programada'
-                          ? `${esProyectado ? '~' : ''}${mainClass.numero_calculado}/${mainClass.contratos.total_clases}`
-                          : ''
+                       const totalPlan = mainClass.contratos?.total_clases
+                       const guiaFueraDePlan = mainClass.estado === 'programada' && totalPlan && mainClass.numero_guia > totalPlan + 0.0001
+                       const numPlan = !totalPlan ? ''
+                          : mainClass.estado === 'programada'
+                            ? (mainClass.numero_guia ? (guiaFueraDePlan ? '⚠️ Plan completo' : `~${mainClass.numero_guia}/${totalPlan}`) : '')
+                            : mainClass.numero_calculado ? `${esProyectado ? '~' : ''}${mainClass.numero_calculado}/${totalPlan}` : ''
                         const colorNum = esProyectado ? '#b45309' : undefined
                         
                         return (
@@ -1735,7 +1750,8 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                               </strong>
                               <div style={{ display: 'flex', gap: '2px', flexShrink: 0, alignItems: 'center' }}>
                                 {numPlan && vista === 'dia' && (
-                                  <span style={{ fontSize: '12px', fontWeight: '700', opacity: 0.9, whiteSpace: 'nowrap' }}>{numPlan}</span>
+                                  <span style={{ fontSize: '12px', fontWeight: '700', opacity: 0.9, whiteSpace: 'nowrap',
+                                    color: guiaFueraDePlan ? '#b91c1c' : mainClass.estado === 'programada' ? '#b45309' : undefined }}>{numPlan}</span>
                                 )}
                                 {mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && <span style={{ fontSize: '23px' }}>⚠️</span>}
                                 {mainClass.estado === 'cancelada' && !mainClass.cancelado_por_academia && mainClass.honorario_valor === null && vista === 'dia' && (
