@@ -215,6 +215,47 @@ function FormCliente({ modo, form, setForm, cargando, onGuardar, onVolver }) {
             {inp('Teléfono del acudiente', 'acudiente_telefono')}
             {inp('Documento del acudiente', 'acudiente_documento')}
           </>)}
+          {sec('Factura electrónica')}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}>
+              <input type="checkbox" checked={!!form.requiere_factura} onChange={e => setForm({ ...form, requiere_factura: e.target.checked })} />
+              Desea factura electrónica
+            </label>
+          </div>
+          {form.requiere_factura && (<>
+            {inp('Nombre o razón social (factura)', 'factura_nombre')}
+            <div>
+              <label style={labelStyle}>Tipo de documento (factura)</label>
+              <select value={form.factura_tipo_documento || ''} onChange={e => setForm({ ...form, factura_tipo_documento: e.target.value })} style={estiloInput}>
+                <option value="">— Elegir —</option>
+                <option value="CC">Cédula de ciudadanía</option>
+                <option value="CE">Cédula de extranjería</option>
+                <option value="NIT">NIT</option>
+              </select>
+            </div>
+            {inp('N° documento (factura)', 'factura_documento')}
+            {inp('Correo para la factura', 'factura_email', 'email')}
+          </>)}
+          {sec('Comunicación')}
+          <div>
+            <label style={labelStyle}>Idioma para mensajes</label>
+            <select value={form.idioma || 'es'} onChange={e => setForm({ ...form, idioma: e.target.value })} style={estiloInput}>
+              <option value="es">Español</option>
+              <option value="en">Inglés</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', fontSize: '14px', paddingBottom: '8px' }}>
+              <input type="checkbox" checked={!!form.autoriza_datos} style={{ marginTop: '3px' }}
+                onChange={e => setForm({ ...form, autoriza_datos: e.target.checked, autoriza_datos_en: e.target.checked ? (form.autoriza_datos_en || new Date().toISOString()) : '' })} />
+              <span>
+                Autorizó tratamiento de datos y mensajes por WhatsApp
+                {form.autoriza_datos && form.autoriza_datos_en && (
+                  <span style={{ display: 'block', fontSize: '12px', color: '#888' }}>Desde el {new Date(form.autoriza_datos_en).toLocaleDateString('es-CO')}</span>
+                )}
+              </span>
+            </label>
+          </div>
         </div>
         <div style={{ marginTop: '28px', display: 'flex', gap: '12px' }}>
           <button onClick={onGuardar} disabled={cargando} style={{ padding: '11px 28px', background: TEAL, color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '15px', fontWeight: '500' }}>
@@ -600,7 +641,9 @@ export default function Clientes({ onReset }: { onReset?: () => void } = {}) {
     direccion: '', ciudad: '', contacto_emergencia_nombre: '', contacto_emergencia_telefono: '',
     menor_de_edad: false, acudiente_nombres: '', acudiente_apellidos: '',
     acudiente_telefono: '', acudiente_documento: '', discapacidad_fisica: false, condicion_aprendizaje: '',
-    inasistencia_perdonada: false
+    inasistencia_perdonada: false,
+    requiere_factura: false, factura_nombre: '', factura_tipo_documento: '', factura_documento: '', factura_email: '',
+    idioma: 'es', autoriza_datos: false, autoriza_datos_en: ''
   })
   const [profesores, setProfesores] = useState<any[]>([])
   const [instrumentos, setInstrumentos] = useState<any[]>([])
@@ -772,7 +815,7 @@ async function recalcularClasesTomadas(planesData: any[]) {
   for (const plan of planesActivos) {
     const { data: clasesReales } = await supabase
       .from('clases')
-      .select('id, estado, es_cortesia, cancelado_por_academia, inasistencia_perdonada, duracion_min')
+      .select('id, estado, es_cortesia, cancelado_por_academia, cancelado_tarde, inasistencia_perdonada, duracion_min')
       .eq('contrato_id', plan.id)
     if (!clasesReales) continue
     const durPlan = plan.duracion_min || 60
@@ -812,7 +855,11 @@ async function recalcularClasesTomadas(planesData: any[]) {
       acudiente_apellidos: cliente.acudiente_apellidos || '', acudiente_telefono: cliente.acudiente_telefono || '',
       acudiente_documento: cliente.acudiente_documento || '', discapacidad_fisica: cliente.discapacidad_fisica || false,
       condicion_aprendizaje: cliente.condicion_aprendizaje || '',
-      inasistencia_perdonada: cliente.inasistencia_perdonada || false
+      inasistencia_perdonada: cliente.inasistencia_perdonada || false,
+      requiere_factura: cliente.requiere_factura || false, factura_nombre: cliente.factura_nombre || '',
+      factura_tipo_documento: cliente.factura_tipo_documento || '', factura_documento: cliente.factura_documento || '',
+      factura_email: cliente.factura_email || '', idioma: cliente.idioma || 'es',
+      autoriza_datos: cliente.autoriza_datos || false, autoriza_datos_en: cliente.autoriza_datos_en || ''
     })
     await cargarDatosCliente(cliente)
     const { data: planesParaRecalc } = await supabase
@@ -828,14 +875,16 @@ await cargarDatosCliente(cliente)
 
   function nuevoCliente() {
     setClienteSeleccionado(null)
-    setForm({ nombre: '', telefono: '', email: '', grupo_whatsapp: '', estado: 'activo', nombres: '', apellidos: '', fecha_nacimiento: '', numero_identificacion: '', ocupacion: '', direccion: '', ciudad: '', contacto_emergencia_nombre: '', contacto_emergencia_telefono: '', menor_de_edad: false, acudiente_nombres: '', acudiente_apellidos: '', acudiente_telefono: '', acudiente_documento: '', discapacidad_fisica: false, condicion_aprendizaje: '' })
+    setForm({ nombre: '', telefono: '', email: '', grupo_whatsapp: '', estado: 'activo', nombres: '', apellidos: '', fecha_nacimiento: '', numero_identificacion: '', ocupacion: '', direccion: '', ciudad: '', contacto_emergencia_nombre: '', contacto_emergencia_telefono: '', menor_de_edad: false, acudiente_nombres: '', acudiente_apellidos: '', acudiente_telefono: '', acudiente_documento: '', discapacidad_fisica: false, condicion_aprendizaje: '', inasistencia_perdonada: false, requiere_factura: false, factura_nombre: '', factura_tipo_documento: '', factura_documento: '', factura_email: '', idioma: 'es', autoriza_datos: false, autoriza_datos_en: '' })
     setConfirmarBorrar(false); setErrorBorrar(''); setModo('nuevo')
   }
 
   async function guardar() {
     if (!form.nombres.trim()) return alert('El nombre es obligatorio')
     setCargando(true)
-    const payload = { ...form, nombre: `${form.nombres.trim()} ${form.apellidos.trim()}`.trim(), fecha_nacimiento: form.fecha_nacimiento && form.fecha_nacimiento.trim() !== '' ? form.fecha_nacimiento : null, inasistencia_perdonada: form.inasistencia_perdonada || false }
+    const payload = { ...form, nombre: `${form.nombres.trim()} ${form.apellidos.trim()}`.trim(), fecha_nacimiento: form.fecha_nacimiento && form.fecha_nacimiento.trim() !== '' ? form.fecha_nacimiento : null, inasistencia_perdonada: form.inasistencia_perdonada || false,
+      factura_tipo_documento: form.factura_tipo_documento || null,
+      autoriza_datos_en: form.autoriza_datos ? (form.autoriza_datos_en || new Date().toISOString()) : null }
     if (modo === 'nuevo') {
       auditar('crear_cliente', 'clientes', undefined, { nombre: payload.nombre || payload.nombres })
         const { data, error } = await supabase.from('clientes').insert(payload).select().single()
@@ -1679,6 +1728,9 @@ await cargarDatosCliente(cliente)
                     <p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{form.acudiente_nombres} {form.acudiente_apellidos} · {form.acudiente_telefono}{form.acudiente_documento ? ` · Doc: ${form.acudiente_documento}` : ''}</p>
                   </div>
                 )}
+                <div><p style={{ margin: '0 0 3px', fontSize: '12px', color: '#999', fontWeight: '600' }}>🧾 Factura electrónica</p><p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{form.requiere_factura ? `${form.factura_nombre || '—'} · ${form.factura_tipo_documento || '—'} ${form.factura_documento || ''}${form.factura_email ? ` · ${form.factura_email}` : ''}` : 'No'}</p></div>
+                <div><p style={{ margin: '0 0 3px', fontSize: '12px', color: '#999', fontWeight: '600' }}>🌐 Idioma</p><p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{form.idioma === 'en' ? 'Inglés' : 'Español'}</p></div>
+                <div><p style={{ margin: '0 0 3px', fontSize: '12px', color: '#999', fontWeight: '600' }}>✅ Autorización de datos</p><p style={{ margin: 0, fontSize: '14px', color: form.autoriza_datos ? '#166534' : '#b45309' }}>{form.autoriza_datos ? `Sí${form.autoriza_datos_en ? ` · ${new Date(form.autoriza_datos_en).toLocaleDateString('es-CO')}` : ''}` : 'Pendiente'}</p></div>
                 {(form.discapacidad_fisica || form.condicion_aprendizaje) && (
                   <div style={{ gridColumn: '1 / -1' }}>
                     {form.discapacidad_fisica && <p style={{ margin: '0 0 4px', fontSize: '13px', color: '#dc2626' }}>⚠️ Presenta discapacidad física</p>}
