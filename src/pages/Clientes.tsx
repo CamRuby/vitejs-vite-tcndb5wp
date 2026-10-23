@@ -5,6 +5,7 @@ import { auditar } from '../auditoria'
 import { calcularNumeracion } from '../utils/numeracionClases'
 import { eliminarInscripcionTaller, registrarPagoTaller } from '../utils/accionesTaller'
 import { eliminarCliente, eliminarPlan } from '../utils/accionesCliente'
+import { confirmarSiHayPlanActivo } from '../utils/planesActivos'
 import { precioPropuestoTaller } from '../utils/preciosTaller'
 import { METODOS_PAGO, hoyLocal } from '../utils/accionesPago'
 import { ModalValorInscripcion } from './ModalesTaller'
@@ -1350,13 +1351,15 @@ await cargarDatosCliente(cliente)
       const { error } = await supabase.from('contratos').update(registro).eq('id', planId)
       if (error) { alert('Error al actualizar plan: ' + error.message); return }
     } else {
+      // Evita planes duplicados: si ya hay un plan activo del mismo instrumento con clases restantes, pregunta antes
+      if (!(await confirmarSiHayPlanActivo(clienteSeleccionado.id, payload.instrumento_id))) return
       auditar('crear_plan', 'contratos', undefined, { cliente: clienteSeleccionado?.nombre || '—' })
             const { data: nuevoPlan, error } = await supabase.from('contratos').insert(registro).select().single()
       if (error) { alert('Error al crear plan: ' + error.message); return }
       // Siempre migrar clases futuras programadas/confirmadas al nuevo plan.
       // Esto cubre tanto renovaciones explícitas como planes nuevos creados desde cero.
       if (nuevoPlan) {
-        const hoy = new Date().toISOString().split('T')[0]
+        const hoy = hoyLocal()   // fecha de Colombia (no la de Londres, que después de las 7 p. m. ya es "mañana")
         // Buscar todos los contratos del cliente que tengan clases futuras pendientes
         const { data: contratosCliente } = await supabase.from('contratos').select('id, duracion_min')
           .eq('cliente_id', clienteSeleccionado.id).neq('id', nuevoPlan.id)
