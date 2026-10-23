@@ -4,7 +4,7 @@ import { patronSinTildes } from '../utils/busqueda'
 import { auditar } from '../auditoria'
 import { calcularNumeracion } from '../utils/numeracionClases'
 import { eliminarInscripcionTaller, registrarPagoTaller } from '../utils/accionesTaller'
-import { eliminarCliente } from '../utils/accionesCliente'
+import { eliminarCliente, eliminarPlan } from '../utils/accionesCliente'
 import { precioPropuestoTaller } from '../utils/preciosTaller'
 import { METODOS_PAGO, hoyLocal } from '../utils/accionesPago'
 import { ModalValorInscripcion } from './ModalesTaller'
@@ -863,6 +863,21 @@ await cargarDatosCliente(cliente)
     const r = await eliminarCliente(clienteSeleccionado.id)
     if (!r.ok) { setErrorBorrar(r.mensaje); setBorrando(false); return }
     cargarVista(vistaActual); setModo('lista'); setBusqueda(''); setClientes([]); setBorrando(false)
+  }
+
+  // Borra un plan SIN clases dadas ni pagos (función única eliminar_plan: la base de datos
+  // vuelve a revisar las reglas, borra sus clases pendientes y deja copia en Auditoría).
+  async function borrarPlan(p: any) {
+    const clasesPlan = clases.filter((c: any) => c.contrato_id === p.id)
+    const nombrePlan = `${p.instrumentos?.nombre || 'Plan'} · ${p.total_clases} clases · desde ${p.fecha_inicio || '—'}`
+    const aviso = `¿Borrar este plan?\n\n${nombrePlan}\n\n` +
+      (clasesPlan.length > 0 ? `También se borrarán sus ${clasesPlan.length} clase(s) sin dar (programadas, confirmadas o canceladas).\n\n` : '') +
+      'Esta acción no se puede deshacer (queda registrada en Auditoría).'
+    if (!window.confirm(aviso)) return
+    const r = await eliminarPlan(p.id)
+    if (!r.ok) { alert(r.mensaje); return }
+    await cargarDatosCliente(clienteSeleccionado)
+    cargarVista(vistaActual)
   }
 
   async function cambiarEstadoPlan(planId: string, nuevoEstado: string) {
@@ -1904,6 +1919,13 @@ await cargarDatosCliente(cliente)
                     <button onClick={() => setAplazando(true)} title="El cliente se ausenta: sus clases de ese periodo salen del horario"
                       style={{ marginLeft: 'auto', padding: '5px 14px', background: 'white', color: '#0e7490', border: '1px solid #a5f3fc', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
                       ⏸ Aplazar clases
+                    </button>
+                  )}
+                  {/* Borrar plan: solo si no tiene clases dadas ni pagos (planes creados por error) */}
+                  {!clases.some((c: any) => c.contrato_id === p.id && c.estado === 'dada') && pagosPlan.length === 0 && (
+                    <button onClick={() => borrarPlan(p)} title="Solo para planes sin clases dadas ni pagos (por ejemplo, creados por error)"
+                      style={{ marginLeft: (p.estado || 'activo') === 'activo' ? '0' : 'auto', padding: '5px 14px', background: 'white', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
+                      🗑 Borrar plan
                     </button>
                   )}
                   {p.estado === 'completado' && (
