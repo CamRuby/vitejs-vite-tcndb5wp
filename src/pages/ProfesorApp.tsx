@@ -380,6 +380,18 @@ export default function ProfesorApp({ rol }: { rol?: string | null }) {
         numeracionHoyMap.set(c.id, proyectado)
         c.numero_proyectado = proyectado
       })
+      // Número guía para programadas: sigue después de la última confirmada (en orden cronológico).
+      // Sirve para pedir la confirmación de la siguiente clase ("¿confirmas la clase 4 de 8?").
+      const programadas = clasesFinales
+        .filter((c: any) => c.estado === 'programada' && !c.esTaller && c.contrato_id && !c.es_cortesia)
+        .sort((a: any, b: any) => `${a.fecha}${a.hora}`.localeCompare(`${b.fecha}${b.hora}`))
+      programadas.forEach((c: any) => {
+        const durPlan = porContratoHoy[c.contrato_id]?.[0]?.contratos?.duracion_min || 60
+        const fraccion = parseFloat(((c.duracion_min || durPlan) / durPlan).toFixed(4))
+        const proyectado = parseFloat(((numeracionReal[c.contrato_id] || 0) + fraccion).toFixed(4))
+        numeracionReal[c.contrato_id] = proyectado
+        c.numero_proyectado = proyectado   // no se guarda como número real: es solo una guía
+      })
     }
     clasesFinales.forEach((c: any) => {
       if (numeracionHoyMap.has(c.id)) c.numero_calculado = numeracionHoyMap.get(c.id)
@@ -1535,9 +1547,13 @@ function TarjetaClase({ c, i, onTap, resumenExpandido, setResumenExpandido, hono
   </span>
 )}
 {!mostrarFecha && !c.esTaller && !c.es_cortesia && c.numero_proyectado && c.contratos?.total_clases && (
-  <span style={{ fontSize:'12px', fontWeight:'800', color:'#b45309', background:'#fffbeb', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
-   ~clase {c.numero_proyectado}/{c.contratos.total_clases}
-  </span>
+  c.numero_proyectado > c.contratos.total_clases + 0.0001
+    ? <span style={{ fontSize:'12px', fontWeight:'800', color:'#b91c1c', background:'#fef2f2', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
+        ⚠️ Plan completo
+      </span>
+    : <span style={{ fontSize:'12px', fontWeight:'800', color:'#b45309', background:'#fffbeb', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
+        ~clase {c.numero_proyectado}/{c.contratos.total_clases}
+      </span>
 )}
 {!c.esTaller && c.es_cortesia && (
   <span style={{ fontSize:'12px', fontWeight:'800', color:'#0369a1', background:'#e0f2fe', padding:'2px 8px', borderRadius:'10px', whiteSpace:'nowrap' }}>
