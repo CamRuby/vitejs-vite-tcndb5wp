@@ -67,6 +67,14 @@ function aInternacional(iso: string, numero: string): string {
   return `+${pais.codigo}${d}`
 }
 
+/** ¿Es menor de edad? Se calcula con la fecha de nacimiento (menos de 18 años cumplidos hoy). */
+function esMenorDeEdad(fechaNacimiento: string): boolean {
+  if (!fechaNacimiento) return false
+  const hoy = new Date()
+  const limite = `${hoy.getFullYear() - 18}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+  return fechaNacimiento > limite
+}
+
 /* ─────────────────────────── Textos ES / EN ─────────────────────────── */
 const T = {
   es: {
@@ -74,14 +82,14 @@ const T = {
     subtitulo: 'Completa tus datos para registrarte',
     obligatorios: 'indica un campo obligatorio.',
     secEstudiante: 'Datos del estudiante',
-    ayudaEstudiante: 'Escribe aquí los datos de quien toma las clases. Si es menor de edad, los datos del acudiente van más abajo.',
+    ayudaEstudiante: 'Escribe aquí los datos de quien toma las clases.',
     nombres: 'Nombres del estudiante', phNombres: 'Ej: María Camila',
     apellidos: 'Apellidos del estudiante', phApellidos: 'Ej: Rodríguez Pérez',
     fechaNac: 'Fecha de nacimiento',
     documento: 'N° de documento', phDocumento: 'Cédula o TI',
     ocupacion: 'Ocupación', phOcupacion: 'Ej: Estudiante, médico, ingeniero...',
     secContacto: 'Contacto',
-    whatsapp: 'WhatsApp', ayudaWhatsapp: 'Por aquí confirmaremos tus clases. Si el estudiante es menor de edad, puede ser el del acudiente.',
+    whatsapp: 'WhatsApp', ayudaWhatsapp: 'Por aquí confirmaremos tus clases.',
     phCelular: 'Ej: 300 123 4567',
     correo: 'Correo electrónico', phCorreo: 'Ej: maria@correo.com',
     secUbicacion: 'Ubicación',
@@ -91,13 +99,14 @@ const T = {
     emNombre: 'Nombre del contacto', phEmNombre: 'Nombre completo',
     emTelefono: 'Teléfono del contacto', phEmTelefono: 'Ej: 3009876543',
     secAdicional: 'Información adicional',
-    menor: 'El estudiante es menor de edad', ayudaMenor: 'Requerirá datos del acudiente',
+    avisoMenor: 'Según la fecha de nacimiento, el estudiante es menor de edad. Por eso te pedimos también los datos del acudiente.',
     discapacidad: 'Presenta discapacidad física',
     condicion: 'Condición especial de aprendizaje', phCondicion: 'Describir si aplica (opcional)',
     secAcudiente: 'Datos del acudiente',
     acNombres: 'Nombres del acudiente', phAcNombres: 'Nombres',
     acApellidos: 'Apellidos del acudiente', phAcApellidos: 'Apellidos',
-    acWhatsapp: 'WhatsApp del acudiente',
+    acWhatsapp: 'WhatsApp del acudiente', ayudaAcWhatsapp: 'Por aquí confirmaremos las clases del estudiante.',
+    acCorreo: 'Correo del acudiente',
     acDocumento: 'Documento del acudiente', phAcDocumento: 'N° documento',
     secFactura: 'Factura electrónica',
     preguntaFactura: '¿Deseas recibir factura electrónica?',
@@ -152,14 +161,14 @@ const T = {
     subtitulo: 'Fill in your details to register',
     obligatorios: 'indicates a required field.',
     secEstudiante: 'Student information',
-    ayudaEstudiante: 'Enter the details of the person taking the lessons. If the student is a minor, the guardian’s details go further below.',
+    ayudaEstudiante: 'Enter the details of the person taking the lessons.',
     nombres: 'Student’s first name(s)', phNombres: 'E.g. Mary Ann',
     apellidos: 'Student’s last name(s)', phApellidos: 'E.g. Smith Johnson',
     fechaNac: 'Date of birth',
     documento: 'ID number', phDocumento: 'ID or passport',
     ocupacion: 'Occupation', phOcupacion: 'E.g. Student, doctor, engineer...',
     secContacto: 'Contact',
-    whatsapp: 'WhatsApp', ayudaWhatsapp: 'We will confirm your lessons here. If the student is a minor, it can be the guardian’s number.',
+    whatsapp: 'WhatsApp', ayudaWhatsapp: 'We will confirm your lessons here.',
     phCelular: 'E.g. 300 123 4567',
     correo: 'Email', phCorreo: 'E.g. mary@email.com',
     secUbicacion: 'Address',
@@ -169,13 +178,14 @@ const T = {
     emNombre: 'Contact name', phEmNombre: 'Full name',
     emTelefono: 'Contact phone', phEmTelefono: 'E.g. 3009876543',
     secAdicional: 'Additional information',
-    menor: 'The student is under 18', ayudaMenor: 'Guardian details will be required',
+    avisoMenor: 'According to the date of birth, the student is under 18, so we also need the guardian’s details.',
     discapacidad: 'Has a physical disability',
     condicion: 'Special learning needs', phCondicion: 'Describe if applicable (optional)',
     secAcudiente: 'Guardian information',
     acNombres: 'Guardian’s first name(s)', phAcNombres: 'First name(s)',
     acApellidos: 'Guardian’s last name(s)', phAcApellidos: 'Last name(s)',
-    acWhatsapp: 'Guardian’s WhatsApp',
+    acWhatsapp: 'Guardian’s WhatsApp', ayudaAcWhatsapp: 'We will confirm the student’s lessons here.',
+    acCorreo: 'Guardian’s email',
     acDocumento: 'Guardian’s ID number', phAcDocumento: 'ID number',
     secFactura: 'Electronic invoice',
     preguntaFactura: 'Would you like to receive an electronic invoice?',
@@ -286,8 +296,7 @@ export default function RegistroCliente() {
     ocupacion: '', direccion: '', ciudad: '', email: '',
     tel_pais: 'CO', tel_numero: '',
     contacto_emergencia_nombre: '', contacto_emergencia_telefono: '',
-    menor_de_edad: false, acudiente_nombres: '', acudiente_apellidos: '',
-    ac_pais: 'CO', ac_numero: '', acudiente_documento: '',
+    acudiente_nombres: '', acudiente_apellidos: '', acudiente_documento: '',
     discapacidad_fisica: false, condicion_aprendizaje: '',
     requiere_factura: null,       // null = aún no responde; true / false
     copiar_datos: false,
@@ -300,12 +309,13 @@ export default function RegistroCliente() {
   const [error, setError]       = useState('')   // código del error; el texto sale en el idioma elegido
 
   const set = (k: string, v: any) => setForm(p => ({ ...p, [k]: v }))
+  const esMenor = esMenorDeEdad(form.fecha_nacimiento)
 
   /** Copia a la factura los datos del estudiante (o del acudiente si es menor). Se pueden corregir después. */
   function copiarDatosFactura(marcar: boolean) {
     setForm(p => {
       if (!marcar) return { ...p, copiar_datos: false }
-      const delAcudiente = !!p.menor_de_edad
+      const delAcudiente = esMenorDeEdad(p.fecha_nacimiento)
       return {
         ...p,
         copiar_datos: true,
@@ -320,7 +330,7 @@ export default function RegistroCliente() {
   }
 
   /** Revisa los obligatorios antes de enviar. Devuelve el código del primer problema, o '' si todo está bien. */
-  function validar(telefono: string, telAcudiente: string): string {
+  function validar(telefono: string): string {
     const vacio = (k: string) => !String(form[k] ?? '').trim()
     const correoOk = (s: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(s).trim())
     if (vacio('nombres') || vacio('apellidos')) return 'falta_nombre'
@@ -328,14 +338,11 @@ export default function RegistroCliente() {
     if (form.fecha_nacimiento > new Date().toISOString().split('T')[0]) return 'fecha_invalida'
     if (vacio('numero_identificacion')) return 'falta_documento'
     if (vacio('ocupacion')) return 'falta_ocupacion'
-    if (!telefono) return 'telefono_invalido'
+    if (esMenor && (vacio('acudiente_nombres') || vacio('acudiente_apellidos') || vacio('acudiente_documento'))) return 'faltan_datos_acudiente'
+    if (!telefono) return esMenor ? 'telefono_acudiente_invalido' : 'telefono_invalido'
     if (!correoOk(form.email)) return 'email_invalido'
     if (vacio('direccion') || vacio('ciudad')) return 'falta_ubicacion'
     if (vacio('contacto_emergencia_nombre') || vacio('contacto_emergencia_telefono')) return 'falta_emergencia'
-    if (form.menor_de_edad) {
-      if (vacio('acudiente_nombres') || vacio('acudiente_apellidos') || vacio('acudiente_documento')) return 'faltan_datos_acudiente'
-      if (!telAcudiente) return 'telefono_acudiente_invalido'
-    }
     if (form.requiere_factura === null) return 'falta_respuesta_factura'
     if (form.requiere_factura) {
       if (vacio('factura_nombre') || vacio('factura_documento')) return 'faltan_datos_factura'
@@ -348,8 +355,7 @@ export default function RegistroCliente() {
 
   async function enviar() {
     const telefono = aInternacional(form.tel_pais, form.tel_numero)
-    const telAcudiente = form.menor_de_edad ? aInternacional(form.ac_pais, form.ac_numero) : ''
-    const problema = validar(telefono, telAcudiente)
+    const problema = validar(telefono)
     if (problema) { setError(problema); return }
     setError(''); setEnviando(true)
 
@@ -367,10 +373,10 @@ export default function RegistroCliente() {
         email: form.email.trim(),
         contacto_emergencia_nombre: form.contacto_emergencia_nombre.trim(),
         contacto_emergencia_telefono: form.contacto_emergencia_telefono.trim(),
-        menor_de_edad: !!form.menor_de_edad,
+        menor_de_edad: esMenor,   // la base de datos también lo calcula con la fecha
         acudiente_nombres: form.acudiente_nombres.trim(),
         acudiente_apellidos: form.acudiente_apellidos.trim(),
-        acudiente_telefono: telAcudiente,
+        acudiente_telefono: esMenor ? telefono : '',   // si es menor, el único WhatsApp es el del acudiente
         acudiente_documento: form.acudiente_documento.trim(),
         discapacidad_fisica: !!form.discapacidad_fisica,
         condicion_aprendizaje: form.condicion_aprendizaje.trim(),
@@ -470,14 +476,19 @@ export default function RegistroCliente() {
                 placeholder={t.phDocumento} style={inp} />
             </div>
           </div>
+          {esMenor && (
+            <p style={{ margin: '-4px 0 16px', fontSize: '13px', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '10px 12px', lineHeight: 1.4 }}>
+              👶 {t.avisoMenor}
+            </p>
+          )}
           <Campo label={t.ocupacion} required>
             <input value={form.ocupacion} onChange={e => set('ocupacion', e.target.value)}
               placeholder={t.phOcupacion} style={inp} />
           </Campo>
         </div>
 
-        {/* ── Contacto ── */}
-        <div style={{ marginBottom: '32px' }}>
+        {/* ── Contacto (solo adultos; si es menor, va en los datos del acudiente) ── */}
+        {!esMenor && <div style={{ marginBottom: '32px' }}>
           <Seccion titulo={t.secContacto} />
           <Campo label={t.whatsapp} required ayuda={t.ayudaWhatsapp}>
             <Telefono pais={form.tel_pais} numero={form.tel_numero} idioma={idioma} placeholder={t.phCelular}
@@ -487,7 +498,34 @@ export default function RegistroCliente() {
             <input type="email" value={form.email} onChange={e => set('email', e.target.value)}
               placeholder={t.phCorreo} style={inp} inputMode="email" autoComplete="email" />
           </Campo>
-        </div>
+        </div>}
+
+        {/* ── Datos del acudiente (solo si es menor) ── */}
+        {esMenor && (
+          <div style={{ marginBottom: '32px', background: '#fffbeb', borderRadius: '16px', padding: '20px', border: '1.5px solid #fde68a' }}>
+            <Seccion titulo={t.secAcudiente} color="#92400e" borde="#fde68a" />
+            <Campo label={t.acNombres} required>
+              <input value={form.acudiente_nombres} onChange={e => set('acudiente_nombres', e.target.value)}
+                placeholder={t.phAcNombres} style={inp} />
+            </Campo>
+            <Campo label={t.acApellidos} required>
+              <input value={form.acudiente_apellidos} onChange={e => set('acudiente_apellidos', e.target.value)}
+                placeholder={t.phAcApellidos} style={inp} />
+            </Campo>
+            <Campo label={t.acDocumento} required>
+              <input value={form.acudiente_documento} onChange={e => set('acudiente_documento', e.target.value)}
+                placeholder={t.phAcDocumento} style={inp} />
+            </Campo>
+            <Campo label={t.acWhatsapp} required ayuda={t.ayudaAcWhatsapp}>
+              <Telefono pais={form.tel_pais} numero={form.tel_numero} idioma={idioma} placeholder={t.phCelular}
+                onPais={v => set('tel_pais', v)} onNumero={v => set('tel_numero', v)} />
+            </Campo>
+            <Campo label={t.acCorreo} required>
+              <input type="email" value={form.email} onChange={e => set('email', e.target.value)}
+                placeholder={t.phCorreo} style={inp} inputMode="email" autoComplete="email" />
+            </Campo>
+          </div>
+        )}
 
         {/* ── Ubicación ── */}
         <div style={{ marginBottom: '32px' }}>
@@ -519,14 +557,6 @@ export default function RegistroCliente() {
         <div style={{ marginBottom: '32px' }}>
           <Seccion titulo={t.secAdicional} />
 
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '16px', background: 'white', borderRadius: '12px', border: '1.5px solid #e5e7eb', cursor: 'pointer', marginBottom: '12px' }}>
-            <input type="checkbox" checked={form.menor_de_edad} onChange={e => set('menor_de_edad', e.target.checked)} style={checkStyle} />
-            <div>
-              <span style={{ display: 'block', fontSize: '15px', fontWeight: '600', color: '#1a1a1a' }}>{t.menor}</span>
-              <span style={{ display: 'block', fontSize: '13px', color: '#888', marginTop: '2px' }}>{t.ayudaMenor}</span>
-            </div>
-          </label>
-
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '16px', background: 'white', borderRadius: '12px', border: '1.5px solid #e5e7eb', cursor: 'pointer', marginBottom: '16px' }}>
             <input type="checkbox" checked={form.discapacidad_fisica} onChange={e => set('discapacidad_fisica', e.target.checked)} style={checkStyle} />
             <span style={{ fontSize: '15px', fontWeight: '600', color: '#1a1a1a', marginTop: '1px' }}>{t.discapacidad}</span>
@@ -537,29 +567,6 @@ export default function RegistroCliente() {
               placeholder={t.phCondicion} style={inp} />
           </Campo>
         </div>
-
-        {/* ── Datos del acudiente (solo si es menor) ── */}
-        {form.menor_de_edad && (
-          <div style={{ marginBottom: '32px', background: '#fffbeb', borderRadius: '16px', padding: '20px', border: '1.5px solid #fde68a' }}>
-            <Seccion titulo={t.secAcudiente} color="#92400e" borde="#fde68a" />
-            <Campo label={t.acNombres} required>
-              <input value={form.acudiente_nombres} onChange={e => set('acudiente_nombres', e.target.value)}
-                placeholder={t.phAcNombres} style={inp} />
-            </Campo>
-            <Campo label={t.acApellidos} required>
-              <input value={form.acudiente_apellidos} onChange={e => set('acudiente_apellidos', e.target.value)}
-                placeholder={t.phAcApellidos} style={inp} />
-            </Campo>
-            <Campo label={t.acWhatsapp} required>
-              <Telefono pais={form.ac_pais} numero={form.ac_numero} idioma={idioma} placeholder={t.phCelular}
-                onPais={v => set('ac_pais', v)} onNumero={v => set('ac_numero', v)} />
-            </Campo>
-            <Campo label={t.acDocumento} required>
-              <input value={form.acudiente_documento} onChange={e => set('acudiente_documento', e.target.value)}
-                placeholder={t.phAcDocumento} style={inp} />
-            </Campo>
-          </div>
-        )}
 
         {/* ── Factura electrónica ── */}
         <div style={{ marginBottom: '32px' }}>
@@ -574,7 +581,7 @@ export default function RegistroCliente() {
           {form.requiere_factura === true && (<>
             <label style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', background: TEAL_LIGHT, borderRadius: '12px', cursor: 'pointer', marginBottom: '16px' }}>
               <input type="checkbox" checked={form.copiar_datos} onChange={e => copiarDatosFactura(e.target.checked)} style={checkStyle} />
-              <span style={{ fontSize: '15px', fontWeight: '600', color: TEAL }}>{form.menor_de_edad ? t.copiarAcudiente : t.copiarEstudiante}</span>
+              <span style={{ fontSize: '15px', fontWeight: '600', color: TEAL }}>{esMenor ? t.copiarAcudiente : t.copiarEstudiante}</span>
             </label>
             <Campo label={t.fNombre} required>
               <input value={form.factura_nombre} onChange={e => set('factura_nombre', e.target.value)}
@@ -607,7 +614,7 @@ export default function RegistroCliente() {
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '16px', background: 'white', borderRadius: '12px', border: `1.5px solid ${form.autoriza_datos ? TEAL : '#e5e7eb'}`, cursor: 'pointer' }}>
             <input type="checkbox" checked={form.autoriza_datos} onChange={e => set('autoriza_datos', e.target.checked)} style={checkStyle} />
             <span style={{ fontSize: '14px', color: '#1a1a1a', lineHeight: 1.5 }}>
-              {form.menor_de_edad ? t.autorizaMenor : t.autoriza}<Obligatorio />
+              {esMenor ? t.autorizaMenor : t.autoriza}<Obligatorio />
             </span>
           </label>
           <button type="button" onClick={() => setVerPolitica(v => !v)}
