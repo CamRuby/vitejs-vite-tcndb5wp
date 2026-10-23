@@ -3,6 +3,9 @@ import { supabase } from '../supabase'
 import { contieneSinTildes } from '../utils/busqueda'
 import { calcularNumeracion } from '../utils/numeracionClases'
 import { eliminarPlan } from '../utils/accionesCliente'
+import { auditar } from '../auditoria'
+import { hoyLocal } from '../utils/accionesPago'
+import { confirmarSiHayPlanActivo } from '../utils/planesActivos'
 
 const TEAL = '#1a8a8a'     
 const TEAL_LIGHT = '#e8f5f5'
@@ -576,6 +579,8 @@ export default function AdminApp() {
     if (!nuevoPlanSedeId) { setNuevoPlanError('Selecciona una sede'); return }
     setNuevoPlanError('')
     setGuardando(true)
+    // Evita planes duplicados: si ya hay un plan activo del mismo instrumento con clases restantes, pregunta antes
+    if (!(await confirmarSiHayPlanActivo(creandoPlan, nuevoPlanInstrumentoId))) { setGuardando(false); return }
     const { data: nuevoPlan, error } = await supabase.from('contratos').insert({
       cliente_id: creandoPlan,
       instrumento_id: nuevoPlanInstrumentoId,
@@ -590,7 +595,10 @@ export default function AdminApp() {
     }).select().single()
     if (error) { setNuevoPlanError('Error: ' + error.message); setGuardando(false); return }
     if (nuevoPlan) {
-      const hoy = new Date().toISOString().split('T')[0]
+      auditar('crear_plan', 'contratos', nuevoPlan.id, {
+        cliente: clientes.find(c => c.id === creandoPlan)?.nombre || '—', desde: 'admin_movil'
+      })
+      const hoy = hoyLocal()   // fecha de Colombia (no la de Londres, que después de las 7 p. m. ya es "mañana")
       // Heredar clases futuras programadas/confirmadas de otros planes del mismo cliente
       const { data: contratosCliente } = await supabase.from('contratos').select('id')
         .eq('cliente_id', creandoPlan).neq('id', nuevoPlan.id)
