@@ -7,6 +7,7 @@ import Horarios from './pages/Horarios'
 import Reportes from './pages/Reportes'
 import Importar from './pages/Importar'
 import Auditoria from './pages/Auditoria'
+import WhatsApp from './pages/WhatsApp'
 
 const MENU = [
   { id: 'inicio',     label: 'Inicio',     icon: '⊞' },
@@ -16,6 +17,7 @@ const MENU = [
   { id: 'reportes',   label: 'Reportes',   icon: '📊' },
   { id: 'importar',   label: 'Importar',   icon: '📥' },
   { id: 'auditoria',  label: 'Auditoría',  icon: '🔍' },
+  { id: 'whatsapp',   label: 'WhatsApp',   icon: '💬', soloAdmin: true },
 ]
 
 export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string | null }) {
@@ -114,7 +116,7 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
           style={{ width: '100%', maxWidth: '152px', display: 'block', marginBottom: '8px', cursor: 'pointer' }} />
       </div>
       <nav style={{ flex: 1, padding: '16px 0', overflowY: 'auto' }}>
-        {MENU.map(item => (
+        {MENU.filter(item => !item.soloAdmin || rol === 'admin' || rol === 'superadmin').map(item => (
           <button key={item.id} onClick={() => navegar(item.id)}
             style={{
               display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
@@ -214,6 +216,7 @@ export default function Dashboard({ usuario, rol }: { usuario: any; rol?: string
           {seccion === 'reportes'   && <Reportes rol={rol ?? undefined} />}
           {seccion === 'importar'   && <Importar />}
           {seccion === 'auditoria'  && <Auditoria />}
+          {seccion === 'whatsapp' && (rol === 'admin' || rol === 'superadmin') && <WhatsApp />}
         </div>
       </div>
 
