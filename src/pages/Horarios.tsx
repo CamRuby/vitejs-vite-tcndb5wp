@@ -1727,7 +1727,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                        const guiaFueraDePlan = mainClass.estado === 'programada' && totalPlan && mainClass.numero_guia > totalPlan + 0.0001
                        const numPlan = !totalPlan ? ''
                           : mainClass.estado === 'programada'
-                            ? (mainClass.numero_guia ? (guiaFueraDePlan ? '⚠️ Plan completo' : `~${mainClass.numero_guia}/${totalPlan}`) : '')
+                            ? (mainClass.numero_guia && !guiaFueraDePlan ? `~${mainClass.numero_guia}/${totalPlan}` : '')
                             : mainClass.numero_calculado ? `${esProyectado ? '~' : ''}${mainClass.numero_calculado}/${totalPlan}` : ''
                         const colorNum = esProyectado ? '#b45309' : undefined
                         
@@ -1745,7 +1745,7 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                               overflow: 'hidden', boxSizing: 'border-box', margin: '2px 3px'
                             }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '2px' }}>
-                              <strong style={{ lineHeight: '1.3', fontSize: vista === 'dia' ? '13px' : '10px', wordBreak: 'break-word' }}>
+                              <strong style={{ lineHeight: '1.3', fontSize: vista === 'dia' ? '13px' : '10px', wordBreak: 'break-word', flex: 1, minWidth: 0 }}>
                                 {mainClass.contratos?.clientes?.nombre}
                               </strong>
                               <div style={{ display: 'flex', gap: '2px', flexShrink: 0, alignItems: 'center' }}>
@@ -1759,6 +1759,12 @@ if (editEstado === 'dada' && claseEditando.estado !== 'dada' && honorarioCalcula
                                   )}
                               </div>
                             </div>
+                            {guiaFueraDePlan && vista === 'dia' && (
+                              <div title="El plan ya no alcanza para esta clase: hay que renovarlo"
+                                style={{ fontSize: '11px', fontWeight: 700, color: '#b91c1c', whiteSpace: 'nowrap', marginTop: '1px' }}>
+                                ⚠️ Plan completo
+                              </div>
+                            )}
                             {(() => {
                               // Etiqueta rosada de semanas seguidas: abajo a la derecha, en el renglón del instrumento
                               // (o del profesor si la clase es corta; en la vista semanal, en un renglón propio)
